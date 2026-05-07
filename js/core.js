@@ -819,6 +819,9 @@ function ensureGroupChatMeta(contact) {
 function ensureContactChatTypeFields(contact) {
     if (!contact || typeof contact !== 'object') return contact;
     contact.chatType = contact.chatType === 'group' ? 'group' : 'direct';
+    if (typeof contact.allowRealPhotoSend !== 'boolean') {
+        contact.allowRealPhotoSend = false;
+    }
     if (contact.chatType === 'group') {
         ensureGroupChatMeta(contact);
     } else if (contact.groupMeta && typeof contact.groupMeta === 'object') {

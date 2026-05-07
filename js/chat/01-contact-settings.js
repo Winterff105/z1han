@@ -1613,6 +1613,7 @@ function createBaseContactPayload({ name, remark = '', persona = '', avatar = ''
         restWindowAwakenedAt: null,
         restWindowUpcomingNoticeForStartMs: null,
         restWindowWakeReplyForStartMs: null,
+        allowRealPhotoSend: false,
         calendarAwareEnabled: true,
         autoItineraryEnabled: false,
         autoItineraryInterval: 10,
@@ -4309,6 +4310,9 @@ function getChatSettingsTargetModeElements() {
     const calendarAwareToggleRow = document.getElementById('chat-setting-calendar-aware')
         ? document.getElementById('chat-setting-calendar-aware').closest('.mag-toggle')
         : null;
+    const allowRealPhotoSendToggleRow = document.getElementById('chat-setting-allow-real-photo-send')
+        ? document.getElementById('chat-setting-allow-real-photo-send').closest('.mag-toggle')
+        : null;
     const deviceUsageToggleRow = document.getElementById('chat-setting-device-usage-shared')
         ? document.getElementById('chat-setting-device-usage-shared').closest('.mag-toggle')
         : null;
@@ -4340,6 +4344,7 @@ function getChatSettingsTargetModeElements() {
         thoughtVisibleToggle: thoughtVisibleToggleRow,
         realTimeToggle: realTimeToggleRow,
         calendarAwareToggle: calendarAwareToggleRow,
+        allowRealPhotoSendToggle: allowRealPhotoSendToggleRow,
         deviceUsageToggle: deviceUsageToggleRow,
         fireBuddyCard: document.getElementById('chat-setting-fire-buddy-enabled') ? document.getElementById('chat-setting-fire-buddy-enabled').closest('.editorial-fire-buddy-card') : null,
         assetsCard: document.getElementById('chat-setting-tts-enabled') ? document.getElementById('chat-setting-tts-enabled').closest('.editorial-card-shell') : null
@@ -4377,6 +4382,7 @@ function syncChatSettingsTargetMode(contact) {
         thoughtVisibleToggle,
         realTimeToggle,
         calendarAwareToggle,
+        allowRealPhotoSendToggle,
         deviceUsageToggle,
         fireBuddyCard,
         assetsCard
@@ -4406,14 +4412,14 @@ function syncChatSettingsTargetMode(contact) {
     });
 
     if (isGroupChat) {
-        [showThoughtToggle, thoughtStyleField, thoughtPetPanel, thoughtVisibleToggle, deviceUsageToggle].forEach((element) => {
+        [showThoughtToggle, thoughtStyleField, thoughtPetPanel, thoughtVisibleToggle, allowRealPhotoSendToggle, deviceUsageToggle].forEach((element) => {
             setChatSettingsElementHidden(element, true);
         });
         [realTimeToggle, calendarAwareToggle].forEach((element) => {
             setChatSettingsElementHidden(element, false);
         });
     } else {
-        [showThoughtToggle, thoughtStyleField, thoughtVisibleToggle, realTimeToggle, calendarAwareToggle, deviceUsageToggle].forEach((element) => {
+        [showThoughtToggle, thoughtStyleField, thoughtVisibleToggle, realTimeToggle, calendarAwareToggle, allowRealPhotoSendToggle, deviceUsageToggle].forEach((element) => {
             setChatSettingsElementHidden(element, false);
         });
         setChatSettingsElementHidden(thoughtPetPanel, false);
@@ -4493,6 +4499,10 @@ function openChatSettings() {
     document.getElementById('chat-setting-thought-visible').checked = contact.thoughtVisible || false;
     document.getElementById('chat-setting-real-time-visible').checked = contact.realTimeVisible || false;
     document.getElementById('chat-setting-calendar-aware').checked = contact.calendarAwareEnabled !== false;
+    const allowRealPhotoSendToggle = document.getElementById('chat-setting-allow-real-photo-send');
+    if (allowRealPhotoSendToggle) {
+        allowRealPhotoSendToggle.checked = !!contact.allowRealPhotoSend;
+    }
     const deviceUsageSharedInput = document.getElementById('chat-setting-device-usage-shared');
     if (deviceUsageSharedInput) {
         deviceUsageSharedInput.checked = typeof window.isDeviceUsageSharedWithContact === 'function'
@@ -5153,6 +5163,9 @@ function handleSaveChatSettings() {
     const thoughtVisible = document.getElementById('chat-setting-thought-visible').checked;
     const realTimeVisible = document.getElementById('chat-setting-real-time-visible').checked;
     const calendarAwareEnabled = document.getElementById('chat-setting-calendar-aware').checked;
+    const allowRealPhotoSend = document.getElementById('chat-setting-allow-real-photo-send')
+        ? document.getElementById('chat-setting-allow-real-photo-send').checked
+        : false;
     const deviceUsageShared = !!(document.getElementById('chat-setting-device-usage-shared') && document.getElementById('chat-setting-device-usage-shared').checked);
     const thoughtDisplayModeRaw = document.getElementById('chat-setting-thought-style')
         ? document.getElementById('chat-setting-thought-style').value
@@ -5254,6 +5267,7 @@ function handleSaveChatSettings() {
     contact.summaryLimit = summaryLimit ? parseInt(summaryLimit) : 0;
     contact.realTimeVisible = realTimeVisible;
     contact.calendarAwareEnabled = calendarAwareEnabled;
+    contact.allowRealPhotoSend = !!allowRealPhotoSend;
     if (!isGroupChat) {
         contact.showThought = showThought;
         contact.thoughtVisible = thoughtVisible;
@@ -5634,6 +5648,7 @@ function ensureChatSettingsTokenPreviewBindings() {
     bindRefresh('chat-setting-thought-visible', ['change']);
     bindRefresh('chat-setting-real-time-visible', ['change']);
     bindRefresh('chat-setting-calendar-aware', ['change']);
+    bindRefresh('chat-setting-allow-real-photo-send', ['change']);
     bindRefresh('chat-setting-device-usage-shared', ['change']);
     bindRefresh('chat-setting-user-persona', ['change']);
 

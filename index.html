@@ -1123,6 +1123,11 @@
                                 <span class="mag-toggle-text">允许此联系人查看我的设备使用 <span class="separator">/</span> <span class="mag-en-short">Device Usage</span></span>
                                 <label><input type="checkbox" id="chat-setting-device-usage-shared" class="mag-toggle-input"><div class="mag-toggle-switch"></div></label>
                             </div>
+
+                            <div class="mag-toggle">
+                                <span class="mag-toggle-text">允许联系人发送真实照片 <span class="separator">/</span> <span class="mag-en-short">Real Photos</span></span>
+                                <label><input type="checkbox" id="chat-setting-allow-real-photo-send" class="mag-toggle-input"><div class="mag-toggle-switch"></div></label>
+                            </div>
                         </div>
                         <div class="editorial-card-shell mag-card editorial-fire-buddy-card">
                             <div class="chat-settings-card-kicker mag-card-decor"><span class="mag-pulse-symbol">&#10022;</span> FBR-04</div>
@@ -7522,6 +7527,27 @@
                 </div>
             </div>
 
+            <div id="album-action-modal" class="album-modal-overlay">
+                <div class="album-modal-content album-action-modal-content">
+                    <div id="album-action-title" class="album-modal-title">相簿操作</div>
+                    <div id="album-action-options" class="album-move-options"></div>
+                    <div class="album-modal-actions">
+                        <button id="album-action-cancel" class="album-modal-btn album-modal-cancel" type="button">取消</button>
+                    </div>
+                </div>
+            </div>
+
+            <div id="album-bind-contact-modal" class="album-modal-overlay">
+                <div class="album-modal-content album-bind-modal-content">
+                    <div id="album-bind-contact-title" class="album-modal-title">绑定联系人</div>
+                    <div id="album-bind-contact-options" class="album-move-options"></div>
+                    <div class="album-modal-actions">
+                        <button id="album-bind-contact-cancel" class="album-modal-btn album-modal-cancel" type="button">取消</button>
+                        <button id="album-bind-contact-save" class="album-modal-btn album-modal-save" type="button">保存</button>
+                    </div>
+                </div>
+            </div>
+
             <div id="album-privacy-password-modal" class="album-modal-overlay">
                 <div class="album-modal-content">
                     <div id="album-privacy-password-title" class="album-modal-title">输入相册密码</div>
@@ -7572,7 +7598,7 @@
                         <button id="album-photo-favorite-btn" class="album-photo-center-btn" type="button" aria-label="Favorite">
                             <i class="ri-heart-line"></i>
                         </button>
-                        <button class="album-photo-center-btn" type="button" aria-label="Info">
+                        <button id="album-photo-info-btn" class="album-photo-center-btn" type="button" aria-label="Info">
                             <i class="ri-information-line"></i>
                         </button>
                         <button class="album-photo-center-btn" type="button" aria-label="Adjust">
@@ -7582,6 +7608,33 @@
                     <button class="album-photo-tool-btn" type="button" aria-label="Delete">
                         <i class="ri-delete-bin-line"></i>
                     </button>
+                </div>
+            </div>
+
+            <div id="album-photo-meta-modal" class="album-modal-overlay">
+                <div class="album-modal-content album-photo-meta-modal-content">
+                    <div class="album-modal-title">照片信息</div>
+                    <div class="album-modal-body album-photo-meta-body">
+                        <label for="album-photo-meta-description" class="album-photo-meta-label">图片描述</label>
+                        <textarea id="album-photo-meta-description" class="album-modal-input album-photo-meta-textarea" placeholder="请输入该照片描述"></textarea>
+                        <label for="album-photo-meta-type" class="album-photo-meta-label">图片类型</label>
+                        <select id="album-photo-meta-type" class="album-modal-input album-photo-meta-select">
+                            <option value="selfie">自拍</option>
+                            <option value="scenery">风景</option>
+                            <option value="food">食物</option>
+                            <option value="portrait">人像</option>
+                            <option value="pet">宠物</option>
+                            <option value="travel">旅行</option>
+                            <option value="party">聚会</option>
+                            <option value="night">夜景</option>
+                            <option value="work">工作</option>
+                            <option value="other">其他</option>
+                        </select>
+                    </div>
+                    <div class="album-modal-actions">
+                        <button id="album-photo-meta-cancel" class="album-modal-btn album-modal-cancel" type="button">取消</button>
+                        <button id="album-photo-meta-save" class="album-modal-btn album-modal-save" type="button">保存</button>
+                    </div>
                 </div>
             </div>
         </div>

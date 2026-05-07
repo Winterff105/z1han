@@ -288,6 +288,91 @@ function sendAssistantVirtualImageMessage(description, contactId, meta = null, i
     return sendMessage(resolvedImageUrl, false, 'virtual_image', normalizedDescription || null, contactId, meta);
 }
 
+function canUseBoundRealPhoto(contact) {
+    return !!(
+        contact
+        && contact.allowRealPhotoSend === true
+        && typeof window.matchAlbumRealPhotoForContact === 'function'
+        && !(typeof window.isGroupChatContact === 'function' && window.isGroupChatContact(contact))
+    );
+}
+
+function buildRealPhotoMatchContextText(history, limit = 16) {
+    const sourceHistory = Array.isArray(history) ? history : [];
+    const textParts = sourceHistory
+        .slice(-Math.max(0, Number(limit) || 0))
+        .map(message => {
+            if (!message) return '';
+            if (message.type === 'text' || message.type === '消息' || message.type === 'description') {
+                return String(message.content || '').trim();
+            }
+            if (message.type === 'virtual_image' || message.type === 'image') {
+                return String(message.description || '').trim();
+            }
+            return '';
+        })
+        .filter(Boolean);
+    return textParts.join(' ');
+}
+
+function trySendMatchedRealPhoto(contact, contactId, imageQuery, contextText, meta = null) {
+    if (!canUseBoundRealPhoto(contact)) return null;
+    const queryText = String(imageQuery || '').trim();
+    const match = window.matchAlbumRealPhotoForContact(contactId, queryText, String(contextText || '').trim());
+    if (!match || !match.src) return null;
+
+    const normalizedMeta = meta && typeof meta === 'object' ? { ...meta } : {};
+    normalizedMeta.realPhoto = {
+        albumId: match.albumId || '',
+        albumName: match.albumName || '',
+        photoId: match.id || '',
+        photoType: match.photoType || 'other',
+        score: Number(match.score || 0)
+    };
+    const description = String(match.description || queryText || '').trim() || null;
+    const sentMessage = sendMessage(match.src, false, 'image', description, contactId, normalizedMeta);
+    if (!sentMessage) return null;
+    return {
+        matched: true,
+        match,
+        message: sentMessage
+    };
+}
+
+function getRealPhotoPromptCandidates(contact, contactId, queryText, contextText, limit = 12) {
+    if (!canUseBoundRealPhoto(contact)) return [];
+    if (typeof window.getAlbumRealPhotoPromptCandidatesForContact === 'function') {
+        const candidates = window.getAlbumRealPhotoPromptCandidatesForContact(contactId, queryText, contextText, limit);
+        return Array.isArray(candidates) ? candidates : [];
+    }
+    if (typeof window.getAlbumBoundRealPhotosForContact !== 'function') return [];
+    const rawCandidates = window.getAlbumBoundRealPhotosForContact(contactId);
+    if (!Array.isArray(rawCandidates)) return [];
+    return rawCandidates.slice(0, Math.max(0, Number(limit) || 0)).map(item => ({
+        albumId: item.albumId,
+        albumName: item.albumName,
+        photoType: item.photoType || 'other',
+        photoTypeLabel: item.photoType || 'other',
+        description: item.description || '',
+        location: item.location || '',
+        datetime: item.datetime || '',
+        score: 0,
+        summary: `[${item.photoType || 'other'}] ${item.description || item.location || '未命名照片'}（相簿：${item.albumName || '未知'}）`
+    }));
+}
+
+function buildRealPhotoPromptSummary(contact, contactId, queryText, contextText) {
+    const candidates = getRealPhotoPromptCandidates(contact, contactId, queryText, contextText, 12);
+    if (!candidates.length) return '';
+    const lines = candidates.map((item, index) => `${index + 1}. ${item.summary || ''}`).filter(Boolean);
+    if (!lines.length) return '';
+    return [
+        '【可发送真实照片候选】',
+        '当你需要发送图片时，可优先从下列候选中选择最匹配的一张。',
+        ...lines
+    ].join('\n');
+}
+
 function formatPlainTextMessageContent(text) {
     const source = String(text || '')
         .replace(/<hidden_img>\s*([\s\S]*?)\s*<\/hidden_img>/gi, '\n$1\n')
@@ -5384,6 +5469,12 @@ async function generateAiReply(instruction = null, targetContactId = null, optio
         let imageToSend = null;
         let hasTransferred = false;
         
+        const activeHistoryForImageMatch = Array.isArray(window.iphoneSimState.chatHistory[contact.id])
+            ? window.iphoneSimState.chatHistory[contact.id]
+            : [];
+        const recentTextContext = buildRealPhotoMatchContextText(activeHistoryForImageMatch, 18);
+        const realPhotoQuerySeed = messagesList.map(msg => `${msg.type || 'text'} ${msg.content || ''}`).join('\n');
+
         const momentRegex = /ACTION:\s*POST_MOMENT:\s*(.*?)(?:\n|$)/;
         const forumPostRegex = /ACTION:\s*POST_FORUM:\s*(.*?)(?:\n|$)/;
         const startForumLiveRegex = /ACTION:\s*START_FORUM_LIVE:\s*(.*?)(?:\n|$)/;
@@ -5965,6 +6056,16 @@ async function generateAiReply(instruction = null, targetContactId = null, optio
             while ((sendImageMatch = processedSegment.match(sendImageRegex)) !== null) {
                 const imageDesc = sendImageMatch[1].trim();
                 if (imageDesc) {
+                    if (canUseBoundRealPhoto(contact)) {
+                        const matchedRealPhoto = trySendMatchedRealPhoto(contact, contact.id, imageDesc, recentTextContext, {
+                            channel: deliveryChannel
+                        });
+                        if (matchedRealPhoto) {
+                            imageToSend = null;
+                            processedSegment = processedSegment.replace(sendImageMatch[0], '');
+                            continue;
+                        }
+                    }
                     imageToSend = { type: 'virtual_image', content: imageDesc };
                 }
                 processedSegment = processedSegment.replace(sendImageMatch[0], '');
@@ -6425,6 +6526,25 @@ async function generateAiReply(instruction = null, targetContactId = null, optio
                 continue;
             }
 
+            const imageCandidateText = `${msg.content || ''} ${msg.description || ''}`.trim();
+            if ((msg.type === '图片' || msg.type === 'image' || msg.type === 'virtual_image') && canUseBoundRealPhoto(contact)) {
+                const realPhotoResult = trySendMatchedRealPhoto(contact, contact.id, imageCandidateText, recentTextContext, {
+                    channel: deliveryChannel,
+                    replyTo: currentReplyTo,
+                    thought: currentThought,
+                    bilingualTranslation: null,
+                    showNotification: deliveryChannel === 'wechat',
+                    readInMessagesApp: false
+                });
+                if (realPhotoResult) {
+                    if (i < messagesList.length - 1) {
+                        const delay = getSpeakerAwareReplyDelay(msg, messagesList[i + 1]);
+                        await new Promise(r => setTimeout(r, delay));
+                    }
+                    continue;
+                }
+            }
+
             // 检查用户是否仍在当前聊天界面
             const isChatOpen = !document.getElementById('chat-screen').classList.contains('hidden');
             const isSameContact = window.iphoneSimState.currentChatContactId === contact.id;
@@ -6494,7 +6614,21 @@ async function generateAiReply(instruction = null, targetContactId = null, optio
                     const chatImageGenerationDisabled = !!(novelaiSettings && novelaiSettings.enabled === false);
                     const globalEnabled = novelaiSettings && novelaiSettings.enabled !== false;
 
-                    if (isLikelyChatImageUrl(rawImageContent)) {
+                    if (canUseBoundRealPhoto(contact)) {
+                        const realPhotoResult = trySendMatchedRealPhoto(contact, contact.id, `${rawImageContent || ''} ${msg.description || ''}`.trim(), recentTextContext, {
+                            channel: deliveryChannel,
+                            replyTo: currentReplyTo,
+                            thought: currentThought,
+                            bilingualTranslation: null,
+                            showNotification: deliveryChannel === 'wechat',
+                            readInMessagesApp: false
+                        });
+                        if (realPhotoResult) {
+                            sent = true;
+                        }
+                    }
+
+                    if (!sent && isLikelyChatImageUrl(rawImageContent)) {
                         sendMessage(rawImageContent, false, 'image', msg.description || null, contactId, { channel: deliveryChannel });
                         sent = true;
                     }
@@ -6510,7 +6644,7 @@ async function generateAiReply(instruction = null, targetContactId = null, optio
                         let preset = null;
     
                         if (presetName === 'AUTO_MATCH') {
-                            const type = detectImageType(imageToSend.content);
+                            const type = detectImageType(rawImageContent || msg.content || msg.description || '');
                             const presets = window.iphoneSimState.novelaiPresets || [];
                             preset = presets.find(p => p.type === type);
                             if (!preset && type !== 'general') {
@@ -6649,6 +6783,25 @@ async function generateAiReply(instruction = null, targetContactId = null, optio
                     typeToSave = 'description';
                 }
                 const descriptionToSave = (msg.type === '图片' || msg.type === 'sticker') ? msg.content : null;
+
+                if ((msg.type === '图片' || msg.type === 'image' || msg.type === 'virtual_image') && canUseBoundRealPhoto(contact)) {
+                    const realPhotoResult = trySendMatchedRealPhoto(contact, contact.id, `${msg.content || ''} ${msg.description || ''}`.trim(), recentTextContext, {
+                        channel: deliveryChannel,
+                        replyTo: currentReplyTo,
+                        thought: currentThought,
+                        bilingualTranslation: null,
+                        showNotification: deliveryChannel === 'wechat',
+                        readInMessagesApp: false
+                    });
+                    if (realPhotoResult) {
+                        if (i < messagesList.length - 1) {
+                            const delay = getSpeakerAwareReplyDelay(msg, messagesList[i + 1]);
+                            await new Promise(r => setTimeout(r, delay));
+                        }
+                        continue;
+                    }
+                }
+
                 sendMessage(contentToSave, false, typeToSave, descriptionToSave, contact.id, {
                     channel: deliveryChannel,
                     replyTo: currentReplyTo,
@@ -6687,6 +6840,17 @@ async function generateAiReply(instruction = null, targetContactId = null, optio
         await new Promise(r => setTimeout(r, 500));
 
         if (imageToSend) {
+            const realPhotoResult = canUseBoundRealPhoto(contact)
+                ? trySendMatchedRealPhoto(contact, contact.id, `${imageToSend.content || ''} ${imageToSend.desc || ''}`.trim(), recentTextContext, {
+                    channel: deliveryChannel
+                })
+                : null;
+            if (realPhotoResult) {
+                imageToSend = null;
+            }
+        }
+
+        if (imageToSend) {
             if (imageToSend.type === 'virtual_image') {
                 let sent = false;
                 const novelaiSettings = window.iphoneSimState.novelaiSettings;
@@ -6704,7 +6868,7 @@ async function generateAiReply(instruction = null, targetContactId = null, optio
                     let preset = null;
 
                     if (presetName === 'AUTO_MATCH') {
-                        const type = detectImageType(msg.content);
+                        const type = detectImageType(imageToSend.content || imageToSend.desc || '');
                         const presets = window.iphoneSimState.novelaiPresets || [];
                         preset = presets.find(p => p.type === type);
                         if (!preset && type !== 'general') {
@@ -8243,6 +8407,12 @@ window.buildAiPromptMessages = async function(contactId, instruction = null, opt
             return list;
         }, [])
         : [];
+    const realPhotoContextText = buildRealPhotoMatchContextText(history, 18);
+    const realPhotoQuerySeed = [
+        typeof instruction === 'string' ? String(instruction || '').trim() : '',
+        ...promptTailMessages.map(item => String(item && item.content || '').trim())
+    ].filter(Boolean).join('\n');
+    const realPhotoDescriptionContext = buildRealPhotoPromptSummary(contact, contactId, realPhotoQuerySeed, realPhotoContextText);
 
     let userPromptInfo = '';
     let currentPersona = null;
@@ -8580,6 +8750,7 @@ window.buildAiPromptMessages = async function(contactId, instruction = null, opt
     appendAiPromptPart(systemPromptParts, 'systemBase', '高德', amapContext);
     appendAiPromptPart(systemPromptParts, 'systemBase', '行程', itineraryContext);
     appendAiPromptPart(systemPromptParts, 'systemBase', extraSystemPromptLabel || '附加场景', extraSystemPrompt);
+    appendAiPromptPart(systemPromptParts, 'systemBase', '真实照片候选', realPhotoDescriptionContext);
     appendAiPromptPart(systemPromptParts, 'systemBase', '条件能力', conditionalCapabilityPrompt);
     appendAiPromptPart(systemPromptParts, 'systemBase', '回复指令', '请回复对方的消息。');
     appendAiPromptPart(systemPromptParts, 'systemBase', '表情包', buildWechatStickerPrompt(contact));
