@@ -332,6 +332,13 @@ function trySendMatchedRealPhoto(contact, contactId, imageQuery, contextText, me
     const description = String(match.description || queryText || '').trim() || null;
     const sentMessage = sendMessage(match.src, false, 'image', description, contactId, normalizedMeta);
     if (!sentMessage) return null;
+    if (typeof window.markAlbumRealPhotoSentForContact === 'function') {
+        try {
+            window.markAlbumRealPhotoSentForContact(contactId, match, Date.now());
+        } catch (error) {
+            console.warn('Failed to mark real photo sent state.', error);
+        }
+    }
     return {
         matched: true,
         match,
@@ -2069,20 +2076,144 @@ function appendMessageToUI(text, isUser, type = 'text', description = null, repl
     msgDiv.appendChild(selectCheckbox);
 
     let longPressTimer;
+    let longPressTriggered = false;
+    let swipeTracking = false;
+    let swipeConsumed = false;
+    let swipeStartX = 0;
+    let swipeStartY = 0;
+    let swipeStartTime = 0;
+    const SWIPE_TRIGGER_DISTANCE = 34;
+    const SWIPE_VERTICAL_TOLERANCE = 34;
+    const SWIPE_MAX_DURATION = 800;
+    const LONG_PRESS_MOVE_CANCEL_DISTANCE = 8;
+    const SWIPE_VISUAL_MAX_OFFSET = 72;
+    const SWIPE_VISUAL_DAMPING = 0.42;
+
+    const clearLongPressTimer = () => {
+        if (longPressTimer) {
+            clearTimeout(longPressTimer);
+            longPressTimer = null;
+        }
+    };
+
+    const applyBubbleSwipeOffset = (offsetX) => {
+        if (!bubble) return;
+        const clamped = Math.max(-SWIPE_VISUAL_MAX_OFFSET, Math.min(SWIPE_VISUAL_MAX_OFFSET, Number(offsetX) || 0));
+        bubble.style.transform = `translateX(${clamped}px)`;
+    };
+
+    const resetBubbleSwipeOffset = (animated = true) => {
+        if (!bubble) return;
+        if (animated) {
+            bubble.style.transition = 'transform 180ms cubic-bezier(0.22, 0.61, 0.36, 1)';
+            bubble.style.transform = 'translateX(0px)';
+            setTimeout(() => {
+                if (!bubble) return;
+                bubble.style.transition = '';
+            }, 200);
+            return;
+        }
+        bubble.style.transition = '';
+        bubble.style.transform = 'translateX(0px)';
+    };
+
     const handleStart = (e) => {
+        longPressTriggered = false;
+        swipeConsumed = false;
+        swipeTracking = false;
+
+        if (window.iphoneSimState && window.iphoneSimState.isMultiSelectMode) {
+            return;
+        }
+
+        const touch = e.touches && e.touches[0];
+        if (touch) {
+            swipeStartX = touch.clientX;
+            swipeStartY = touch.clientY;
+            swipeStartTime = Date.now();
+            swipeTracking = true;
+        }
+        resetBubbleSwipeOffset(false);
+
+        clearLongPressTimer();
         longPressTimer = setTimeout(() => {
+            longPressTriggered = true;
             handleMessageLongPress(e, text, isUser, type, msgId);
         }, 500);
     };
-    const handleEnd = () => {
-        clearTimeout(longPressTimer);
+
+    const handleMove = (e) => {
+        if (!swipeTracking || !e.touches || !e.touches[0]) {
+            clearLongPressTimer();
+            return;
+        }
+        const touch = e.touches[0];
+        const deltaX = touch.clientX - swipeStartX;
+        const deltaY = touch.clientY - swipeStartY;
+        if (Math.abs(deltaX) > LONG_PRESS_MOVE_CANCEL_DISTANCE || Math.abs(deltaY) > LONG_PRESS_MOVE_CANCEL_DISTANCE) {
+            clearLongPressTimer();
+        }
+        if (Math.abs(deltaY) <= SWIPE_VERTICAL_TOLERANCE * 2) {
+            applyBubbleSwipeOffset(deltaX * SWIPE_VISUAL_DAMPING);
+        } else {
+            applyBubbleSwipeOffset(0);
+        }
+    };
+
+    const handleEnd = (e) => {
+        const touch = e.changedTouches && e.changedTouches[0];
+        const elapsed = Date.now() - swipeStartTime;
+        clearLongPressTimer();
+        resetBubbleSwipeOffset(true);
+
+        if (!touch || !swipeTracking || swipeConsumed || longPressTriggered) {
+            swipeTracking = false;
+            return;
+        }
+
+        const deltaX = touch.clientX - swipeStartX;
+        const deltaY = touch.clientY - swipeStartY;
+        const absDeltaX = Math.abs(deltaX);
+        const absDeltaY = Math.abs(deltaY);
+
+        const isHorizontalSwipe = (
+            elapsed <= SWIPE_MAX_DURATION
+            && absDeltaX >= SWIPE_TRIGGER_DISTANCE
+            && absDeltaY <= SWIPE_VERTICAL_TOLERANCE
+            && absDeltaX >= absDeltaY * 1.15
+        );
+
+        if (!isHorizontalSwipe) {
+            swipeTracking = false;
+            return;
+        }
+
+        const msgData = buildChatMessageContextData(text, isUser, type, msgId);
+        if (deltaX > 0) {
+            const quoted = triggerQuoteAction(msgData);
+            if (quoted && typeof window.showChatToast === 'function') {
+                window.showChatToast('已引用该消息', 1200);
+            }
+        } else {
+            triggerEditAction(msgData);
+        }
+
+        swipeConsumed = true;
+        swipeTracking = false;
+    };
+
+    const handleCancel = () => {
+        clearLongPressTimer();
+        swipeTracking = false;
+        resetBubbleSwipeOffset(true);
     };
     
     const bubble = msgDiv.querySelector('.message-content');
     if (bubble) {
         bubble.addEventListener('touchstart', handleStart);
+        bubble.addEventListener('touchmove', handleMove);
         bubble.addEventListener('touchend', handleEnd);
-        bubble.addEventListener('touchmove', handleEnd);
+        bubble.addEventListener('touchcancel', handleCancel);
         bubble.addEventListener('contextmenu', (e) => {
             e.preventDefault();
             handleMessageLongPress(e, text, isUser, type, msgId);
@@ -2372,6 +2503,11 @@ function handleMessageLongPress(e, content, isUser, type, msgId) {
 
     if (!target) return;
 
+    const msgData = buildChatMessageContextData(content, isUser, type, msgId);
+    showContextMenu(target, msgData);
+}
+
+function buildChatMessageContextData(content, isUser, type, msgId) {
     const contact = window.iphoneSimState.contacts.find(c => String(c.id) === String(window.iphoneSimState.currentChatContactId));
     let name = 'AI';
     const groupSpeakerMeta = msgId && contact && typeof window.isGroupChatContact === 'function' && window.isGroupChatContact(contact) && typeof window.getGroupMessageSpeakerMeta === 'function'
@@ -2390,7 +2526,45 @@ function handleMessageLongPress(e, content, isUser, type, msgId) {
         name = contact ? (contact.remark || contact.name) : 'AI';
     }
 
-    showContextMenu(target, { content, name, isUser, type, msgId });
+    return { content, name, isUser, type, msgId };
+}
+
+function triggerQuoteAction(msgData) {
+    if (!msgData) return false;
+    handleQuote(msgData);
+    return true;
+}
+
+function triggerEditAction(msgData) {
+    if (!msgData || !msgData.msgId) {
+        alert('无法编辑此消息（缺少ID）');
+        return false;
+    }
+
+    const history = window.iphoneSimState.chatHistory[window.iphoneSimState.currentChatContactId];
+    const fullMsg = history ? history.find(m => m.id === msgData.msgId) : null;
+
+    if (fullMsg && fullMsg.novelaiPrompt) {
+        const newPrompt = prompt("NovelAI 生成提示词 (Prompt):", fullMsg.novelaiPrompt);
+        if (newPrompt !== null && newPrompt !== fullMsg.novelaiPrompt) {
+            fullMsg.novelaiPrompt = newPrompt;
+            saveConfig();
+            alert('提示词已更新 (仅更新记录，不会重新生成图片)');
+        }
+        return true;
+    }
+
+    if (msgData.type !== 'text') {
+        if (!confirm('这是一条非文本消息（如图片或转账），直接编辑内容可能会破坏显示格式。确定要编辑吗？')) {
+            return false;
+        }
+    }
+    if (typeof openEditChatMessageModal === 'function') {
+        openEditChatMessageModal(msgData.msgId, msgData.content);
+    } else {
+        alert('编辑功能暂不可用');
+    }
+    return true;
 }
 
 function showContextMenu(targetEl, msgData) {
@@ -2502,7 +2676,7 @@ function showContextMenu(targetEl, msgData) {
     menu.style.visibility = 'visible';
     
     menu.querySelector('#menu-quote').onclick = () => {
-        handleQuote(msgData);
+        triggerQuoteAction(msgData);
         menu.remove();
     };
     
@@ -2620,40 +2794,8 @@ function showContextMenu(targetEl, msgData) {
     }
 
     menu.querySelector('#menu-edit').onclick = () => {
-        if (msgData.msgId) {
-            menu.remove();
-
-            // 检查是否有 NovelAI 提示词
-            const history = window.iphoneSimState.chatHistory[window.iphoneSimState.currentChatContactId];
-            const fullMsg = history ? history.find(m => m.id === msgData.msgId) : null;
-            
-            if (fullMsg && fullMsg.novelaiPrompt) {
-                // 如果有提示词，显示提示词编辑框
-                // 这里简单使用 prompt 弹窗，也可以换成更复杂的模态框
-                // 为了更好的体验，可以使用 textarea 的模态框，但目前 prompt 最简单有效
-                const newPrompt = prompt("NovelAI 生成提示词 (Prompt):", fullMsg.novelaiPrompt);
-                if (newPrompt !== null && newPrompt !== fullMsg.novelaiPrompt) {
-                    fullMsg.novelaiPrompt = newPrompt;
-                    saveConfig();
-                    alert('提示词已更新 (仅更新记录，不会重新生成图片)');
-                }
-                return;
-            }
-
-            if (msgData.type !== 'text') {
-                if(!confirm('这是一条非文本消息（如图片或转账），直接编辑内容可能会破坏显示格式。确定要编辑吗？')) {
-                    return;
-                }
-            }
-            if (typeof openEditChatMessageModal === 'function') {
-                openEditChatMessageModal(msgData.msgId, msgData.content);
-            } else {
-                alert('编辑功能暂不可用');
-            }
-        } else {
-            alert('无法编辑此消息（缺少ID）');
-            menu.remove();
-        }
+        menu.remove();
+        triggerEditAction(msgData);
     };
 
     menu.querySelector('#menu-delete').onclick = () => {

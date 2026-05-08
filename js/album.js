@@ -1,4 +1,4 @@
-(function () {
+﻿(function () {
     const PLACEHOLDER_COVER = 'https://placehold.co/600x400?text=Album';
     const PHOTO_TYPE_OPTIONS = [
         { value: 'selfie', label: '自拍' },
@@ -33,6 +33,10 @@
         '一下子', '一下下', '请', '麻烦', '的', '了', '和', '与', '及', 'to', 'for', 'the',
         'a', 'an', 'is', 'are', 'on', 'in', 'at', 'with'
     ]);
+    const NEW_PHOTO_INTENT_KEYWORDS = [
+        'new photo', 'new picture', 'fresh photo', 'recent photo', 'latest photo', 'just took',
+        '刚拍', '新拍', '新照片', '新图片', '最新', '现场', '现在拍'
+    ];
 
     function buildPhoto(id, seed, location, datetime) {
         return {
@@ -42,7 +46,8 @@
             location,
             datetime,
             description: '',
-            photoType: 'other'
+            photoType: 'other',
+            lastSentAtByContact: {}
         };
     }
 
@@ -130,7 +135,9 @@
     ];
 
     function clonePhoto(photo) {
-        return { ...photo };
+        const cloned = { ...photo };
+        cloned.lastSentAtByContact = normalizeLastSentAtByContact(photo && photo.lastSentAtByContact);
+        return cloned;
     }
 
     function cloneSection(section) {
@@ -191,6 +198,18 @@
         return ids;
     }
 
+    function normalizeLastSentAtByContact(value) {
+        if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+        const next = {};
+        Object.entries(value).forEach(([contactId, timestamp]) => {
+            const key = String(contactId || '').trim();
+            const num = Number(timestamp);
+            if (!key || !Number.isFinite(num) || num <= 0) return;
+            next[key] = num;
+        });
+        return next;
+    }
+
     function sanitizePhoto(photo, fallbackId) {
         const safePhoto = photo && typeof photo === 'object' ? photo : {};
         const src = typeof safePhoto.src === 'string' && safePhoto.src
@@ -205,7 +224,8 @@
             location: typeof safePhoto.location === 'string' ? safePhoto.location : 'Imported Photo',
             datetime: typeof safePhoto.datetime === 'string' ? safePhoto.datetime : '',
             description: normalizePhotoDescription(safePhoto.description),
-            photoType: normalizePhotoType(safePhoto.photoType)
+            photoType: normalizePhotoType(safePhoto.photoType),
+            lastSentAtByContact: normalizeLastSentAtByContact(safePhoto.lastSentAtByContact)
         };
     }
 
@@ -479,6 +499,20 @@
         return keywords.some(keyword => keyword && text.includes(String(keyword).toLowerCase()));
     }
 
+    function getPhotoLastSentAtForContact(photoOrCandidate, contactId) {
+        if (!photoOrCandidate) return 0;
+        const normalizedContactId = String(contactId || '').trim();
+        if (!normalizedContactId) return 0;
+        const map = normalizeLastSentAtByContact(photoOrCandidate.lastSentAtByContact);
+        return Number(map[normalizedContactId] || 0);
+    }
+
+    function isFreshPhotoIntent(queryText, contextText) {
+        const combined = normalizeSearchText(queryText, contextText);
+        if (!combined) return false;
+        return NEW_PHOTO_INTENT_KEYWORDS.some(keyword => combined.includes(String(keyword).toLowerCase()));
+    }
+
     function buildRealPhotoCandidateRecord(photo, album, orderIndex) {
         if (!photo || !album) return null;
         const src = typeof photo.src === 'string' && photo.src.trim()
@@ -497,7 +531,8 @@
             location: typeof photo.location === 'string' ? photo.location : '',
             datetime: typeof photo.datetime === 'string' ? photo.datetime : '',
             description: normalizePhotoDescription(photo.description),
-            photoType: normalizePhotoType(photo.photoType)
+            photoType: normalizePhotoType(photo.photoType),
+            lastSentAtByContact: normalizeLastSentAtByContact(photo.lastSentAtByContact)
         };
     }
 
@@ -518,6 +553,7 @@
                 const candidate = buildRealPhotoCandidateRecord(photo, album, `${albumIndex}:${photoIndex}`);
                 if (!candidate || seenSrc.has(candidate.src)) return;
                 seenSrc.add(candidate.src);
+                candidate.lastSentAtForContact = getPhotoLastSentAtForContact(candidate, normalizedContactId);
                 records.push(candidate);
             });
         });
@@ -574,17 +610,30 @@
     function getAlbumRealPhotoPromptCandidatesForContact(contactId, queryText = '', contextText = '', limit = 12) {
         const records = collectAlbumBoundRealPhotoRecords(contactId);
         if (!records.length) return [];
+        const normalizedContactId = String(contactId || '').trim();
+        const preferFresh = isFreshPhotoIntent(queryText, contextText);
 
         let scored = records
             .map((record, index) => ({
                 ...record,
                 score: scoreAlbumRealPhotoCandidate(record, queryText, contextText),
-                sortIndex: index
+                sortIndex: index,
+                lastSentAtForContact: getPhotoLastSentAtForContact(record, normalizedContactId)
             }))
+            .filter(record => !(preferFresh && record.lastSentAtForContact > 0))
             .sort((left, right) => {
                 if (right.score !== left.score) return right.score - left.score;
+                if ((left.lastSentAtForContact > 0) !== (right.lastSentAtForContact > 0)) {
+                    return left.lastSentAtForContact > 0 ? 1 : -1;
+                }
+                if (left.lastSentAtForContact !== right.lastSentAtForContact) {
+                    return left.lastSentAtForContact - right.lastSentAtForContact;
+                }
                 return left.sortIndex - right.sortIndex;
             });
+        if (preferFresh && scored.length === 0) {
+            return [];
+        }
         const hasPositiveScore = scored.some(record => record.score > 0);
         if (hasPositiveScore) {
             scored = scored.filter(record => record.score > 0);
@@ -599,25 +648,34 @@
             description: item.description,
             location: item.location,
             datetime: item.datetime,
+            lastSentAtForContact: item.lastSentAtForContact || 0,
             score: item.score,
-            summary: `[${PHOTO_TYPE_LABEL_MAP[item.photoType] || '其他'}] ${item.description || item.location || '未命名照片'}（相簿：${item.albumName || '未知'}${item.location ? ` / ${item.location}` : ''}${item.datetime ? ` / ${item.datetime}` : ''}）`
+            summary: `[${PHOTO_TYPE_LABEL_MAP[item.photoType] || '其他'}] ${item.description || item.location || '未命名照片'}（相簿：${item.albumName || '未知'}${item.location ? ` / ${item.location}` : ''}${item.datetime ? ` / ${item.datetime}` : ''}${item.lastSentAtForContact ? ` / 已发送：${new Date(item.lastSentAtForContact).toLocaleString()}` : ''}）`
         }));
     }
 
     function matchAlbumRealPhotoForContact(contactId, queryText, contextText) {
         const records = collectAlbumBoundRealPhotoRecords(contactId);
         if (!records.length) return null;
+        const normalizedContactId = String(contactId || '').trim();
+        const preferFresh = isFreshPhotoIntent(queryText, contextText);
 
         let bestRecord = null;
         let bestScore = 0;
 
         records.forEach((record, index) => {
-            const score = scoreAlbumRealPhotoCandidate(record, queryText, contextText);
+            const sentAt = getPhotoLastSentAtForContact(record, normalizedContactId);
+            if (preferFresh && sentAt > 0) return;
+            let score = scoreAlbumRealPhotoCandidate(record, queryText, contextText);
+            if (sentAt > 0) {
+                score -= preferFresh ? 100 : 2.2;
+            }
+            if (score <= 0) return;
             if (score > bestScore || (score === bestScore && bestRecord && index < bestRecord.sortIndex)) {
-                bestRecord = { ...record, score, sortIndex: index };
+                bestRecord = { ...record, score, sortIndex: index, lastSentAtForContact: sentAt };
                 bestScore = score;
             } else if (!bestRecord && score > 0) {
-                bestRecord = { ...record, score, sortIndex: index };
+                bestRecord = { ...record, score, sortIndex: index, lastSentAtForContact: sentAt };
                 bestScore = score;
             }
         });
@@ -634,8 +692,35 @@
             datetime: bestRecord.datetime,
             description: bestRecord.description,
             photoType: bestRecord.photoType,
+            lastSentAtForContact: bestRecord.lastSentAtForContact || 0,
             score: bestRecord.score
         };
+    }
+
+    function markAlbumRealPhotoSentForContact(contactId, photoMatch, sentAt = Date.now()) {
+        const normalizedContactId = String(contactId || '').trim();
+        if (!normalizedContactId || !photoMatch || typeof photoMatch !== 'object') return false;
+        const sentTimestamp = Number(sentAt);
+        if (!Number.isFinite(sentTimestamp) || sentTimestamp <= 0) return false;
+
+        const syncPhoto = (photo) => {
+            if (!photo || !isSamePhotoReference(photo, photoMatch)) return;
+            const map = normalizeLastSentAtByContact(photo.lastSentAtByContact);
+            map[normalizedContactId] = sentTimestamp;
+            photo.lastSentAtByContact = map;
+        };
+
+        albumState.recentSections.forEach(section => {
+            if (!section || !Array.isArray(section.photos)) return;
+            section.photos.forEach(syncPhoto);
+        });
+        albumState.albums.forEach(album => {
+            if (!album || !Array.isArray(album.photos)) return;
+            album.photos.forEach(syncPhoto);
+        });
+
+        persistAlbumState();
+        return true;
     }
 
     function getAlbumActionOptions(albumId) {
@@ -2045,7 +2130,8 @@
             location: typeof options.location === 'string' && options.location.trim() ? options.location.trim() : 'Saved from Chat',
             datetime: formatPhotoTimestamp(now),
             description: normalizePhotoDescription(options.description),
-            photoType: normalizePhotoType(options.photoType)
+            photoType: normalizePhotoType(options.photoType),
+            lastSentAtByContact: {}
         };
 
         const todaySection = getOrCreateTodaySection();
@@ -2082,7 +2168,8 @@
                 location: 'Imported Photo',
                 datetime: formatPhotoTimestamp(now),
                 description: '',
-                photoType: 'other'
+                photoType: 'other',
+                lastSentAtByContact: {}
             }))
         ));
 
@@ -2834,6 +2921,7 @@
     window.closeAlbumApp = closeAlbumApp;
     window.savePhotoToAlbumLibrary = savePhotoToLibrary;
     window.getAlbumScreenShareSnapshot = getAlbumScreenShareSnapshot;
+    window.markAlbumRealPhotoSentForContact = markAlbumRealPhotoSentForContact;
     window.getAlbumBoundRealPhotosForContact = getAlbumBoundRealPhotosForContact;
     window.getAlbumRealPhotoPromptCandidatesForContact = getAlbumRealPhotoPromptCandidatesForContact;
     window.matchAlbumRealPhotoForContact = matchAlbumRealPhotoForContact;

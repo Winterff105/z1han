@@ -9665,6 +9665,15 @@
                             <label>消息内容</label>
                             <textarea id="edit-chat-msg-content" placeholder="输入新的消息内容..." style="height: 150px;"></textarea>
                         </div>
+                        <input type="hidden" id="edit-chat-msg-type" value="text">
+                        <div id="edit-chat-msg-type-switch" class="edit-chat-msg-type-switch" aria-label="消息类型切换">
+                            <button type="button" class="edit-chat-msg-type-btn active" data-msg-type="text">文本</button>
+                            <button type="button" class="edit-chat-msg-type-btn" data-msg-type="voice">语音</button>
+                            <button type="button" class="edit-chat-msg-type-btn" data-msg-type="image">图片</button>
+                            <button type="button" class="edit-chat-msg-type-btn" data-msg-type="sticker">表情包</button>
+                        </div>
+                        <button type="button" id="add-inserted-chat-msg-btn" class="edit-chat-msg-insert-btn">插入消息</button>
+                        <div id="inserted-chat-msg-list" class="edit-chat-msg-insert-list"></div>
                         <button id="save-edit-chat-msg-btn" class="ios-btn-block">保存修改</button>
                     </div>
                 </div>

@@ -6559,9 +6559,197 @@ window.playVoiceMsg = async function(msgId, textElId, event) {
 window.openEditChatMessageModal = function(msgId, currentContent) {
     currentEditingChatMsgId = msgId;
     const textarea = document.getElementById('edit-chat-msg-content');
-    textarea.value = currentContent;
+    const typeInput = document.getElementById('edit-chat-msg-type');
+    const modal = document.getElementById('edit-chat-msg-modal');
+    const insertedList = document.getElementById('inserted-chat-msg-list');
+    const selectedType = resolveEditChatMessageType(msgId);
+    textarea.value = resolveEditChatMessageTextValue(msgId, currentContent);
+    if (typeInput) typeInput.value = selectedType;
+    if (insertedList) insertedList.innerHTML = '';
+    if (modal) {
+        modal.querySelectorAll('.edit-chat-msg-type-btn').forEach(btn => {
+            if (btn.closest('.edit-chat-msg-insert-item')) return;
+            btn.classList.toggle('active', btn.dataset.msgType === selectedType);
+        });
+    }
     document.getElementById('edit-chat-msg-modal').classList.remove('hidden');
 };
+
+function resolveEditChatMessageType(msgId) {
+    if (!msgId || !window.iphoneSimState || !window.iphoneSimState.currentChatContactId) return 'text';
+    const messages = window.iphoneSimState.chatHistory[window.iphoneSimState.currentChatContactId];
+    if (!Array.isArray(messages)) return 'text';
+    const targetMsg = messages.find(m => String(m && m.id) === String(msgId));
+    if (!targetMsg) return 'text';
+    const rawType = String(targetMsg.type || 'text').trim().toLowerCase();
+    if (rawType === 'virtual_image' || rawType === 'image') return 'image';
+    if (rawType === 'voice') return 'voice';
+    if (rawType === 'sticker') return 'sticker';
+    return 'text';
+}
+
+function resolveEditChatMessageTextValue(msgId, fallbackContent) {
+    if (!msgId || !window.iphoneSimState || !window.iphoneSimState.currentChatContactId) {
+        return String(fallbackContent || '');
+    }
+    const messages = window.iphoneSimState.chatHistory[window.iphoneSimState.currentChatContactId];
+    if (!Array.isArray(messages)) return String(fallbackContent || '');
+    const targetMsg = messages.find(m => String(m && m.id) === String(msgId));
+    if (!targetMsg) return String(fallbackContent || '');
+
+    const msgType = String(targetMsg.type || '').toLowerCase();
+    if (msgType === 'voice') {
+        try {
+            const voiceData = typeof targetMsg.content === 'string' ? JSON.parse(targetMsg.content) : targetMsg.content;
+            return String((voiceData && voiceData.text) || fallbackContent || '').trim();
+        } catch (e) {
+            return String(fallbackContent || '').trim();
+        }
+    }
+    if (msgType === 'image' || msgType === 'virtual_image' || msgType === 'sticker') {
+        const preferred = String(targetMsg.description || fallbackContent || '').trim();
+        if (preferred) return preferred;
+    }
+    return String(fallbackContent || '').trim();
+}
+
+function buildEditedChatMessagePayload(nextType, newContent, oldMessage) {
+    const safeType = ['text', 'voice', 'image', 'sticker'].includes(nextType) ? nextType : 'text';
+    const trimmedContent = String(newContent || '').trim();
+    const previousMessage = oldMessage && typeof oldMessage === 'object' ? oldMessage : {};
+
+    if (safeType === 'voice') {
+        let previousVoiceData = {};
+        if (String(previousMessage.type || '').toLowerCase() === 'voice') {
+            try {
+                previousVoiceData = typeof previousMessage.content === 'string'
+                    ? JSON.parse(previousMessage.content)
+                    : (previousMessage.content || {});
+            } catch (e) {
+                previousVoiceData = {};
+            }
+        }
+        return {
+            type: 'voice',
+            content: JSON.stringify({
+                duration: Number(previousVoiceData.duration || 3),
+                text: trimmedContent,
+                isReal: !!previousVoiceData.isReal,
+                audio: previousVoiceData.audio || null
+            }),
+            description: null
+        };
+    }
+
+    if (safeType === 'image') {
+        const oldType = String(previousMessage.type || '').toLowerCase();
+        const keepOriginalRealImage = oldType === 'image' && typeof previousMessage.content === 'string' && !!previousMessage.content.trim();
+        return {
+            type: keepOriginalRealImage ? 'image' : 'virtual_image',
+            content: keepOriginalRealImage
+                ? previousMessage.content
+                : (window.iphoneSimState.defaultVirtualImageUrl || 'https://placehold.co/600x400/png?text=Photo'),
+            description: trimmedContent
+        };
+    }
+
+    if (safeType === 'sticker') {
+        let stickerUrl = null;
+        if (window.iphoneSimState && Array.isArray(window.iphoneSimState.stickerCategories)) {
+            for (const cat of window.iphoneSimState.stickerCategories) {
+                if (!cat || !Array.isArray(cat.list)) continue;
+                const found = cat.list.find(s => {
+                    const desc = String((s && s.desc) || '').trim();
+                    return desc && (desc === trimmedContent || desc.includes(trimmedContent) || trimmedContent.includes(desc));
+                });
+                if (found && found.url) {
+                    stickerUrl = found.url;
+                    break;
+                }
+            }
+        }
+
+        if (stickerUrl) {
+            return {
+                type: 'sticker',
+                content: stickerUrl,
+                description: trimmedContent
+            };
+        }
+
+        return {
+            type: 'text',
+            content: `[表情包: ${trimmedContent}]`,
+            description: null
+        };
+    }
+
+    return {
+        type: 'text',
+        content: trimmedContent,
+        description: null
+    };
+}
+
+function createInsertedChatMessageItem(defaultContent = '', defaultType = 'text') {
+    const wrapper = document.createElement('div');
+    wrapper.className = 'edit-chat-msg-insert-item';
+    wrapper.innerHTML = `
+        <div class="edit-chat-msg-insert-head">
+            <span class="edit-chat-msg-insert-title">插入消息</span>
+            <button type="button" class="edit-chat-msg-insert-remove" title="移除">×</button>
+        </div>
+        <textarea class="edit-chat-msg-insert-content" placeholder="输入插入的消息内容..."></textarea>
+        <input type="hidden" class="edit-chat-msg-insert-type" value="text">
+        <div class="edit-chat-msg-type-switch" aria-label="插入消息类型切换">
+            <button type="button" class="edit-chat-msg-type-btn active" data-msg-type="text">文本</button>
+            <button type="button" class="edit-chat-msg-type-btn" data-msg-type="voice">语音</button>
+            <button type="button" class="edit-chat-msg-type-btn" data-msg-type="image">图片</button>
+            <button type="button" class="edit-chat-msg-type-btn" data-msg-type="sticker">表情包</button>
+        </div>
+    `;
+
+    const textArea = wrapper.querySelector('.edit-chat-msg-insert-content');
+    const typeInput = wrapper.querySelector('.edit-chat-msg-insert-type');
+    const typeButtons = Array.from(wrapper.querySelectorAll('.edit-chat-msg-type-btn'));
+    const removeBtn = wrapper.querySelector('.edit-chat-msg-insert-remove');
+    const normalizedType = ['text', 'voice', 'image', 'sticker'].includes(defaultType) ? defaultType : 'text';
+
+    if (textArea) textArea.value = String(defaultContent || '');
+    if (typeInput) typeInput.value = normalizedType;
+    typeButtons.forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.msgType === normalizedType);
+        btn.addEventListener('click', () => {
+            const msgType = String(btn.dataset.msgType || 'text').trim();
+            if (typeInput) typeInput.value = msgType || 'text';
+            typeButtons.forEach(item => item.classList.toggle('active', item === btn));
+        });
+    });
+    if (removeBtn) {
+        removeBtn.addEventListener('click', () => {
+            wrapper.remove();
+        });
+    }
+    return wrapper;
+}
+
+function collectInsertedChatMessages() {
+    const list = document.getElementById('inserted-chat-msg-list');
+    if (!list) return [];
+    const items = Array.from(list.querySelectorAll('.edit-chat-msg-insert-item'));
+    const insertedMessages = [];
+    items.forEach(item => {
+        const contentEl = item.querySelector('.edit-chat-msg-insert-content');
+        const typeEl = item.querySelector('.edit-chat-msg-insert-type');
+        const content = String(contentEl ? contentEl.value : '').trim();
+        if (!content) return;
+        insertedMessages.push({
+            type: String(typeEl ? typeEl.value : 'text').trim() || 'text',
+            content
+        });
+    });
+    return insertedMessages;
+}
 
 window.openEditBlockModal = function(jsonContent) {
     const list = document.getElementById('edit-block-list');
@@ -6914,14 +7102,44 @@ function handleSaveEditedChatMessage() {
     const msgIndex = messages.findIndex(m => m.id == currentEditingChatMsgId);
 
     if (msgIndex !== -1) {
-        messages[msgIndex].content = newContent;
+        const selectedTypeInput = document.getElementById('edit-chat-msg-type');
+        const selectedType = selectedTypeInput ? selectedTypeInput.value : 'text';
+        const payload = buildEditedChatMessagePayload(selectedType, newContent, messages[msgIndex]);
+        const insertedItems = collectInsertedChatMessages();
+        const originalMessage = messages[msgIndex];
+        messages[msgIndex].type = payload.type;
+        messages[msgIndex].content = payload.content;
+        if (payload.description) {
+            messages[msgIndex].description = payload.description;
+        } else {
+            delete messages[msgIndex].description;
+        }
         if (messages[msgIndex].bilingualTranslation) {
             delete messages[msgIndex].bilingualTranslation;
+        }
+        if (insertedItems.length > 0) {
+            const insertedMessages = insertedItems.map(item => {
+                const insertedPayload = buildEditedChatMessagePayload(item.type, item.content, originalMessage);
+                const message = {
+                    id: Date.now() + Math.random().toString(36).substr(2, 9),
+                    time: Date.now(),
+                    role: originalMessage && originalMessage.role ? originalMessage.role : 'assistant',
+                    type: insertedPayload.type,
+                    content: insertedPayload.content
+                };
+                if (insertedPayload.description) {
+                    message.description = insertedPayload.description;
+                }
+                return message;
+            });
+            messages.splice(msgIndex + 1, 0, ...insertedMessages);
         }
         saveConfig();
         renderChatHistory(window.iphoneSimState.currentChatContactId);
         
         document.getElementById('edit-chat-msg-modal').classList.add('hidden');
+        const insertedList = document.getElementById('inserted-chat-msg-list');
+        if (insertedList) insertedList.innerHTML = '';
         currentEditingChatMsgId = null;
     } else {
         alert('找不到原消息，可能已被删除');
@@ -8737,6 +8955,12 @@ function setupChatListeners() {
     const editChatMsgModal = document.getElementById('edit-chat-msg-modal');
     const closeEditChatMsgBtn = document.getElementById('close-edit-chat-msg');
     const saveEditChatMsgBtn = document.getElementById('save-edit-chat-msg-btn');
+    const addInsertedChatMsgBtn = document.getElementById('add-inserted-chat-msg-btn');
+    const insertedChatMsgList = document.getElementById('inserted-chat-msg-list');
+    const editChatMsgTypeInput = document.getElementById('edit-chat-msg-type');
+    const editChatMsgTypeButtons = editChatMsgModal
+        ? Array.from(editChatMsgModal.querySelectorAll('.edit-chat-msg-type-btn'))
+        : [];
 
     const contactsTitleBtn = document.getElementById('contacts-title-btn');
     if (contactsTitleBtn) {
@@ -8747,11 +8971,35 @@ function setupChatListeners() {
         closeEditChatMsgBtn.addEventListener('click', () => {
             editChatMsgModal.classList.add('hidden');
             currentEditingChatMsgId = null;
+            if (insertedChatMsgList) insertedChatMsgList.innerHTML = '';
         });
     }
 
     if (saveEditChatMsgBtn) {
         saveEditChatMsgBtn.addEventListener('click', handleSaveEditedChatMessage);
+    }
+
+    if (editChatMsgTypeButtons.length > 0) {
+        editChatMsgTypeButtons.forEach(btn => {
+            if (btn.closest('.edit-chat-msg-insert-item')) return;
+            btn.addEventListener('click', () => {
+                const msgType = String(btn.dataset.msgType || 'text').trim();
+                if (editChatMsgTypeInput) editChatMsgTypeInput.value = msgType || 'text';
+                editChatMsgTypeButtons.forEach(item => {
+                    if (item.closest('.edit-chat-msg-insert-item')) return;
+                    item.classList.toggle('active', item === btn);
+                });
+            });
+        });
+    }
+
+    if (addInsertedChatMsgBtn && insertedChatMsgList) {
+        addInsertedChatMsgBtn.addEventListener('click', () => {
+            const item = createInsertedChatMessageItem('', 'text');
+            insertedChatMsgList.appendChild(item);
+            const textarea = item.querySelector('.edit-chat-msg-insert-content');
+            if (textarea) textarea.focus();
+        });
     }
 
     const closeAutoSnapshotBtn = document.getElementById('close-auto-snapshot');

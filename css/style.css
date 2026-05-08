@@ -1136,6 +1136,135 @@ textarea {
     to { transform: translateY(0); }
 }
 
+#edit-chat-msg-modal {
+    align-items: center;
+    justify-content: center;
+    z-index: 320;
+}
+
+#edit-chat-msg-modal .modal-content {
+    width: min(90vw, 380px);
+    max-height: min(82vh, 560px);
+    border-radius: 18px;
+    border: 1px solid #e5e7eb;
+    box-shadow: 0 16px 40px rgba(15, 23, 42, 0.24);
+    animation: editMsgModalPopIn 220ms cubic-bezier(0.22, 1, 0.36, 1);
+    padding-bottom: 0;
+}
+
+#edit-chat-msg-modal .modal-header::before {
+    display: none;
+}
+
+#edit-chat-msg-modal .modal-body {
+    padding-top: 8px;
+}
+
+.edit-chat-msg-type-switch {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 8px;
+    margin: 10px 0 14px;
+}
+
+.edit-chat-msg-type-btn {
+    border: 1px solid #d6dae1;
+    border-radius: 10px;
+    background: #f7f8fb;
+    color: #4b5563;
+    font-size: 13px;
+    font-weight: 600;
+    padding: 8px 4px;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.edit-chat-msg-type-btn.active {
+    border-color: #007aff;
+    background: #eaf3ff;
+    color: #007aff;
+}
+
+.edit-chat-msg-insert-btn {
+    width: 100%;
+    border: 1px dashed #c8d0dc;
+    border-radius: 11px;
+    background: #f8fafc;
+    color: #334155;
+    font-size: 14px;
+    font-weight: 600;
+    padding: 9px 12px;
+    line-height: 1.2;
+    cursor: pointer;
+    margin-bottom: 12px;
+}
+
+.edit-chat-msg-insert-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-bottom: 12px;
+}
+
+.edit-chat-msg-insert-item {
+    border: 1px solid #e5e7eb;
+    border-radius: 12px;
+    background: #fafbfc;
+    padding: 10px 10px 8px;
+}
+
+.edit-chat-msg-insert-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 8px;
+}
+
+.edit-chat-msg-insert-title {
+    font-size: 12px;
+    color: #64748b;
+    font-weight: 600;
+}
+
+.edit-chat-msg-insert-remove {
+    border: none;
+    background: transparent;
+    color: #94a3b8;
+    font-size: 16px;
+    line-height: 1;
+    cursor: pointer;
+    padding: 2px 4px;
+}
+
+.edit-chat-msg-insert-item textarea {
+    width: 100%;
+    min-height: 88px;
+    background: #f2f2f7;
+    border: none;
+    border-radius: 10px;
+    padding: 10px 12px;
+    font-size: 16px;
+    color: #000;
+    outline: none;
+    resize: vertical;
+    margin-bottom: 8px;
+}
+
+.edit-chat-msg-insert-item .edit-chat-msg-type-switch {
+    margin: 0;
+}
+
+@keyframes editMsgModalPopIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px) scale(0.98);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
 .modal-header {
     padding: 16px 20px;
     display: flex;
