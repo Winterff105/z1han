@@ -3067,12 +3067,9 @@ const CHAT_CUSTOM_CSS_SCOPE_SELECTOR = '#chat-screen#chat-screen#chat-screen';
 function buildChatCustomCssText(rawCss) {
     const customCss = String(rawCss || '').trim();
     if (!customCss) return '';
-    // Backward-compatible: keep old "declarations only" input working.
-    if (!/[{}]/.test(customCss)) {
-        return `${CHAT_CUSTOM_CSS_SCOPE_SELECTOR} { ${customCss} }`;
-    }
-    // New behavior: if user writes full CSS rules/selectors, keep as-is.
-    return customCss;
+    // Keep legacy behavior: wrap all custom CSS in a high-specificity chat scope.
+    // Existing user presets (including full selector rules) rely on this precedence.
+    return `${CHAT_CUSTOM_CSS_SCOPE_SELECTOR} { ${customCss} }`;
 }
 
 function applyChatCustomCss(rawCss) {

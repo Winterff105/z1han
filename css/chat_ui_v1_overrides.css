@@ -290,7 +290,7 @@
 #chat-screen .chat-blocked-footer {
     display: none;
     padding: 12px 14px calc(12px + max(0px, env(safe-area-inset-bottom)));
-    background: rgba(248, 248, 248, 0.94)
+    background: rgba(248, 248, 248, 0.94);
     border-top: 1px solid rgba(0, 0, 0, 0.08);
     backdrop-filter: blur(16px);
     -webkit-backdrop-filter: blur(16px);
