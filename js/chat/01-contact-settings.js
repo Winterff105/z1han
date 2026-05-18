@@ -3036,6 +3036,32 @@ window.confirmWechatBlockFromSettings = confirmWechatBlockFromSettings;
 window.handleToggleWechatBlockStatus = handleToggleWechatBlockStatus;
 window.handleWechatUnblockFromChat = handleWechatUnblockFromChat;
 
+const CHAT_CUSTOM_CSS_SCOPE_SELECTOR = '#chat-screen#chat-screen#chat-screen';
+
+function buildChatCustomCssText(rawCss) {
+    const customCss = String(rawCss || '').trim();
+    if (!customCss) return '';
+    // Backward-compatible: keep old "declarations only" input working.
+    if (!/[{}]/.test(customCss)) {
+        return `${CHAT_CUSTOM_CSS_SCOPE_SELECTOR} { ${customCss} }`;
+    }
+    // New behavior: if user writes full CSS rules/selectors, keep as-is.
+    return customCss;
+}
+
+function applyChatCustomCss(rawCss) {
+    const existingStyle = document.getElementById('chat-custom-css');
+    if (existingStyle) existingStyle.remove();
+
+    const compiledCss = buildChatCustomCssText(rawCss);
+    if (!compiledCss) return;
+
+    const style = document.createElement('style');
+    style.id = 'chat-custom-css';
+    style.textContent = compiledCss;
+    document.head.appendChild(style);
+}
+
 function applyChatDisplayPreferences(contactOrId = null) {
     const chatScreen = document.getElementById('chat-screen');
     if (!chatScreen) return;
@@ -3076,17 +3102,7 @@ window.applyChatDisplayPreferences = applyChatDisplayPreferences;
 function applyChatSettingsCustomCssPreview() {
     const cssTextarea = document.getElementById('chat-setting-custom-css');
     if (!cssTextarea) return;
-
-    const existingStyle = document.getElementById('chat-custom-css');
-    if (existingStyle) existingStyle.remove();
-
-    const customCss = cssTextarea.value.trim();
-    if (!customCss) return;
-
-    const style = document.createElement('style');
-    style.id = 'chat-custom-css';
-    style.textContent = `#chat-screen#chat-screen#chat-screen { ${customCss} }`;
-    document.head.appendChild(style);
+    applyChatCustomCss(cssTextarea.value);
 }
 
 window.applyChatSettingsCustomCssPreview = applyChatSettingsCustomCssPreview;
@@ -3125,16 +3141,7 @@ function openChat(contactId) {
         chatScreen.style.backgroundImage = '';
     }
 
-    const existingStyle = document.getElementById('chat-custom-css');
-    if (existingStyle) existingStyle.remove();
-
-    if (contact.customCss) {
-        const style = document.createElement('style');
-        style.id = 'chat-custom-css';
-        // Scope CSS to chat screen to prevent affecting settings page
-        style.textContent = `#chat-screen#chat-screen#chat-screen { ${contact.customCss} }`;
-        document.head.appendChild(style);
-    }
+    applyChatCustomCss(contact.customCss);
 
     // 应用字体大小
     const chatBody = document.getElementById('chat-messages');
@@ -5561,16 +5568,7 @@ function handleSaveChatSettings() {
             chatScreen.style.backgroundImage = '';
         }
 
-        const existingStyle = document.getElementById('chat-custom-css');
-        if (existingStyle) existingStyle.remove();
-
-        if (contact.customCss) {
-            const style = document.createElement('style');
-            style.id = 'chat-custom-css';
-            // Scope CSS to chat screen to prevent affecting settings page
-            style.textContent = `#chat-screen#chat-screen#chat-screen { ${contact.customCss} }`;
-            document.head.appendChild(style);
-        }
+        applyChatCustomCss(contact.customCss);
 
         // 应用字体大小
         const chatBody = document.getElementById('chat-messages');

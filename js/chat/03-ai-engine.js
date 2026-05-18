@@ -2143,6 +2143,27 @@ function appendMessageToUI(text, isUser, type = 'text', description = null, repl
         `;
     }
 
+    const bubbleContentEl = msgDiv.querySelector('.message-content');
+    const outsideTimeEl = msgDiv.querySelector('.msg-time');
+    if (
+        bubbleContentEl
+        && outsideTimeEl
+        && (msgDiv.classList.contains('user') || msgDiv.classList.contains('other'))
+    ) {
+        let inlineTimeEl = bubbleContentEl.querySelector('.bubble-inline-time');
+        if (!inlineTimeEl) {
+            inlineTimeEl = document.createElement('span');
+            inlineTimeEl.className = 'bubble-inline-time';
+            inlineTimeEl.setAttribute('aria-hidden', 'true');
+            inlineTimeEl.style.display = 'none';
+            bubbleContentEl.appendChild(inlineTimeEl);
+        }
+        inlineTimeEl.textContent = String(outsideTimeEl.textContent || '').trim();
+        if (outsideTimeEl.textContent) {
+            outsideTimeEl.setAttribute('data-time-text', String(outsideTimeEl.textContent || '').trim());
+        }
+    }
+
     if (!isUser) {
         const avatarEl = msgDiv.querySelector('.chat-avatar');
         if (avatarEl) {
