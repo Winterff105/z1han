@@ -336,6 +336,16 @@ function normalizeContactTopbarStatusSource(value) {
     return normalized === 'activity' ? 'activity' : 'custom';
 }
 
+function normalizeTimestampPosition(value) {
+    const normalized = String(value || '').trim().toLowerCase();
+    return normalized === 'inside' ? 'inside' : 'outside';
+}
+
+function normalizeTimestampFormat(value) {
+    const normalized = String(value || '').trim().toLowerCase();
+    return normalized === '12h' ? '12h' : '24h';
+}
+
 function normalizeChatAppearancePreset(value) {
     const normalized = String(value || '').trim();
     if (!normalized) return 'default';
@@ -518,6 +528,16 @@ function ensureContactStickerSuggestionFields(contact) {
     return contact;
 }
 
+function ensureContactTimestampFields(contact) {
+    if (!contact || typeof contact !== 'object') return contact;
+    if (typeof contact.showTimestamp !== 'boolean') {
+        contact.showTimestamp = true;
+    }
+    contact.timestampPosition = normalizeTimestampPosition(contact.timestampPosition);
+    contact.timestampFormat = normalizeTimestampFormat(contact.timestampFormat);
+    return contact;
+}
+
 function syncChatTopbarAvatarSettingsVisibility() {
     const enabledInput = document.getElementById('chat-setting-topbar-avatar-visible');
     const panel = document.getElementById('chat-setting-topbar-avatar-position-field');
@@ -673,6 +693,9 @@ window.syncChatTopbarAvatarSettingsVisibility = syncChatTopbarAvatarSettingsVisi
 window.applyChatTopbarAppearance = applyChatTopbarAppearance;
 window.ensureContactCallWorldbookFields = ensureContactCallWorldbookFields;
 window.ensureContactStickerSuggestionFields = ensureContactStickerSuggestionFields;
+window.normalizeTimestampPosition = normalizeTimestampPosition;
+window.normalizeTimestampFormat = normalizeTimestampFormat;
+window.ensureContactTimestampFields = ensureContactTimestampFields;
 window.CHAT_BILINGUAL_LANGUAGE_OPTIONS = CHAT_BILINGUAL_LANGUAGE_OPTIONS.slice();
 
 if (document.readyState === 'loading') {
@@ -1694,7 +1717,10 @@ function createBaseContactPayload({ name, remark = '', persona = '', avatar = ''
         callLinkedWbCategories: [],
         meetingLinkedWbCategories: [],
         linkedStickerCategories: [],
-        stickerSuggestionEnabled: true
+        stickerSuggestionEnabled: true,
+        showTimestamp: true,
+        timestampPosition: 'outside',
+        timestampFormat: '24h'
     };
 }
 
@@ -3075,6 +3101,9 @@ function applyChatDisplayPreferences(contactOrId = null) {
             contact = (window.iphoneSimState.contacts || []).find(c => c.id === targetId);
         }
     }
+    if (contact) {
+        ensureContactTimestampFields(contact);
+    }
 
     // New per-side avatar visibility with backward compatibility for legacy showAvatar.
     let avatarVisibility = 'show-both';
@@ -3086,6 +3115,8 @@ function applyChatDisplayPreferences(contactOrId = null) {
         }
     }
     const showTimestamp = contact ? (contact.showTimestamp !== false) : true;
+    const timestampPosition = contact ? normalizeTimestampPosition(contact.timestampPosition) : 'outside';
+    const timestampFormat = contact ? normalizeTimestampFormat(contact.timestampFormat) : '24h';
 
     const hideOtherAvatar = avatarVisibility === 'hide-other' || avatarVisibility === 'hide-both';
     const hideSelfAvatar = avatarVisibility === 'hide-self' || avatarVisibility === 'hide-both';
@@ -3095,6 +3126,9 @@ function applyChatDisplayPreferences(contactOrId = null) {
     chatScreen.classList.toggle('hide-chat-avatar-other', hideOtherAvatar);
     chatScreen.classList.toggle('hide-chat-avatar-self', hideSelfAvatar);
     chatScreen.classList.toggle('hide-chat-timestamp', !showTimestamp);
+    chatScreen.classList.toggle('timestamp-inside', timestampPosition === 'inside');
+    chatScreen.dataset.timestampPosition = timestampPosition;
+    chatScreen.dataset.timestampFormat = timestampFormat;
 }
 
 window.applyChatDisplayPreferences = applyChatDisplayPreferences;
@@ -3117,6 +3151,7 @@ function openChat(contactId) {
     if (typeof window.ensureContactWechatBlockFields === 'function') {
         window.ensureContactWechatBlockFields(contact);
     }
+    ensureContactTimestampFields(contact);
     ensureContactChatAppearancePresetField(contact);
     
     if (window.iphoneSimState.isMultiSelectMode) {
@@ -4535,6 +4570,7 @@ function openChatSettings() {
     ensureContactTopbarAvatarFields(contact);
     ensureContactCallWorldbookFields(contact);
     ensureContactStickerSuggestionFields(contact);
+    ensureContactTimestampFields(contact);
     ensureContactChatAppearancePresetField(contact);
     if (typeof window.ensureContactWechatBlockFields === 'function') {
         window.ensureContactWechatBlockFields(contact);
@@ -4683,6 +4719,14 @@ function openChatSettings() {
     const showTimestampToggle = document.getElementById('chat-setting-show-timestamp');
     if (showTimestampToggle) {
         showTimestampToggle.checked = contact.showTimestamp !== false;
+    }
+    const timestampPositionSelect = document.getElementById('chat-setting-timestamp-position');
+    if (timestampPositionSelect) {
+        timestampPositionSelect.value = normalizeTimestampPosition(contact.timestampPosition);
+    }
+    const timestampFormatSelect = document.getElementById('chat-setting-time-format');
+    if (timestampFormatSelect) {
+        timestampFormatSelect.value = normalizeTimestampFormat(contact.timestampFormat);
     }
 
     const stickerSuggestionToggle = document.getElementById('chat-setting-sticker-suggestion-enabled');
@@ -5250,7 +5294,11 @@ function handleSaveChatSettings() {
     ensureContactBilingualTranslationFields(contact);
     ensureContactCallWorldbookFields(contact);
     ensureContactStickerSuggestionFields(contact);
+    ensureContactTimestampFields(contact);
     ensureContactChatAppearancePresetField(contact);
+    const previousShowTimestamp = contact.showTimestamp !== false;
+    const previousTimestampPosition = normalizeTimestampPosition(contact.timestampPosition);
+    const previousTimestampFormat = normalizeTimestampFormat(contact.timestampFormat);
     const previousRestWindowSnapshot = `${contact.restWindowEnabled ? '1' : '0'}|${contact.restWindowStart || ''}|${contact.restWindowEnd || ''}`;
 
     const name = document.getElementById('chat-setting-name').value;
@@ -5302,6 +5350,12 @@ function handleSaveChatSettings() {
         ? document.getElementById('chat-setting-avatar-visibility').value
         : 'show-both';
     const showTimestamp = document.getElementById('chat-setting-show-timestamp') ? document.getElementById('chat-setting-show-timestamp').checked : true;
+    const timestampPosition = document.getElementById('chat-setting-timestamp-position')
+        ? normalizeTimestampPosition(document.getElementById('chat-setting-timestamp-position').value)
+        : 'outside';
+    const timestampFormat = document.getElementById('chat-setting-time-format')
+        ? normalizeTimestampFormat(document.getElementById('chat-setting-time-format').value)
+        : '24h';
     const stickerSuggestionEnabled = document.getElementById('chat-setting-sticker-suggestion-enabled')
         ? document.getElementById('chat-setting-sticker-suggestion-enabled').checked
         : true;
@@ -5413,6 +5467,8 @@ function handleSaveChatSettings() {
     // Backward-compat for any old logic relying on showAvatar.
     contact.showAvatar = avatarVisibility !== 'hide-both';
     contact.showTimestamp = showTimestamp;
+    contact.timestampPosition = timestampPosition;
+    contact.timestampFormat = timestampFormat;
     contact.stickerSuggestionEnabled = !!stickerSuggestionEnabled;
     contact.topbarAvatarVisible = !!topbarAvatarVisible;
     contact.topbarAvatarPosition = topbarAvatarPosition;
@@ -5550,11 +5606,19 @@ function handleSaveChatSettings() {
         );
     }
 
+    const shouldRefreshChatAfterDisplayPrefChange = (
+        previousShowTimestamp !== showTimestamp
+        || previousTimestampPosition !== timestampPosition
+        || previousTimestampFormat !== timestampFormat
+    );
+
     Promise.all(promises).then(() => {
         saveConfig();
         setChatSettingsFloatingSaveState(true);
         if (window.renderContactList) window.renderContactList(window.iphoneSimState.currentContactGroup || 'all');
-        renderChatHistory(contact.id);
+        if (shouldRefreshChatAfterDisplayPrefChange) {
+            renderChatHistory(contact.id);
+        }
         if (typeof window.renderThoughtEntryUI === 'function') {
             window.renderThoughtEntryUI(contact.id);
         }

@@ -1107,6 +1107,79 @@
     color: #b4b4bb;
 }
 
+#chat-screen .chat-message .bubble-inline-time {
+    display: none;
+}
+
+#chat-screen .chat-message.supports-inline-time .msg-time {
+    display: none !important;
+}
+
+#chat-screen .chat-message.supports-inline-time .message-content {
+    position: relative;
+    overflow: visible;
+}
+
+#chat-screen:not(.hide-chat-timestamp) .chat-message.supports-inline-time .bubble-inline-time {
+    display: block;
+    position: absolute;
+    bottom: 5px;
+    line-height: 1;
+    white-space: nowrap;
+    pointer-events: none;
+    font-size: 10px;
+    color: #b4b4bb;
+}
+
+#chat-screen:not(.timestamp-inside) .chat-message.user.supports-inline-time .bubble-inline-time {
+    right: calc(100% + 8px);
+    left: auto;
+}
+
+#chat-screen:not(.timestamp-inside) .chat-message.other.supports-inline-time .bubble-inline-time {
+    left: calc(100% + 8px);
+    right: auto;
+}
+
+#chat-screen.timestamp-inside .chat-message.supports-inline-time .message-content {
+    padding-right: 14px !important;
+    padding-bottom: 8px !important;
+    min-height: 0;
+}
+
+/* Inline timestamp (same line with text):
+   - single-line: sits on the same line
+   - multi-line: naturally lands at the right side of the last line
+   - no global extra right gutter for upper lines */
+#chat-screen.timestamp-inside .chat-message.supports-inline-time .bubble-inline-time {
+    display: inline !important;
+    position: static;
+    float: none;
+    right: auto;
+    left: auto;
+    bottom: auto;
+    margin-left: 6px;
+    font-size: 0.82em;
+    font-weight: 500;
+    line-height: 1.1;
+    letter-spacing: 0;
+    vertical-align: baseline;
+    white-space: nowrap;
+    color: rgba(118, 118, 128, 0.82);
+}
+
+#chat-screen.timestamp-inside .chat-message.supports-inline-time .message-content > br + .bubble-inline-time {
+    margin-left: 0;
+}
+
+#chat-screen.timestamp-inside .chat-message.user.supports-inline-time .bubble-inline-time {
+    color: rgba(255, 255, 255, 0.92);
+}
+
+#chat-screen.hide-chat-timestamp .chat-message .bubble-inline-time {
+    display: none !important;
+}
+
 #chat-screen .chat-time-stamp span,
 #chat-screen .system-tip {
     background: rgba(0, 0, 0, 0.05);
@@ -1411,6 +1484,14 @@
 
 #chat-screen.chat-appearance-ios26 .msg-time {
     color: var(--ios26-subtle);
+}
+
+#chat-screen.chat-appearance-ios26.timestamp-inside .chat-message.supports-inline-time .bubble-inline-time {
+    color: rgba(118, 118, 128, 0.82);
+}
+
+#chat-screen.chat-appearance-ios26.timestamp-inside .chat-message.user.supports-inline-time .bubble-inline-time {
+    color: rgba(255, 255, 255, 0.92);
 }
 
 #chat-screen.chat-appearance-ios26 .chat-bottom-stack {
