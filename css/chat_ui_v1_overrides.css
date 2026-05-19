@@ -1145,8 +1145,8 @@
 }
 
 #chat-screen.timestamp-inside .chat-message.supports-inline-time .message-content {
-    padding-right: 14px !important;
-    padding-bottom: 8px !important;
+    /* Inline timestamps now participate in normal text flow, so forcing
+       extra right/bottom padding creates uneven whitespace in custom bubbles. */
     min-height: 0;
 }
 
@@ -1164,7 +1164,7 @@
     margin-left: 6px;
     font-size: 0.82em;
     font-weight: 500;
-    line-height: 1.1;
+    line-height: 1;
     letter-spacing: 0;
     vertical-align: baseline;
     white-space: nowrap;
