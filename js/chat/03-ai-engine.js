@@ -2109,7 +2109,8 @@ function appendMessageToUI(text, isUser, type = 'text', description = null, repl
     }
 
     const msgTimeStr = formatChatTimestampText(now, timestampPrefs.format);
-    const timeHtml = `<div class="msg-time">${msgTimeStr}</div>`;
+    // Keep both class names for backward compatibility with existing custom CSS.
+    const timeHtml = `<div class="msg-time message-time">${msgTimeStr}</div>`;
 
     function buildGroupSpeakerLabelHtml(meta, isSelf = false) {
         if (!meta || (!meta.name && !meta.title)) return '';
@@ -2209,7 +2210,9 @@ function appendMessageToUI(text, isUser, type = 'text', description = null, repl
         let inlineTimeEl = bubbleContentEl.querySelector('.bubble-inline-time');
         if (!inlineTimeEl) {
             inlineTimeEl = document.createElement('span');
-            inlineTimeEl.className = 'bubble-inline-time';
+            // Keep both legacy timestamp class names on the visible inline node
+            // so user custom CSS can target either .msg-time or .message-time.
+            inlineTimeEl.className = 'bubble-inline-time msg-time message-time';
             inlineTimeEl.setAttribute('aria-hidden', 'true');
         }
         if (inlineTimeEl.parentElement !== inlineTimeHost) {

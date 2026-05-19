@@ -1103,7 +1103,9 @@
     border-top: 1px solid var(--v1-border-color);
 }
 
-#chat-screen .msg-time {
+#chat-screen > .msg-time,
+#chat-screen .chat-message > .msg-time,
+#chat-screen .chat-message > .message-time {
     color: #b4b4bb;
 }
 
@@ -1111,7 +1113,8 @@
     display: none;
 }
 
-#chat-screen .chat-message.supports-inline-time .msg-time {
+#chat-screen .chat-message.supports-inline-time > .msg-time,
+#chat-screen .chat-message.supports-inline-time > .message-time {
     display: none !important;
 }
 
@@ -1165,7 +1168,7 @@
     letter-spacing: 0;
     vertical-align: baseline;
     white-space: nowrap;
-    color: rgba(118, 118, 128, 0.82);
+    color: inherit;
 }
 
 #chat-screen.timestamp-inside .chat-message.supports-inline-time .message-content > br + .bubble-inline-time {
@@ -1173,7 +1176,7 @@
 }
 
 #chat-screen.timestamp-inside .chat-message.user.supports-inline-time .bubble-inline-time {
-    color: rgba(255, 255, 255, 0.92);
+    color: inherit;
 }
 
 #chat-screen.hide-chat-timestamp .chat-message .bubble-inline-time {
@@ -1482,16 +1485,17 @@
     box-shadow: none;
 }
 
-#chat-screen.chat-appearance-ios26 .msg-time {
+#chat-screen.chat-appearance-ios26 .chat-message > .msg-time,
+#chat-screen.chat-appearance-ios26 .chat-message > .message-time {
     color: var(--ios26-subtle);
 }
 
 #chat-screen.chat-appearance-ios26.timestamp-inside .chat-message.supports-inline-time .bubble-inline-time {
-    color: rgba(118, 118, 128, 0.82);
+    color: inherit;
 }
 
 #chat-screen.chat-appearance-ios26.timestamp-inside .chat-message.user.supports-inline-time .bubble-inline-time {
-    color: rgba(255, 255, 255, 0.92);
+    color: inherit;
 }
 
 #chat-screen.chat-appearance-ios26 .chat-bottom-stack {
@@ -2476,7 +2480,8 @@
 
 #chat-screen.chat-appearance-ios26 #chat-messages.chat-body .chat-time-stamp span,
 #chat-screen.chat-appearance-ios26 #chat-messages.chat-body .system-tip,
-#chat-screen.chat-appearance-ios26 #chat-messages.chat-body .msg-time {
+#chat-screen.chat-appearance-ios26 #chat-messages.chat-body > .chat-message > .msg-time,
+#chat-screen.chat-appearance-ios26 #chat-messages.chat-body > .chat-message > .message-time {
     font-size: 0.73em !important;
 }
 

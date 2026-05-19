@@ -5603,19 +5603,10 @@ function handleSaveChatSettings() {
         );
     }
 
-    const shouldRefreshChatAfterDisplayPrefChange = (
-        previousShowTimestamp !== showTimestamp
-        || previousTimestampPosition !== timestampPosition
-        || previousTimestampFormat !== timestampFormat
-    );
-
     Promise.all(promises).then(() => {
         saveConfig();
         setChatSettingsFloatingSaveState(true);
         if (window.renderContactList) window.renderContactList(window.iphoneSimState.currentContactGroup || 'all');
-        if (shouldRefreshChatAfterDisplayPrefChange) {
-            renderChatHistory(contact.id);
-        }
         if (typeof window.renderThoughtEntryUI === 'function') {
             window.renderThoughtEntryUI(contact.id);
         }
@@ -5647,6 +5638,9 @@ function handleSaveChatSettings() {
         applyChatAppearancePreset(contact);
         applyChatDisplayPreferences(contact);
         applyChatTopbarAppearance(contact);
+        // Render after visual classes and custom CSS are applied so timestamp
+        // nodes always match the latest mode/format immediately.
+        renderChatHistory(contact.id);
         if (typeof window.refreshChatStickerSuggestionBarForCurrentInput === 'function') {
             window.refreshChatStickerSuggestionBarForCurrentInput();
         }
