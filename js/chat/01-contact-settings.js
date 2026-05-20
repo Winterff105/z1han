@@ -2823,6 +2823,9 @@ function renderContactList(filterGroup = 'all') {
                      return;
                 }
                 openChat(contact.id);
+                if (typeof window.maybeShow520EventEntryFromWechatChat === 'function') {
+                    window.maybeShow520EventEntryFromWechatChat({ source: 'wechat-contact-list', contactId: contact.id });
+                }
             });
 
             list.appendChild(item);
