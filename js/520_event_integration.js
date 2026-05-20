@@ -17,6 +17,8 @@
     const GENERATED_STATE_KEY = 'generated520EventState';
     const EVENT_MEMORY_CARD_COUNT = 8;
     const LOADING_TEXT_DEFAULT = '正在寻找时空碎片';
+    const BACK_SCROLL_AUTO_START_DELAY = 2400;
+    const BACK_SCROLL_AUTO_SPEED = 18;
 
     const memories = [
         {
@@ -957,7 +959,7 @@
     overflow-x: hidden;
     -webkit-overflow-scrolling: touch;
     overscroll-behavior-y: contain;
-    touch-action: pan-y;
+    touch-action: none;
     scrollbar-width: thin;
     scrollbar-color: rgba(255,255,255,0.28) transparent;
     padding: 40px 30px;
@@ -2039,8 +2041,61 @@ ${getMarkup()}
             });
         }
 
-        function buildFrameMarkup(mem, index) {
-            return `
+
+        function stopBackScrollAutoPlay(frame) {
+            if (!frame) return;
+            if (frame.__backScrollAutoStartTimer) {
+                window.clearTimeout(frame.__backScrollAutoStartTimer);
+                frame.__backScrollAutoStartTimer = 0;
+            }
+            if (frame.__backScrollAutoRafId) {
+                window.cancelAnimationFrame(frame.__backScrollAutoRafId);
+                frame.__backScrollAutoRafId = 0;
+            }
+        }
+
+        function startBackScrollAutoPlay(frame) {
+            if (!frame) return;
+            stopBackScrollAutoPlay(frame);
+            const backScrollLayer = frame.querySelector('.back-scroll-layer');
+            if (!backScrollLayer) return;
+            frame.__backScrollAutoStartTimer = window.setTimeout(() => {
+                if (!frame.isConnected || !frame.classList.contains('flipped')) return;
+                const layer = frame.querySelector('.back-scroll-layer');
+                if (!layer) return;
+                const maxScroll = Math.max(0, layer.scrollHeight - layer.clientHeight);
+                if (maxScroll <= 0) return;
+                let lastTime = performance.now();
+                const tick = (now) => {
+                    if (!frame.isConnected || !frame.classList.contains('flipped')) {
+                        stopBackScrollAutoPlay(frame);
+                        return;
+                    }
+                    const activeLayer = frame.querySelector('.back-scroll-layer');
+                    if (!activeLayer) {
+                        stopBackScrollAutoPlay(frame);
+                        return;
+                    }
+                    const activeMaxScroll = Math.max(0, activeLayer.scrollHeight - activeLayer.clientHeight);
+                    if (activeMaxScroll <= 0) {
+                        stopBackScrollAutoPlay(frame);
+                        return;
+                    }
+                    const deltaSeconds = Math.max(0, (now - lastTime) / 1000);
+                    lastTime = now;
+                    activeLayer.scrollTop = Math.min(activeMaxScroll, activeLayer.scrollTop + (BACK_SCROLL_AUTO_SPEED * deltaSeconds));
+                    if (activeLayer.scrollTop >= activeMaxScroll - 1) {
+                        activeLayer.scrollTop = activeMaxScroll;
+                        stopBackScrollAutoPlay(frame);
+                        return;
+                    }
+                    frame.__backScrollAutoRafId = window.requestAnimationFrame(tick);
+                };
+                frame.__backScrollAutoRafId = window.requestAnimationFrame(tick);
+            }, BACK_SCROLL_AUTO_START_DELAY);
+        }
+function buildFrameMarkup(mem, index) {
+    return `
 <div class="frame-inner">
     <div class="frame-front">
         <div class="frame-top">
@@ -2068,7 +2123,7 @@ ${getMarkup()}
 <div class="frame-glow"></div>
 <div class="spotlight"></div>
 `;
-        }
+}
 
         function renderFrames(memoryList) {
             frames.length = 0;
@@ -2076,54 +2131,117 @@ ${getMarkup()}
             const list = Array.isArray(memoryList) && memoryList.length
                 ? memoryList
                 : memories;
-            list.forEach((mem, index) => {
-                const frame = document.createElement('div');
-                frame.className = 'memory-frame';
-                frame.innerHTML = buildFrameMarkup(mem, index);
-                const backScrollLayer = frame.querySelector('.back-scroll-layer');
-                let touchStartX = 0;
-                let touchStartY = 0;
-                let touchMoved = false;
-                const touchTapMoveThreshold = 8;
+        list.forEach((mem, index) => {
+            const frame = document.createElement('div');
+            frame.className = 'memory-frame';
+            frame.innerHTML = buildFrameMarkup(mem, index);
+            const backScrollLayer = frame.querySelector('.back-scroll-layer');
 
-                frame.addEventListener('touchstart', (event) => {
-                    if (!event.touches || event.touches.length !== 1) return;
-                    touchMoved = false;
-                    touchStartX = event.touches[0].clientX;
-                    touchStartY = event.touches[0].clientY;
-                }, { passive: true });
+            let touchStartX = 0;
+            let touchStartY = 0;
+            let touchScrollStartY = 0;
+            let touchMoved = false;
+            let pointerDragging = false;
+            let pointerLastY = 0;
+            const touchTapMoveThreshold = 8;
+            const touchScrollThreshold = 6;
 
-                frame.addEventListener('touchmove', (event) => {
-                    if (!event.touches || event.touches.length !== 1) return;
-                    const deltaX = Math.abs(event.touches[0].clientX - touchStartX);
-                    const deltaY = Math.abs(event.touches[0].clientY - touchStartY);
-                    if (deltaX > touchTapMoveThreshold || deltaY > touchTapMoveThreshold) {
-                        touchMoved = true;
-                    }
-                }, { passive: true });
+            const handleTouchStart = (event) => {
+                if (!event.touches || event.touches.length !== 1) return;
+                touchMoved = false;
+                touchStartX = event.touches[0].clientX;
+                touchStartY = event.touches[0].clientY;
+                touchScrollStartY = event.touches[0].clientY;
+            };
 
-                frame.addEventListener('wheel', (event) => {
-                    if (!frame.classList.contains('flipped')) return;
-                    const backScrollLayer = frame.querySelector('.back-scroll-layer');
-                    if (!backScrollLayer) return;
+            const handleTouchMove = (event) => {
+                if (!event.touches || event.touches.length !== 1) return;
+                const deltaX = Math.abs(event.touches[0].clientX - touchStartX);
+                const deltaY = Math.abs(event.touches[0].clientY - touchStartY);
+                if (deltaX > touchTapMoveThreshold || deltaY > touchTapMoveThreshold) {
+                    touchMoved = true;
+                }
+                if (!frame.classList.contains('flipped') || !backScrollLayer) return;
+                event.preventDefault();
+                const currentY = event.touches[0].clientY;
+                const scrollDelta = touchScrollStartY - currentY;
+                if (Math.abs(scrollDelta) >= touchScrollThreshold) {
+                    backScrollLayer.scrollTop += scrollDelta;
+                    touchScrollStartY = currentY;
+                }
+            };
+
+            const handleTouchEnd = () => {
+                touchScrollStartY = 0;
+            };
+
+            const handlePointerDown = (event) => {
+                if (!event || event.pointerType === 'mouse') return;
+                pointerDragging = true;
+                pointerLastY = event.clientY;
+            };
+
+            const handlePointerMove = (event) => {
+                if (!pointerDragging || !event || event.pointerType === 'mouse') return;
+                if (!frame.classList.contains('flipped') || !backScrollLayer) return;
+                const delta = pointerLastY - event.clientY;
+                if (Math.abs(delta) >= 1) {
                     event.preventDefault();
-                    backScrollLayer.scrollTop += event.deltaY;
-                }, { passive: false });
+                    backScrollLayer.scrollTop += delta;
+                    pointerLastY = event.clientY;
+                    touchMoved = true;
+                }
+            };
 
-                frame.addEventListener('click', () => {
-                    if (touchMoved) {
-                        touchMoved = false;
-                        return;
-                    }
-                    const shouldFlipToBack = !frame.classList.contains('flipped');
-                    frame.classList.toggle('flipped');
-                    if (shouldFlipToBack && backScrollLayer) {
-                        backScrollLayer.scrollTop = 0;
-                    }
-                });
-                frames.push(frame);
-                framesWrapper.appendChild(frame);
+            const handlePointerUp = () => {
+                pointerDragging = false;
+            };
+
+            if (backScrollLayer) {
+                backScrollLayer.addEventListener('touchstart', handleTouchStart, { passive: true });
+                backScrollLayer.addEventListener('touchmove', handleTouchMove, { passive: false });
+                backScrollLayer.addEventListener('touchend', handleTouchEnd, { passive: true });
+                backScrollLayer.addEventListener('touchcancel', handleTouchEnd, { passive: true });
+                backScrollLayer.addEventListener('pointerdown', handlePointerDown, { passive: true });
+                backScrollLayer.addEventListener('pointermove', handlePointerMove, { passive: false });
+                backScrollLayer.addEventListener('pointerup', handlePointerUp, { passive: true });
+                backScrollLayer.addEventListener('pointercancel', handlePointerUp, { passive: true });
+            } else {
+                frame.addEventListener('touchstart', handleTouchStart, { passive: true });
+                frame.addEventListener('touchmove', handleTouchMove, { passive: false });
+                frame.addEventListener('touchend', handleTouchEnd, { passive: true });
+                frame.addEventListener('touchcancel', handleTouchEnd, { passive: true });
+                frame.addEventListener('pointerdown', handlePointerDown, { passive: true });
+                frame.addEventListener('pointermove', handlePointerMove, { passive: false });
+                frame.addEventListener('pointerup', handlePointerUp, { passive: true });
+                frame.addEventListener('pointercancel', handlePointerUp, { passive: true });
+            }
+
+            frame.addEventListener('wheel', (event) => {
+                if (!frame.classList.contains('flipped')) return;
+                const backScrollLayer = frame.querySelector('.back-scroll-layer');
+                if (!backScrollLayer) return;
+                event.preventDefault();
+                backScrollLayer.scrollTop += event.deltaY;
+            }, { passive: false });
+
+            frame.addEventListener('click', () => {
+                if (touchMoved) {
+                    touchMoved = false;
+                    return;
+                }
+                const shouldFlipToBack = !frame.classList.contains('flipped');
+                frame.classList.toggle('flipped');
+                if (shouldFlipToBack && backScrollLayer) {
+                    backScrollLayer.scrollTop = 0;
+                    startBackScrollAutoPlay(frame);
+                } else {
+                    stopBackScrollAutoPlay(frame);
+                }
             });
+            frames.push(frame);
+            framesWrapper.appendChild(frame);
+        });
             calculateMaxScroll();
             scrollArea.style.transform = `translateX(-${scrollPos}px)`;
         }
@@ -2177,6 +2295,7 @@ ${getMarkup()}
                 animationFrameId = 0;
             }
             pauseLocalMusic(true);
+            frames.forEach((frame) => stopBackScrollAutoPlay(frame));
             cleanupFns.splice(0).forEach((cleanup) => {
                 try {
                     cleanup();
@@ -2214,7 +2333,12 @@ ${getMarkup()}
             letterView.classList.add('hidden');
             startMarker.classList.remove('inactive');
             frames.forEach((frame) => {
+                stopBackScrollAutoPlay(frame);
                 frame.classList.remove('active', 'flipped');
+                const backScrollLayer = frame.querySelector('.back-scroll-layer');
+                if (backScrollLayer) {
+                    backScrollLayer.scrollTop = 0;
+                }
             });
             calculateMaxScroll();
             syncMusicUi();
@@ -2564,8 +2688,8 @@ ${getMarkup()}
         }
 
         if (getSkipPreference()) {
-            entryOverlay.classList.add('hidden');
-            generateAndStartExperience({ replay: false });
+            destroyOverlay();
+            return host;
         }
 
         return host;
