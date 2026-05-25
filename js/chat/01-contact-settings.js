@@ -4619,6 +4619,25 @@ function openChatSettings() {
             novelaiPresetSelect.value = contact.novelaiPreset;
         }
     }
+    const novelaiReferenceInput = document.getElementById('chat-setting-novelai-reference-image');
+    const novelaiReferencePreview = document.getElementById('chat-setting-novelai-reference-preview');
+    const novelaiReferencePlaceholder = document.getElementById('chat-setting-novelai-reference-placeholder');
+    const novelaiReferenceClearBtn = document.getElementById('chat-setting-novelai-reference-clear');
+    const currentReferenceImage = String(contact.novelaiReferenceImage || '').trim();
+    if (novelaiReferenceInput) {
+        novelaiReferenceInput.value = '';
+    }
+    if (novelaiReferenceClearBtn) {
+        novelaiReferenceClearBtn.dataset.cleared = '0';
+        novelaiReferenceClearBtn.style.display = currentReferenceImage ? 'inline-flex' : 'none';
+    }
+    if (novelaiReferencePreview) {
+        novelaiReferencePreview.src = currentReferenceImage || '';
+        novelaiReferencePreview.style.display = currentReferenceImage ? 'block' : 'none';
+    }
+    if (novelaiReferencePlaceholder) {
+        novelaiReferencePlaceholder.style.display = currentReferenceImage ? 'none' : 'block';
+    }
 
     document.getElementById('chat-setting-context-limit').value = contact.contextLimit || '';
     populateChatSettingsBilingualLanguageSelect('chat-setting-bilingual-source-lang', contact.bilingualSourceLang, CHAT_BILINGUAL_DEFAULT_SOURCE_LANG);
@@ -5333,6 +5352,8 @@ function handleSaveChatSettings() {
             : contact.thoughtPetSize
     );
     const thoughtPetImageInput = document.getElementById('chat-setting-thought-pet-image');
+    const novelaiReferenceImageInput = document.getElementById('chat-setting-novelai-reference-image');
+    const novelaiReferenceClearBtn = document.getElementById('chat-setting-novelai-reference-clear');
     const ttsEnabled = document.getElementById('chat-setting-tts-enabled').checked;
     const ttsVoiceId = document.getElementById('chat-setting-tts-voice-id').value;
     const userPersonaId = document.getElementById('chat-setting-user-persona').value;
@@ -5494,6 +5515,9 @@ function handleSaveChatSettings() {
     }
     if (!isGroupChat) {
         contact.novelaiPreset = novelaiPreset;
+        if (novelaiReferenceClearBtn && novelaiReferenceClearBtn.dataset.cleared === '1') {
+            contact.novelaiReferenceImage = '';
+        }
     }
 
     if (isGroupChat) {
@@ -5591,6 +5615,18 @@ function handleSaveChatSettings() {
                 resolve();
             }).catch(err => {
                 console.error('桌宠图片压缩失败', err);
+                resolve();
+            });
+        }));
+    }
+
+    if (!isGroupChat && novelaiReferenceImageInput && novelaiReferenceImageInput.files && novelaiReferenceImageInput.files[0]) {
+        promises.push(new Promise(resolve => {
+            compressImagePreserveAlpha(novelaiReferenceImageInput.files[0], 1024, 0.86).then(base64 => {
+                contact.novelaiReferenceImage = base64;
+                resolve();
+            }).catch(err => {
+                console.error('参考图压缩失败', err);
                 resolve();
             });
         }));

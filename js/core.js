@@ -516,12 +516,23 @@ const state = {
     novelaiSettings: {
         url: 'https://api.novelai.net',
         key: '',
+        provider: 'novelai',
+        customApiUrl: '',
+        customApiKey: '',
+        customModel: '',
+        customFetchPath: '/models',
+        customGeneratePath: '/images/generations',
+        customEditPath: '/images/edits',
         model: 'nai-diffusion-3',
         size: '832x1216',
+        width: 832,
+        height: 1216,
         steps: 28,
         cfg: 5,
         sampler: 'k_euler_ancestral',
         seed: -1,
+        referenceStrength: 0.62,
+        referenceInfoExtracted: 0.92,
         ucPreset: 0,
         addQualityTags: true,
         smea: false,
@@ -2069,7 +2080,7 @@ function setupIOSFullScreen() {
     let lastTouchEnd = 0;
     document.addEventListener('touchend', function(event) {
         const now = (new Date()).getTime();
-        if (now - lastTouchEnd <= 300) {
+        if (now - lastTouchEnd <= 300 && event.cancelable) {
             event.preventDefault();
         }
         lastTouchEnd = now;
@@ -2176,12 +2187,23 @@ async function loadConfig() {
             if (!state.novelaiSettings) state.novelaiSettings = { 
                 url: 'https://api.novelai.net', 
                 key: '', 
+                provider: 'novelai',
+                customApiUrl: '',
+                customApiKey: '',
+                customModel: '',
+                customFetchPath: '/models',
+                customGeneratePath: '/images/generations',
+                customEditPath: '/images/edits',
                 model: 'nai-diffusion-3', 
                 size: '832x1216',
+                width: 832,
+                height: 1216,
                 steps: 28,
                 cfg: 5,
                 sampler: 'k_euler_ancestral',
                 seed: -1,
+                referenceStrength: 0.62,
+                referenceInfoExtracted: 0.92,
                 ucPreset: 0,
                 addQualityTags: true,
                 smea: false,
@@ -2190,6 +2212,34 @@ async function loadConfig() {
                 negativePrompt: 'lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer digits, cropped, worst quality, low quality, normal quality, jpeg artifacts, signature, watermark, username, blurry',
                 corsProxy: 'corsproxy.io'
             };
+            state.novelaiSettings = Object.assign({
+                url: 'https://api.novelai.net',
+                key: '',
+                provider: 'novelai',
+                customApiUrl: '',
+                customApiKey: '',
+                customModel: '',
+                customFetchPath: '/models',
+                customGeneratePath: '/images/generations',
+                customEditPath: '/images/edits',
+                model: 'nai-diffusion-3',
+                size: '832x1216',
+                width: 832,
+                height: 1216,
+                steps: 28,
+                cfg: 5,
+                sampler: 'k_euler_ancestral',
+                seed: -1,
+                referenceStrength: 0.62,
+                referenceInfoExtracted: 0.92,
+                ucPreset: 0,
+                addQualityTags: true,
+                smea: false,
+                smeaDyn: false,
+                defaultPrompt: '((full body shot:1.6)), (solo character:1.5), dynamic pose, 1boy, ((manly))',
+                negativePrompt: 'lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer digits, cropped, worst quality, low quality, normal quality, jpeg artifacts, signature, watermark, username, blurry',
+                corsProxy: 'corsproxy.io'
+            }, state.novelaiSettings || {});
             if (!state.amapSettings) state.amapSettings = { jsKey: '', webKey: '', key: '', securityCode: '' };
             if (typeof state.amapSettings.jsKey !== 'string') state.amapSettings.jsKey = '';
             if (typeof state.amapSettings.webKey !== 'string') state.amapSettings.webKey = '';

@@ -494,9 +494,31 @@
                             <div class="toggle-switch"></div>
                         </label>
                     </div>
+
+                    <div class="input-wrapper">
+                        <select id="novelai-provider-select">
+                            <option value="novelai">NovelAI</option>
+                            <option value="custom">Custom API</option>
+                        </select>
+                    </div>
                     
                     <div class="input-wrapper">
                         <input type="password" id="novelai-api-key" placeholder="NovelAI Key">
+                    </div>
+
+                    <div id="novelai-custom-api-fields" style="display:none;">
+                        <div class="input-wrapper">
+                            <input type="text" id="novelai-custom-api-url" placeholder="Custom API Base URL (e.g. https://api.example.com/v1)">
+                        </div>
+                        <div class="input-wrapper">
+                            <input type="password" id="novelai-custom-api-key" placeholder="Custom API Key">
+                        </div>
+                        <div class="option-header" style="margin-top: 10px;">
+                            <span class="option-label" style="font-size: 14px;">Custom Models</span>
+                            <div class="option-action">
+                                <button class="btn-text" id="novelai-custom-fetch-models">Fetch</button>
+                            </div>
+                        </div>
                     </div>
 
                     <div class="option-header" style="margin-top: 10px;">
@@ -1223,6 +1245,19 @@
 <option value="">-- 不使用预设 --</option>
                                         </select>
                                         <div style="font-size: 12px; color: var(--mag-sec-text); margin-top: 8px; line-height: 1.6;">当在聊天中生成该角色的图片时，将使用此预设的提示词。</div>
+                                    </div>
+
+                                    <div class="mag-field" style="margin-top: 14px;">
+                                        <label class="mag-label">Reference Image <span class="separator">/</span> <span class="mag-zh">参考图</span></label>
+                                        <input type="file" id="chat-setting-novelai-reference-image" accept="image/*" class="file-input-hidden">
+                                        <div style="display:flex; align-items:center; gap:12px;">
+                                            <label for="chat-setting-novelai-reference-image" class="mag-upload-preview is-clickable" style="width:78px; height:78px; border-radius:14px; flex-shrink:0; overflow:hidden; background: linear-gradient(135deg, rgba(0,0,0,0.05), rgba(0,0,0,0.12));">
+                                                <img id="chat-setting-novelai-reference-preview" src="" alt="Reference Image" style="width:100%; height:100%; object-fit:cover; display:none;">
+                                                <span id="chat-setting-novelai-reference-placeholder" style="font-size:11px; color: var(--mag-sec-text); text-align:center; line-height:1.4; padding:8px;">上传参考图</span>
+                                            </label>
+                                            <button type="button" id="chat-setting-novelai-reference-clear" class="mag-btn" style="padding:8px 12px; min-width: auto;">清除</button>
+                                        </div>
+                                        <div style="font-size: 12px; color: var(--mag-sec-text); margin-top: 8px; line-height: 1.6;">生图时会附带这张参考图，用于参考人物脸和身材。</div>
                                     </div>
                                 </div>
                             </div>

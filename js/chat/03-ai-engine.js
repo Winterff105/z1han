@@ -1,4 +1,131 @@
-﻿window.refreshAiImage = async function(msgId, event) {
+﻿function maskChatImageDebugKey(key) {
+    const raw = String(key || '');
+    if (!raw) return '(empty)';
+    if (raw.length <= 8) return `${raw.slice(0, 2)}***${raw.slice(-1)}`;
+    return `${raw.slice(0, 4)}***${raw.slice(-4)}`;
+}
+
+function summarizeChatImageDebugReference(referenceImage) {
+    const raw = String(referenceImage || '').trim();
+    if (!raw) {
+        return { hasReference: false, kind: 'none', length: 0 };
+    }
+    if (raw.startsWith('data:image')) {
+        return { hasReference: true, kind: 'data_url', length: raw.length };
+    }
+    if (typeof window.isChatMediaReference === 'function' && window.isChatMediaReference(raw)) {
+        return { hasReference: true, kind: 'chat_media_ref', length: raw.length };
+    }
+    if (/^https?:\/\//i.test(raw) || raw.startsWith('//')) {
+        return { hasReference: true, kind: 'http_url', length: raw.length };
+    }
+    return { hasReference: true, kind: 'raw_base64_or_other', length: raw.length };
+}
+
+function logChatImageStage(stage, payload = {}) {
+    try {
+        console.log(`[ChatImage Debug] ${stage}`, payload);
+    } catch (error) {}
+}
+
+function getChatHistoryBucketForImageDebug(contactId) {
+    if (!window.iphoneSimState || !window.iphoneSimState.chatHistory) return null;
+    const history = window.iphoneSimState.chatHistory[contactId];
+    return Array.isArray(history) ? history : null;
+}
+
+function refreshChatImageResultViews(contactId, channelHint = 'wechat') {
+    const normalizedChannel = String(channelHint || '').trim() === 'messages-app' ? 'messages-app' : 'wechat';
+
+    if (normalizedChannel === 'messages-app' && window.MessagesApp && typeof window.MessagesApp.refresh === 'function') {
+        window.MessagesApp.refresh(contactId);
+    }
+
+    const currentContactId = window.iphoneSimState && window.iphoneSimState.currentChatContactId;
+    if (String(currentContactId || '') === String(contactId || '') && typeof window.renderChatHistory === 'function') {
+        renderChatHistory(contactId, true);
+    }
+}
+
+function applyGeneratedImageToPlaceholderMessage(contactId, placeholderMsg, base64Image, finalPrompt, negativePrompt, channelHint = 'wechat') {
+    const placeholderMsgId = placeholderMsg && placeholderMsg.id != null ? String(placeholderMsg.id) : '';
+    const history = getChatHistoryBucketForImageDebug(contactId);
+    const normalizedChannel = String(channelHint || '').trim() === 'messages-app' ? 'messages-app' : 'wechat';
+
+    logChatImageStage('placeholder:update-attempt', {
+        contactId,
+        placeholderMsgId,
+        historyLength: Array.isArray(history) ? history.length : 0,
+        channel: normalizedChannel
+    });
+
+    let targetMessage = null;
+    if (placeholderMsgId && Array.isArray(history)) {
+        targetMessage = history.find(item => item && String(item.id || '') === placeholderMsgId) || null;
+    }
+
+    if (!targetMessage && Array.isArray(history)) {
+        for (let i = history.length - 1; i >= 0; i--) {
+            const candidate = history[i];
+            if (!candidate || candidate.role !== 'assistant') continue;
+            if (normalizedChannel === 'messages-app' && candidate.channel !== 'messages-app') continue;
+            if (normalizedChannel === 'wechat' && candidate.channel === 'messages-app') continue;
+            if (candidate.type !== 'virtual_image') continue;
+            if (placeholderMsg && typeof placeholderMsg.content === 'string' && placeholderMsg.content.trim()) {
+                if (String(candidate.content || '').trim() !== String(placeholderMsg.content || '').trim()) continue;
+            }
+            targetMessage = candidate;
+            break;
+        }
+    }
+
+    if (!targetMessage) {
+        logChatImageStage('placeholder:update-miss', {
+            contactId,
+            placeholderMsgId,
+            channel: normalizedChannel
+        });
+        const fallbackMessage = sendMessage(base64Image, false, 'image', placeholderMsg && placeholderMsg.description ? placeholderMsg.description : null, contactId, {
+            channel: normalizedChannel,
+            readInMessagesApp: normalizedChannel === 'messages-app'
+        });
+        if (fallbackMessage) {
+            fallbackMessage.novelaiPrompt = finalPrompt;
+            fallbackMessage.novelaiNegativePrompt = negativePrompt;
+            logChatImageStage('placeholder:update-fallback-sent', {
+                contactId,
+                fallbackMsgId: fallbackMessage.id || null,
+                channel: normalizedChannel
+            });
+            saveConfig();
+            refreshChatImageResultViews(contactId, normalizedChannel);
+            return true;
+        }
+        return false;
+    }
+
+    targetMessage.type = 'image';
+    targetMessage.content = base64Image;
+    targetMessage.novelaiPrompt = finalPrompt;
+    targetMessage.novelaiNegativePrompt = negativePrompt;
+    if (normalizedChannel === 'messages-app') {
+        targetMessage.readInMessagesApp = true;
+    }
+    delete targetMessage._hiddenBySanitizer;
+
+    logChatImageStage('placeholder:update-found', {
+        contactId,
+        placeholderMsgId,
+        resolvedMsgId: targetMessage.id || null,
+        channel: targetMessage.channel || normalizedChannel
+    });
+
+    saveConfig();
+    refreshChatImageResultViews(contactId, targetMessage.channel || normalizedChannel);
+    return true;
+}
+
+window.refreshAiImage = async function(msgId, event) {
     if (event) event.stopPropagation();
 
     const contactId = window.iphoneSimState.currentChatContactId;
@@ -19,8 +146,20 @@
     if (!confirm("确定要使用相同的提示词重新生成这张图片吗？")) return;
 
     const novelaiSettings = window.iphoneSimState.novelaiSettings;
-    if (!novelaiSettings || !novelaiSettings.key) {
-        alert("请先配置 NovelAI API Key");
+    const imageProvider = novelaiSettings && novelaiSettings.provider === 'custom' ? 'custom' : 'novelai';
+    const imageApiKey = imageProvider === 'custom'
+        ? (novelaiSettings && (novelaiSettings.customApiKey || novelaiSettings.key))
+        : (novelaiSettings && novelaiSettings.key);
+    logChatImageStage('refresh:start', {
+        contactId,
+        msgId,
+        provider: imageProvider,
+        hasSettings: !!novelaiSettings,
+        hasApiKey: !!imageApiKey,
+        keyMasked: maskChatImageDebugKey(imageApiKey)
+    });
+    if (!novelaiSettings || !imageApiKey) {
+        alert(imageProvider === 'custom' ? "请先配置 Custom API Key" : "请先配置 NovelAI API Key");
         return;
     }
 
@@ -32,23 +171,41 @@
     msg.content = window.iphoneSimState.defaultVirtualImageUrl || 'https://placehold.co/600x400/png?text=Regenerating...';
     
     // 强制重新渲染
-    if (window.renderChatHistory) renderChatHistory(contactId, true);
+    refreshChatImageResultViews(contactId, msg.channel || 'wechat');
 
     try {
+         const contact = window.iphoneSimState.contacts.find(c => String(c.id) === String(contactId));
+         const defaultModel = imageProvider === 'custom'
+            ? (novelaiSettings.customModel || novelaiSettings.model)
+            : novelaiSettings.model;
          const genOptions = {
-            key: novelaiSettings.key,
-            model: novelaiSettings.model,
+            provider: imageProvider,
+            key: imageApiKey,
+            model: defaultModel,
             prompt: msg.novelaiPrompt,
             negativePrompt: msg.novelaiNegativePrompt || novelaiSettings.negativePrompt,
             steps: novelaiSettings.steps || 28,
             scale: novelaiSettings.cfg || 5,
             seed: -1,
-            width: 832,
-            height: 1216
+            width: novelaiSettings.width || 832,
+            height: novelaiSettings.height || 1216,
+            referenceImage: contact ? (contact.novelaiReferenceImage || '') : '',
+            referenceStrength: novelaiSettings.referenceStrength,
+            referenceInfoExtracted: novelaiSettings.referenceInfoExtracted
         };
+        logChatImageStage('refresh:gen-options', {
+            provider: genOptions.provider,
+            model: genOptions.model,
+            steps: genOptions.steps,
+            scale: genOptions.scale,
+            width: genOptions.width,
+            height: genOptions.height,
+            promptLength: String(genOptions.prompt || '').length,
+            negativePromptLength: String(genOptions.negativePrompt || '').length,
+            reference: summarizeChatImageDebugReference(genOptions.referenceImage)
+        });
 
         // 尝试从 preset 恢复参数
-        const contact = window.iphoneSimState.contacts.find(c => String(c.id) === String(contactId));
         if (contact && contact.novelaiPreset) {
              let preset = null;
              if (contact.novelaiPreset === 'AUTO_MATCH') {
@@ -72,21 +229,29 @@
         }
 
         const base64Image = await window.generateNovelAiImageApi(genOptions);
+        logChatImageStage('refresh:success', {
+            imageType: String(base64Image || '').slice(0, 20),
+            imageLength: String(base64Image || '').length
+        });
 
         // 更新消息
         msg.type = 'image';
         msg.content = base64Image;
         
         saveConfig();
-        if (window.renderChatHistory) renderChatHistory(contactId, true);
+        refreshChatImageResultViews(contactId, msg.channel || 'wechat');
 
     } catch (e) {
         console.error("Regeneration failed", e);
+        logChatImageStage('refresh:error', {
+            message: e && e.message ? e.message : String(e),
+            stack: e && e.stack ? String(e.stack).slice(0, 600) : ''
+        });
         alert("生成失败: " + e.message);
         // 恢复原图
         msg.type = originalType;
         msg.content = originalContent;
-        if (window.renderChatHistory) renderChatHistory(contactId, true);
+        refreshChatImageResultViews(contactId, msg.channel || 'wechat');
     }
 };
 
@@ -3664,6 +3829,26 @@ async function convertAiRequestImageUrlToDataUrl(url) {
                     return dataUrl;
                 }
             }
+            // Fallback: some runtimes can still resolve to a local blob URL.
+            if (typeof window.resolveChatMediaSrc === 'function') {
+                const localSrc = await window.resolveChatMediaSrc(normalizedUrl);
+                if (localSrc) {
+                    if (typeof localSrc === 'string' && localSrc.startsWith('data:image')) {
+                        return localSrc;
+                    }
+                    try {
+                        const localResponse = await fetch(localSrc);
+                        if (localResponse.ok) {
+                            const localBlob = await localResponse.blob();
+                            if (localBlob instanceof Blob) {
+                                return await blobToDataUrl(localBlob);
+                            }
+                        }
+                    } catch (localFetchError) {
+                        console.warn('[AI Debug] fallback fetch for chat media src failed', localFetchError);
+                    }
+                }
+            }
             throw new Error('chat media reference could not be resolved');
         }
 
@@ -3704,6 +3889,7 @@ async function normalizeAiRequestMessageImages(messages) {
     let totalImageCount = 0;
     let convertedCount = 0;
     let failedCount = 0;
+    let degradedCount = 0;
 
     for (const message of messages) {
         if (!message || !Array.isArray(message.content)) continue;
@@ -3725,10 +3911,24 @@ async function normalizeAiRequestMessageImages(messages) {
                 convertedCount += 1;
             } catch (error) {
                 failedCount += 1;
-                console.warn('[AI Debug] failed to convert request image to data URL', {
+                // Do not send unsupported URL schemes (e.g. chat-media://...) to upstream model APIs.
+                // Downgrade this part to plain text to keep the request valid.
+                const isChatMediaRef = typeof window.isChatMediaReference === 'function'
+                    && window.isChatMediaReference(normalizedUrl);
+                const errorMessage = error && error.message ? error.message : String(error);
+                const debugPayload = {
                     url: normalizedUrl,
-                    error: error && error.message ? error.message : String(error)
-                });
+                    error: errorMessage
+                };
+                if (isChatMediaRef && /could not be resolved/i.test(errorMessage)) {
+                    console.info('[AI Debug] stale chat-media reference downgraded in AI request', debugPayload);
+                } else {
+                    console.warn('[AI Debug] failed to convert request image to data URL', debugPayload);
+                }
+                part.type = 'text';
+                part.text = isChatMediaRef ? '[图片不可用: 本地引用已失效]' : '[图片不可用]';
+                delete part.image_url;
+                degradedCount += 1;
             }
         }
     }
@@ -3737,7 +3937,8 @@ async function normalizeAiRequestMessageImages(messages) {
         console.log('[AI Debug] normalized request images', {
             totalImageCount,
             convertedCount,
-            failedCount
+            failedCount,
+            degradedCount
         });
     }
 }
@@ -6458,17 +6659,29 @@ async function generateAiReply(instruction = null, targetContactId = null, optio
             while ((sendImageMatch = processedSegment.match(sendImageRegex)) !== null) {
                 const imageDesc = sendImageMatch[1].trim();
                 if (imageDesc) {
+                    logChatImageStage('action:send-image-detected', {
+                        contactId: contact && contact.id ? contact.id : null,
+                        descriptionPreview: imageDesc.slice(0, 160)
+                    });
                     if (canUseBoundRealPhoto(contact)) {
                         const matchedRealPhoto = trySendMatchedRealPhoto(contact, contact.id, imageDesc, recentTextContext, {
                             channel: deliveryChannel
                         });
                         if (matchedRealPhoto) {
+                            logChatImageStage('action:send-image-used-real-photo', {
+                                contactId: contact && contact.id ? contact.id : null,
+                                imageDescPreview: imageDesc.slice(0, 120)
+                            });
                             imageToSend = null;
                             processedSegment = processedSegment.replace(sendImageMatch[0], '');
                             continue;
                         }
                     }
                     imageToSend = { type: 'virtual_image', content: imageDesc };
+                    logChatImageStage('action:send-image-queued-virtual', {
+                        contactId: contact && contact.id ? contact.id : null,
+                        imageDescPreview: imageDesc.slice(0, 120)
+                    });
                 }
                 processedSegment = processedSegment.replace(sendImageMatch[0], '');
             }
@@ -7016,6 +7229,25 @@ async function generateAiReply(instruction = null, targetContactId = null, optio
                     const novelaiSettings = window.iphoneSimState.novelaiSettings;
                     const chatImageGenerationDisabled = !!(novelaiSettings && novelaiSettings.enabled === false);
                     const globalEnabled = novelaiSettings && novelaiSettings.enabled !== false;
+                    const imageProvider = novelaiSettings && novelaiSettings.provider === 'custom' ? 'custom' : 'novelai';
+                    const imageApiKey = imageProvider === 'custom'
+                        ? (novelaiSettings && (novelaiSettings.customApiKey || novelaiSettings.key))
+                        : (novelaiSettings && novelaiSettings.key);
+                    const defaultImageModel = imageProvider === 'custom'
+                        ? (novelaiSettings && (novelaiSettings.customModel || novelaiSettings.model))
+                        : (novelaiSettings && novelaiSettings.model);
+                    logChatImageStage('flowA:entry', {
+                        contactId,
+                        messageType: msg.type,
+                        provider: imageProvider,
+                        globalEnabled: !!globalEnabled,
+                        chatImageGenerationDisabled: !!chatImageGenerationDisabled,
+                        hasApiKey: !!imageApiKey,
+                        keyMasked: maskChatImageDebugKey(imageApiKey),
+                        hasGenerator: !!window.generateNovelAiImageApi,
+                        hasPreset: !!(contact && contact.novelaiPreset),
+                        rawImageContentPreview: String(rawImageContent || '').slice(0, 120)
+                    });
 
                     if (canUseBoundRealPhoto(contact)) {
                         const realPhotoResult = trySendMatchedRealPhoto(contact, contact.id, `${rawImageContent || ''} ${msg.description || ''}`.trim(), recentTextContext, {
@@ -7041,9 +7273,9 @@ async function generateAiReply(instruction = null, targetContactId = null, optio
                         sent = true;
                     }
                     
-                    if (!sent && globalEnabled && window.generateNovelAiImageApi && contact.novelaiPreset) {
+                    if (!sent && globalEnabled && imageApiKey && window.generateNovelAiImageApi) {
                         let finalPrompt = "";
-                        let presetName = contact.novelaiPreset;
+                        let presetName = contact.novelaiPreset || '';
                         let preset = null;
     
                         if (presetName === 'AUTO_MATCH') {
@@ -7077,37 +7309,65 @@ async function generateAiReply(instruction = null, targetContactId = null, optio
 
                         try {
                             const genOptions = {
-                                key: novelaiSettings.key,
-                                model: (preset && preset.settings && preset.settings.model) || novelaiSettings.model,
+                                provider: imageProvider,
+                                key: imageApiKey,
+                                model: (preset && preset.settings && preset.settings.model) || defaultImageModel,
                                 prompt: finalPrompt,
                                 negativePrompt: (preset && preset.settings && preset.settings.negativePrompt) || novelaiSettings.negativePrompt,
                                 steps: (preset && preset.settings && preset.settings.steps) || novelaiSettings.steps,
                                 scale: (preset && preset.settings && preset.settings.scale) || novelaiSettings.cfg,
                                 seed: (preset && preset.settings && preset.settings.seed) !== undefined ? preset.settings.seed : -1,
-                                width: (preset && preset.settings && preset.settings.width) || 832,
-                                height: (preset && preset.settings && preset.settings.height) || 1216
+                                width: (preset && preset.settings && preset.settings.width) || novelaiSettings.width || 832,
+                                height: (preset && preset.settings && preset.settings.height) || novelaiSettings.height || 1216,
+                                referenceImage: contact.novelaiReferenceImage || '',
+                                referenceStrength: novelaiSettings.referenceStrength,
+                                referenceInfoExtracted: novelaiSettings.referenceInfoExtracted
                             };
+                            logChatImageStage('flowA:gen-options', {
+                                contactId,
+                                provider: genOptions.provider,
+                                model: genOptions.model,
+                                steps: genOptions.steps,
+                                scale: genOptions.scale,
+                                width: genOptions.width,
+                                height: genOptions.height,
+                                promptLength: String(genOptions.prompt || '').length,
+                                negativePromptLength: String(genOptions.negativePrompt || '').length,
+                                reference: summarizeChatImageDebugReference(genOptions.referenceImage)
+                            });
 
                             // 先发送占位图片以占据正确的历史记录顺序
                             const placeholderUrl = window.iphoneSimState.defaultVirtualImageUrl || 'https://placehold.co/600x400/png?text=Generating...';
                             const placeholderMsg = sendMessage(placeholderUrl, false, 'virtual_image', msg.content, contactId, { channel: deliveryChannel });
+                            logChatImageStage('flowA:placeholder-created', {
+                                contactId,
+                                placeholderMsgId: placeholderMsg && placeholderMsg.id ? placeholderMsg.id : null
+                            });
                             
                             appendMessageToUI('[系统]: 正在生成图片...', false, 'system', null, null, null, null, false);
 
                             window.generateNovelAiImageApi(genOptions).then(base64Image => {
                                 // 图片生成成功，直接更新占位消息，而不是发送新消息
-                                if (placeholderMsg) {
-                                    placeholderMsg.type = 'image';
-                                    placeholderMsg.content = base64Image;
-                                    placeholderMsg.novelaiPrompt = finalPrompt;
-                                    placeholderMsg.novelaiNegativePrompt = genOptions.negativePrompt;
-                                    saveConfig();
-                                    
-                                    // 刷新界面以显示新图片，并保持滚动位置
-                                    if (window.renderChatHistory) renderChatHistory(contactId, true);
-                                }
+                                logChatImageStage('flowA:api-success', {
+                                    contactId,
+                                    imageType: String(base64Image || '').slice(0, 20),
+                                    imageLength: String(base64Image || '').length
+                                });
+                                applyGeneratedImageToPlaceholderMessage(
+                                    contactId,
+                                    placeholderMsg,
+                                    base64Image,
+                                    finalPrompt,
+                                    genOptions.negativePrompt,
+                                    deliveryChannel
+                                );
                             }).catch(err => {
                                 console.error("NovelAI Gen Error", err);
+                                logChatImageStage('flowA:api-error', {
+                                    contactId,
+                                    message: err && err.message ? err.message : String(err),
+                                    stack: err && err.stack ? String(err.stack).slice(0, 600) : ''
+                                });
                                 appendMessageToUI(`[系统]: 生图失败 - ${err.message}`, false, 'system', null, null, null, null, false);
                                 // 失败时占位符保持为 virtual_image，无需额外处理，或可更新为错误图
                             });
@@ -7116,19 +7376,27 @@ async function generateAiReply(instruction = null, targetContactId = null, optio
 
                         } catch (e) {
                             console.error("NovelAI Setup Error", e);
+                            logChatImageStage('flowA:setup-error', {
+                                contactId,
+                                message: e && e.message ? e.message : String(e),
+                                stack: e && e.stack ? String(e.stack).slice(0, 600) : ''
+                            });
                             appendMessageToUI(`[系统]: 生图配置错误 - ${e.message}`, false, 'text', null, null, null, null, false);
                         }
                     }
 
                     if (!sent) {
                         const failReason = [];
-                        if (!contact.novelaiPreset) failReason.push("未选择预设");
-                        else if (!globalEnabled) failReason.push("全局开关未开启");
+                        if (!globalEnabled) failReason.push("全局开关未开启");
                         
                         if (!window.generateNovelAiImageApi) failReason.push("生图模块未加载");
-                        if (!novelaiSettings || !novelaiSettings.key) failReason.push("API Key缺失");
+                        if (!imageApiKey) failReason.push("API Key缺失");
 
                         if (failReason.length > 0) {
+                            logChatImageStage('flowA:skip-generate', {
+                                contactId,
+                                reason: failReason.join('; ')
+                            });
                             appendMessageToUI(`[系统诊断]: 无法生成图片 - ${failReason.join('; ')}`, false, 'text', null, null, null, null, false);
                         }
 
@@ -7259,15 +7527,33 @@ async function generateAiReply(instruction = null, targetContactId = null, optio
                 const novelaiSettings = window.iphoneSimState.novelaiSettings;
                 const chatImageGenerationDisabled = !!(novelaiSettings && novelaiSettings.enabled === false);
                 const globalEnabled = novelaiSettings && novelaiSettings.enabled !== false;
+                const imageProvider = novelaiSettings && novelaiSettings.provider === 'custom' ? 'custom' : 'novelai';
+                const imageApiKey = imageProvider === 'custom'
+                    ? (novelaiSettings && (novelaiSettings.customApiKey || novelaiSettings.key))
+                    : (novelaiSettings && novelaiSettings.key);
+                const defaultImageModel = imageProvider === 'custom'
+                    ? (novelaiSettings && (novelaiSettings.customModel || novelaiSettings.model))
+                    : (novelaiSettings && novelaiSettings.model);
+                logChatImageStage('flowB:entry', {
+                    contactId,
+                    provider: imageProvider,
+                    globalEnabled: !!globalEnabled,
+                    chatImageGenerationDisabled: !!chatImageGenerationDisabled,
+                    hasApiKey: !!imageApiKey,
+                    keyMasked: maskChatImageDebugKey(imageApiKey),
+                    hasGenerator: !!window.generateNovelAiImageApi,
+                    hasPreset: !!(contact && contact.novelaiPreset),
+                    imageToSendPreview: String(imageToSend && imageToSend.content || '').slice(0, 120)
+                });
 
                 if (chatImageGenerationDisabled) {
                     sendAssistantVirtualImageMessage(imageToSend.content, contactId, { channel: deliveryChannel });
                     sent = true;
                 }
                 
-                if (!sent && globalEnabled && window.generateNovelAiImageApi && contact.novelaiPreset) {
+                if (!sent && globalEnabled && imageApiKey && window.generateNovelAiImageApi) {
                     let finalPrompt = "";
-                    let presetName = contact.novelaiPreset;
+                    let presetName = contact.novelaiPreset || '';
                     let preset = null;
 
                     if (presetName === 'AUTO_MATCH') {
@@ -7301,37 +7587,66 @@ async function generateAiReply(instruction = null, targetContactId = null, optio
 
                     try {
                         const genOptions = {
-                            key: novelaiSettings.key,
-                            model: (preset && preset.settings && preset.settings.model) || novelaiSettings.model,
+                            provider: imageProvider,
+                            key: imageApiKey,
+                            model: (preset && preset.settings && preset.settings.model) || defaultImageModel,
                             prompt: finalPrompt,
                             negativePrompt: (preset && preset.settings && preset.settings.negativePrompt) || novelaiSettings.negativePrompt,
                             steps: (preset && preset.settings && preset.settings.steps) || novelaiSettings.steps,
                             scale: (preset && preset.settings && preset.settings.scale) || novelaiSettings.cfg,
                             seed: (preset && preset.settings && preset.settings.seed) !== undefined ? preset.settings.seed : -1,
-                            width: (preset && preset.settings && preset.settings.width) || 832,
-                            height: (preset && preset.settings && preset.settings.height) || 1216
+                            width: (preset && preset.settings && preset.settings.width) || novelaiSettings.width || 832,
+                            height: (preset && preset.settings && preset.settings.height) || novelaiSettings.height || 1216,
+                            referenceImage: contact.novelaiReferenceImage || '',
+                            referenceStrength: novelaiSettings.referenceStrength,
+                            referenceInfoExtracted: novelaiSettings.referenceInfoExtracted
                         };
+                        logChatImageStage('flowB:gen-options', {
+                            contactId,
+                            provider: genOptions.provider,
+                            model: genOptions.model,
+                            steps: genOptions.steps,
+                            scale: genOptions.scale,
+                            width: genOptions.width,
+                            height: genOptions.height,
+                            promptLength: String(genOptions.prompt || '').length,
+                            negativePromptLength: String(genOptions.negativePrompt || '').length,
+                            reference: summarizeChatImageDebugReference(genOptions.referenceImage)
+                        });
 
                         // 先发送占位图片
                         const placeholderUrl = window.iphoneSimState.defaultVirtualImageUrl || 'https://placehold.co/600x400/png?text=Generating...';
                         const placeholderMsg = sendMessage(placeholderUrl, false, 'virtual_image', imageToSend.content, contactId, { channel: deliveryChannel });
+                        logChatImageStage('flowB:placeholder-created', {
+                            contactId,
+                            placeholderMsgId: placeholderMsg && placeholderMsg.id ? placeholderMsg.id : null
+                        });
 
                         // 直接调用当前作用域内的函数
                         appendMessageToUI('[系统]: 正在生成图片...', false, 'system', null, null, null, null, false);
 
                         window.generateNovelAiImageApi(genOptions).then(base64Image => {
                             // 更新占位消息
-                            if (placeholderMsg) {
-                                placeholderMsg.type = 'image';
-                                placeholderMsg.content = base64Image;
-                                placeholderMsg.novelaiPrompt = finalPrompt;
-                                placeholderMsg.novelaiNegativePrompt = genOptions.negativePrompt;
-                                saveConfig();
-                                
-                                if (window.renderChatHistory) renderChatHistory(contactId, true);
-                            }
+                            logChatImageStage('flowB:api-success', {
+                                contactId,
+                                imageType: String(base64Image || '').slice(0, 20),
+                                imageLength: String(base64Image || '').length
+                            });
+                            applyGeneratedImageToPlaceholderMessage(
+                                contactId,
+                                placeholderMsg,
+                                base64Image,
+                                finalPrompt,
+                                genOptions.negativePrompt,
+                                deliveryChannel
+                            );
                         }).catch(err => {
                             console.error("NovelAI Gen Error", err);
+                            logChatImageStage('flowB:api-error', {
+                                contactId,
+                                message: err && err.message ? err.message : String(err),
+                                stack: err && err.stack ? String(err.stack).slice(0, 600) : ''
+                            });
                             appendMessageToUI(`[系统]: 生图API错误 - ${err.message}`, false, 'system', null, null, null, null, false);
                         });
                         
@@ -7339,6 +7654,11 @@ async function generateAiReply(instruction = null, targetContactId = null, optio
 
                     } catch (e) {
                         console.error("NovelAI Setup Error", e);
+                        logChatImageStage('flowB:setup-error', {
+                            contactId,
+                            message: e && e.message ? e.message : String(e),
+                            stack: e && e.stack ? String(e.stack).slice(0, 600) : ''
+                        });
                         appendMessageToUI(`[系统]: 生图配置错误 - ${e.message}`, false, 'text', null, null, null, null, false);
                     }
                 }
@@ -7346,15 +7666,18 @@ async function generateAiReply(instruction = null, targetContactId = null, optio
                 if (!sent) {
                     // 增强诊断：显示所有未满足的条件
                     const failReason = [];
-                    if (!contact.novelaiPreset) failReason.push("未选择预设");
-                    else if (!globalEnabled) failReason.push("全局开关未开启");
+                    if (!globalEnabled) failReason.push("全局开关未开启");
                     
                     if (!window.generateNovelAiImageApi) failReason.push("生图模块未加载");
-                    if (!novelaiSettings || !novelaiSettings.key) failReason.push("API Key缺失");
+                    if (!imageApiKey) failReason.push("API Key缺失");
 
                     // 只要是 virtual_image 类型，即使没预设，也提示一下（可能是用户忘了配）
                     // 或者是配置了但其他条件不满足
                     if (failReason.length > 0) {
+                        logChatImageStage('flowB:skip-generate', {
+                            contactId,
+                            reason: failReason.join('; ')
+                        });
                         appendMessageToUI(`[系统诊断]: 无法生成图片 - ${failReason.join('; ')}`, false, 'text', null, null, null, null, false);
                     }
 
@@ -9540,6 +9863,9 @@ window.buildAiPromptMessages = async function(contactId, instruction = null, opt
 
     return messages;
 };
+
+
+
 
 
 
