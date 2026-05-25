@@ -42,7 +42,7 @@
             cfg: 5,
             sampler: 'k_euler_ancestral',
             seed: -1,
-            referenceStrength: 0.62,
+            referenceStrength: 0.78,
             referenceInfoExtracted: 0.92,
             ucPreset: 0,
             addQualityTags: true,
@@ -215,6 +215,14 @@
         return { hasReference: true, kind: 'unknown', length: 0 };
     }
 
+    function summarizeReferenceListForDebug(references) {
+        const list = Array.isArray(references) ? references : [];
+        return {
+            count: list.length,
+            first: summarizeReferenceForDebug(list[0] || null)
+        };
+    }
+
     async function normalizeReferenceImage(referenceImage) {
         const raw = asString(referenceImage);
         if (!raw) return null;
@@ -264,6 +272,35 @@
         }
 
         return null;
+    }
+
+    async function normalizeReferenceImages(referenceImage, referenceImages = []) {
+        const candidates = [];
+        const primary = asString(referenceImage);
+        if (primary) candidates.push(primary);
+        if (Array.isArray(referenceImages)) {
+            for (const item of referenceImages) {
+                const normalized = asString(item);
+                if (normalized) candidates.push(normalized);
+            }
+        }
+        const dedupedCandidates = Array.from(new Set(candidates));
+        const output = [];
+        for (const candidate of dedupedCandidates) {
+            let normalized = null;
+            try {
+                normalized = await normalizeReferenceImage(candidate);
+            } catch (error) {
+                console.warn('[NovelAI Debug] reference:normalize-item-error', {
+                    message: error && error.message ? error.message : String(error)
+                });
+                normalized = null;
+            }
+            if (!normalized || !normalized.dataUrl) continue;
+            if (output.some(item => item.dataUrl === normalized.dataUrl)) continue;
+            output.push(normalized);
+        }
+        return output;
     }
 
     function parseImageFromJson(data) {
@@ -426,10 +463,14 @@
         throw new Error('No image data found in response');
     }
 
-    function buildNovelAiPayload(options, reference) {
+    function buildNovelAiPayload(options, reference, references = []) {
         const model = asString(options.model || 'nai-diffusion-3');
         const prompt = asString(options.prompt);
         const negativePrompt = asString(options.negativePrompt);
+        const normalizedReferences = Array.isArray(references) && references.length
+            ? references
+            : (reference ? [reference] : []);
+        const primaryReference = normalizedReferences[0] || null;
 
         const parameters = {
             params_version: 3,
@@ -473,18 +514,22 @@
             parameters.prefer_brownian = true;
         }
 
-        if (reference && reference.rawBase64) {
+        if (primaryReference && primaryReference.rawBase64) {
             if (model.includes('diffusion-4')) {
                 const referenceStrength = clampNumber(options.referenceStrength, 0, 1, 0.62);
                 const referenceInfoExtracted = clampNumber(options.referenceInfoExtracted, 0, 1, 0.92);
-                parameters.reference_image = reference.rawBase64;
+                const rawReferences = normalizedReferences
+                    .map(item => item && item.rawBase64 ? item.rawBase64 : '')
+                    .filter(Boolean);
+                const finalRawReferences = rawReferences.length ? rawReferences : [primaryReference.rawBase64];
+                parameters.reference_image = finalRawReferences[0];
                 parameters.reference_strength = referenceStrength;
                 parameters.reference_information_extracted = referenceInfoExtracted;
-                parameters.reference_image_multiple = [reference.rawBase64];
-                parameters.reference_strength_multiple = [referenceStrength];
-                parameters.reference_information_extracted_multiple = [referenceInfoExtracted];
+                parameters.reference_image_multiple = finalRawReferences;
+                parameters.reference_strength_multiple = finalRawReferences.map(() => referenceStrength);
+                parameters.reference_information_extracted_multiple = finalRawReferences.map(() => referenceInfoExtracted);
             } else {
-                parameters.image = reference.rawBase64;
+                parameters.image = primaryReference.rawBase64;
                 parameters.strength = clampNumber(options.referenceStrength, 0, 1, 0.35);
                 parameters.noise = 0.2;
             }
@@ -498,10 +543,17 @@
         };
     }
 
-    function buildCustomPayload(options, reference) {
+    function buildCustomPayload(options, reference, references = []) {
         const model = asString(options.model || '');
         const gptImageLikeModel = isLikelyGptImageModel(model);
-        const hasReference = !!(reference && reference.dataUrl);
+        const normalizedReferences = Array.isArray(references) && references.length
+            ? references
+            : (reference ? [reference] : []);
+        const referenceDataUrls = normalizedReferences
+            .map(item => item && item.dataUrl ? asString(item.dataUrl) : '')
+            .filter(Boolean);
+        const primaryReferenceDataUrl = referenceDataUrls[0] || '';
+        const hasReference = referenceDataUrls.length > 0;
         const promptBase = asString(options.prompt || '');
         const prompt = hasReference
             ? `${promptBase}\n\n${buildReferenceIdentityInstruction(options.referenceStrength)}`
@@ -523,17 +575,17 @@
             response_format: 'b64_json'
         };
 
-        if (reference && reference.dataUrl) {
+        if (hasReference) {
             const referenceStrength = Math.max(0.78, clampNumber(options.referenceStrength, 0, 1, 0.82));
-            payload.reference_image = reference.dataUrl;
-            payload.reference_images = [reference.dataUrl];
-            payload.reference_image_urls = [reference.dataUrl];
-            payload.image = reference.dataUrl;
-            payload.images = [reference.dataUrl];
-            payload.image_url = reference.dataUrl;
-            payload.image_urls = [reference.dataUrl];
-            payload.input_image = reference.dataUrl;
-            payload.input_images = [reference.dataUrl];
+            payload.reference_image = primaryReferenceDataUrl;
+            payload.reference_images = referenceDataUrls;
+            payload.reference_image_urls = referenceDataUrls;
+            payload.image = primaryReferenceDataUrl;
+            payload.images = referenceDataUrls;
+            payload.image_url = primaryReferenceDataUrl;
+            payload.image_urls = referenceDataUrls;
+            payload.input_image = primaryReferenceDataUrl;
+            payload.input_images = referenceDataUrls;
             payload.reference_strength = referenceStrength;
             payload.image_strength = referenceStrength;
             payload.strength = clampNumber(referenceStrength * 0.78, 0, 1, 0.65);
@@ -582,8 +634,8 @@
         return formData;
     }
 
-    async function requestNovelAiImage(options, reference) {
-        const payload = buildNovelAiPayload(options, reference);
+    async function requestNovelAiImage(options, reference, references = []) {
+        const payload = buildNovelAiPayload(options, reference, references);
         console.log('[NovelAI Debug] request:nai:start', {
             provider: 'novelai',
             endpoint: NOVELAI_ENDPOINT,
@@ -595,7 +647,8 @@
             scale: options.scale,
             promptLength: String(options.prompt || '').length,
             negativePromptLength: String(options.negativePrompt || '').length,
-            reference: summarizeReferenceForDebug(reference)
+            reference: summarizeReferenceForDebug(reference),
+            referenceList: summarizeReferenceListForDebug(references)
         });
         const response = await fetch(NOVELAI_ENDPOINT, {
             method: 'POST',
@@ -613,15 +666,18 @@
         return parseImageResponse(response);
     }
 
-    async function requestCustomImage(options, settings, reference) {
+    async function requestCustomImage(options, settings, reference, references = []) {
         const endpoint = resolveCustomGenerateUrl(settings);
         if (!endpoint) {
             throw new Error('Custom API URL is empty');
         }
 
-        const hasReference = !!(reference && reference.dataUrl);
+        const normalizedReferences = Array.isArray(references) && references.length
+            ? references
+            : (reference ? [reference] : []);
+        const hasReference = normalizedReferences.length > 0;
         const editsEndpoint = hasReference ? resolveCustomEditsUrl(settings, endpoint) : '';
-        const jsonPayload = buildCustomPayload(options, reference);
+        const jsonPayload = buildCustomPayload(options, reference, normalizedReferences);
         const commonLogPayload = {
             provider: 'custom',
             endpoint,
@@ -635,6 +691,7 @@
             promptLength: String(options.prompt || '').length,
             negativePromptLength: String(options.negativePrompt || '').length,
             reference: summarizeReferenceForDebug(reference),
+            referenceList: summarizeReferenceListForDebug(normalizedReferences),
             payloadReferenceKeys: hasReference
                 ? ['reference_image', 'reference_images', 'image', 'images', 'input_image', 'input_images', 'reference_strength', 'input_fidelity']
                 : []
@@ -649,19 +706,26 @@
 
         if (hasReference && editsEndpoint) {
             try {
-                const referenceBlob = await buildReferenceBlob(reference);
-                if (referenceBlob) {
-                    const editFormData = buildCustomEditFormData(options, reference);
-                    editFormData.append('image', referenceBlob, 'reference.png');
-                    editFormData.append('images', referenceBlob, 'reference.png');
-                    editFormData.append('input_image', referenceBlob, 'reference.png');
-                    editFormData.append('input_images', referenceBlob, 'reference.png');
+                const referenceBlobList = (await Promise.all(
+                    normalizedReferences.map(item => buildReferenceBlob(item).catch(() => null))
+                )).filter(Boolean);
+                if (referenceBlobList.length > 0) {
+                    const editFormData = buildCustomEditFormData(options, normalizedReferences[0]);
+                    referenceBlobList.forEach((blob, index) => {
+                        const name = `reference-${index + 1}.png`;
+                        editFormData.append('image', blob, name);
+                        editFormData.append('images', blob, name);
+                        editFormData.append('input_images', blob, name);
+                        if (index === 0) {
+                            editFormData.append('input_image', blob, name);
+                        }
+                    });
 
                     console.log('[NovelAI Debug] request:custom:edits-attempt', {
                         endpoint: editsEndpoint,
                         method: 'POST',
-                        referenceBlobType: referenceBlob.type || 'image/png',
-                        referenceBlobSize: referenceBlob.size,
+                        referenceCount: referenceBlobList.length,
+                        referenceBlobSizes: referenceBlobList.map(item => item.size),
                         mode: 'multipart/form-data'
                     });
                     const editResponse = await fetch(editsEndpoint, {
@@ -1031,6 +1095,26 @@
             });
         }
 
+        const referenceStrengthInput = document.getElementById('novelai-reference-strength');
+        const referenceStrengthValue = document.getElementById('novelai-reference-strength-val');
+        if (referenceStrengthInput) {
+            const normalizedStrength = clampNumber(settings.referenceStrength, 0, 1, 0.78);
+            referenceStrengthInput.value = normalizedStrength;
+            if (referenceStrengthValue) referenceStrengthValue.textContent = normalizedStrength.toFixed(2);
+            bindOnce(referenceStrengthInput, 'input', (event) => {
+                if (referenceStrengthValue) {
+                    referenceStrengthValue.textContent = clampNumber(event.target.value, 0, 1, 0.78).toFixed(2);
+                }
+            });
+            bindOnce(referenceStrengthInput, 'change', (event) => {
+                settings.referenceStrength = clampNumber(event.target.value, 0, 1, 0.78);
+                if (referenceStrengthValue) {
+                    referenceStrengthValue.textContent = settings.referenceStrength.toFixed(2);
+                }
+                if (window.saveConfig) window.saveConfig();
+            });
+        }
+
         const seedInput = document.getElementById('novelai-seed');
         if (seedInput) {
             seedInput.value = safeNumber(settings.seed, -1);
@@ -1148,10 +1232,13 @@
         );
 
         const referenceInput = asString(options.referenceImage || '');
-        const hasReferenceInput = !!referenceInput;
+        const referenceInputList = Array.isArray(options.referenceImages)
+            ? options.referenceImages.map(item => asString(item)).filter(Boolean)
+            : [];
+        const hasReferenceInput = !!referenceInput || referenceInputList.length > 0;
         const defaultReferenceStrength = (provider === 'custom' && hasReferenceInput)
-            ? Math.max(0.78, safeNumber(settings.referenceStrength, 0.62))
-            : safeNumber(settings.referenceStrength, 0.62);
+            ? Math.max(0.78, safeNumber(settings.referenceStrength, 0.78))
+            : safeNumber(settings.referenceStrength, 0.78);
 
         const requestOptions = {
             provider,
@@ -1178,9 +1265,11 @@
             )
         };
 
+        let references = [];
         let reference = null;
         try {
-            reference = await normalizeReferenceImage(referenceInput);
+            references = await normalizeReferenceImages(referenceInput, referenceInputList);
+            reference = references[0] || null;
         } catch (referenceError) {
             console.warn('[NovelAI Debug] reference:normalize-error', {
                 provider,
@@ -1189,8 +1278,10 @@
                     : (typeof window.isChatMediaReference === 'function' && window.isChatMediaReference(referenceInput)
                         ? 'chat_media_ref'
                         : (/^https?:\/\//i.test(referenceInput) ? 'http_url' : (referenceInput ? 'raw_or_other' : 'none'))),
+                inputCount: (referenceInput ? 1 : 0) + referenceInputList.length,
                 message: referenceError && referenceError.message ? referenceError.message : String(referenceError)
             });
+            references = [];
             reference = null;
         }
         console.log('[NovelAI Debug] generate:entry', {
@@ -1209,11 +1300,13 @@
                 : (typeof window.isChatMediaReference === 'function' && window.isChatMediaReference(referenceInput)
                     ? 'chat_media_ref'
                     : (/^https?:\/\//i.test(referenceInput) ? 'http_url' : (referenceInput ? 'raw_or_other' : 'none'))),
-            normalizedReference: summarizeReferenceForDebug(reference)
+            inputReferenceCount: (referenceInput ? 1 : 0) + referenceInputList.length,
+            normalizedReference: summarizeReferenceForDebug(reference),
+            normalizedReferenceList: summarizeReferenceListForDebug(references)
         });
         if (provider === 'custom') {
-            return requestCustomImage(requestOptions, settings, reference);
+            return requestCustomImage(requestOptions, settings, reference, references);
         }
-        return requestNovelAiImage(requestOptions, reference);
+        return requestNovelAiImage(requestOptions, reference, references);
     };
 })();

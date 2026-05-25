@@ -22,6 +22,15 @@ function summarizeChatImageDebugReference(referenceImage) {
     return { hasReference: true, kind: 'raw_base64_or_other', length: raw.length };
 }
 
+function getContactReferenceImagesForImageGen(contact) {
+    if (!contact || typeof contact !== 'object') return [];
+    const list = Array.isArray(contact.novelaiReferenceImages) ? contact.novelaiReferenceImages : [];
+    const normalized = list.map(item => String(item || '').trim()).filter(Boolean);
+    if (normalized.length > 0) return normalized;
+    const fallback = String(contact.novelaiReferenceImage || '').trim();
+    return fallback ? [fallback] : [];
+}
+
 function logChatImageStage(stage, payload = {}) {
     try {
         console.log(`[ChatImage Debug] ${stage}`, payload);
@@ -175,6 +184,7 @@ window.refreshAiImage = async function(msgId, event) {
 
     try {
          const contact = window.iphoneSimState.contacts.find(c => String(c.id) === String(contactId));
+         const contactReferenceImages = getContactReferenceImagesForImageGen(contact);
          const defaultModel = imageProvider === 'custom'
             ? (novelaiSettings.customModel || novelaiSettings.model)
             : novelaiSettings.model;
@@ -189,7 +199,8 @@ window.refreshAiImage = async function(msgId, event) {
             seed: -1,
             width: novelaiSettings.width || 832,
             height: novelaiSettings.height || 1216,
-            referenceImage: contact ? (contact.novelaiReferenceImage || '') : '',
+            referenceImage: contactReferenceImages[0] || '',
+            referenceImages: contactReferenceImages,
             referenceStrength: novelaiSettings.referenceStrength,
             referenceInfoExtracted: novelaiSettings.referenceInfoExtracted
         };
@@ -202,7 +213,8 @@ window.refreshAiImage = async function(msgId, event) {
             height: genOptions.height,
             promptLength: String(genOptions.prompt || '').length,
             negativePromptLength: String(genOptions.negativePrompt || '').length,
-            reference: summarizeChatImageDebugReference(genOptions.referenceImage)
+            reference: summarizeChatImageDebugReference(genOptions.referenceImage),
+            referenceCount: genOptions.referenceImages.length
         });
 
         // 尝试从 preset 恢复参数
@@ -1467,7 +1479,7 @@ function appendMessageToUI(text, isUser, type = 'text', description = null, repl
         
         contentHtml = `
             <div class="virtual-image-container" style="position: relative; cursor: pointer; display: flex; justify-content: center; align-items: center;">
-                <img id="${imgId}" src="${text}" style="max-width: 200px; border-radius: 4px; display: block; width: auto; height: auto;">
+                <img id="${imgId}" src="${text}" loading="lazy" decoding="async" style="max-width: 200px; border-radius: 4px; display: block; width: auto; height: auto;">
                 <div id="${overlayId}" class="virtual-image-overlay" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(255, 255, 255, 0.8); border-radius: 4px; display: flex; align-items: center; justify-content: center; padding: 10px; box-sizing: border-box; opacity: 0; transition: opacity 0.3s; pointer-events: none;">
                     <div style="font-size: 14px; color: #333; line-height: 1.4; overflow-y: auto; max-height: 100%; text-align: center;">${cleanDesc}</div>
                 </div>
@@ -1521,7 +1533,7 @@ function appendMessageToUI(text, isUser, type = 'text', description = null, repl
         const isDeferredSticker = typeof window.isChatMediaReference === 'function' && window.isChatMediaReference(text);
         const stickerSrc = isDeferredSticker ? (window.CHAT_MEDIA_PIXEL_PLACEHOLDER || '') : text;
         const stickerRefAttr = isDeferredSticker ? ` data-chat-media-ref="${encodeURIComponent(text)}"` : '';
-        contentHtml = `<img src="${stickerSrc}"${stickerRefAttr} onclick="showImagePreview(this.src)">`;
+        contentHtml = `<img src="${stickerSrc}"${stickerRefAttr} onclick="showImagePreview(this.src)" loading="lazy" decoding="async">`;
     } else if (type === 'voice') {
         extraClass = 'voice-msg'; 
     } else if (type === 'description') {
@@ -7308,6 +7320,7 @@ async function generateAiReply(instruction = null, targetContactId = null, optio
                         }
 
                         try {
+                            const contactReferenceImages = getContactReferenceImagesForImageGen(contact);
                             const genOptions = {
                                 provider: imageProvider,
                                 key: imageApiKey,
@@ -7319,7 +7332,8 @@ async function generateAiReply(instruction = null, targetContactId = null, optio
                                 seed: (preset && preset.settings && preset.settings.seed) !== undefined ? preset.settings.seed : -1,
                                 width: (preset && preset.settings && preset.settings.width) || novelaiSettings.width || 832,
                                 height: (preset && preset.settings && preset.settings.height) || novelaiSettings.height || 1216,
-                                referenceImage: contact.novelaiReferenceImage || '',
+                                referenceImage: contactReferenceImages[0] || '',
+                                referenceImages: contactReferenceImages,
                                 referenceStrength: novelaiSettings.referenceStrength,
                                 referenceInfoExtracted: novelaiSettings.referenceInfoExtracted
                             };
@@ -7333,7 +7347,8 @@ async function generateAiReply(instruction = null, targetContactId = null, optio
                                 height: genOptions.height,
                                 promptLength: String(genOptions.prompt || '').length,
                                 negativePromptLength: String(genOptions.negativePrompt || '').length,
-                                reference: summarizeChatImageDebugReference(genOptions.referenceImage)
+                                reference: summarizeChatImageDebugReference(genOptions.referenceImage),
+                                referenceCount: genOptions.referenceImages.length
                             });
 
                             // 先发送占位图片以占据正确的历史记录顺序
@@ -7586,6 +7601,7 @@ async function generateAiReply(instruction = null, targetContactId = null, optio
                     }
 
                     try {
+                        const contactReferenceImages = getContactReferenceImagesForImageGen(contact);
                         const genOptions = {
                             provider: imageProvider,
                             key: imageApiKey,
@@ -7597,7 +7613,8 @@ async function generateAiReply(instruction = null, targetContactId = null, optio
                             seed: (preset && preset.settings && preset.settings.seed) !== undefined ? preset.settings.seed : -1,
                             width: (preset && preset.settings && preset.settings.width) || novelaiSettings.width || 832,
                             height: (preset && preset.settings && preset.settings.height) || novelaiSettings.height || 1216,
-                            referenceImage: contact.novelaiReferenceImage || '',
+                            referenceImage: contactReferenceImages[0] || '',
+                            referenceImages: contactReferenceImages,
                             referenceStrength: novelaiSettings.referenceStrength,
                             referenceInfoExtracted: novelaiSettings.referenceInfoExtracted
                         };
@@ -7611,7 +7628,8 @@ async function generateAiReply(instruction = null, targetContactId = null, optio
                             height: genOptions.height,
                             promptLength: String(genOptions.prompt || '').length,
                             negativePromptLength: String(genOptions.negativePrompt || '').length,
-                            reference: summarizeChatImageDebugReference(genOptions.referenceImage)
+                            reference: summarizeChatImageDebugReference(genOptions.referenceImage),
+                            referenceCount: genOptions.referenceImages.length
                         });
 
                         // 先发送占位图片

@@ -8312,6 +8312,7 @@ function setupChatListeners() {
     const novelaiReferenceImageInput = document.getElementById('chat-setting-novelai-reference-image');
     const novelaiReferencePreview = document.getElementById('chat-setting-novelai-reference-preview');
     const novelaiReferencePlaceholder = document.getElementById('chat-setting-novelai-reference-placeholder');
+    const novelaiReferenceCount = document.getElementById('chat-setting-novelai-reference-count');
     const novelaiReferenceClearBtn = document.getElementById('chat-setting-novelai-reference-clear');
 
     const thoughtStyleSelect = document.getElementById('chat-setting-thought-style');
@@ -8388,7 +8389,8 @@ function setupChatListeners() {
     };
     if (novelaiReferenceImageInput) {
         novelaiReferenceImageInput.addEventListener('change', (e) => {
-            const file = e.target.files && e.target.files[0] ? e.target.files[0] : null;
+            const files = e.target.files ? Array.from(e.target.files) : [];
+            const file = files[0] || null;
             if (!file) return;
             const reader = new FileReader();
             reader.onload = (event) => {
@@ -8402,6 +8404,11 @@ function setupChatListeners() {
                 if (novelaiReferenceClearBtn) {
                     novelaiReferenceClearBtn.dataset.cleared = '0';
                     novelaiReferenceClearBtn.style.display = 'inline-flex';
+                }
+                if (novelaiReferenceCount) {
+                    novelaiReferenceCount.textContent = files.length > 4
+                        ? `已选择 ${files.length} 张（将使用前4张）`
+                        : (files.length > 0 ? `已选择 ${files.length} 张` : '未选择');
                 }
                 markChatSettingsDirty();
             };
@@ -8419,6 +8426,9 @@ function setupChatListeners() {
             }
             if (novelaiReferencePlaceholder) {
                 novelaiReferencePlaceholder.style.display = 'block';
+            }
+            if (novelaiReferenceCount) {
+                novelaiReferenceCount.textContent = '未选择';
             }
             novelaiReferenceClearBtn.dataset.cleared = '1';
             novelaiReferenceClearBtn.style.display = 'none';

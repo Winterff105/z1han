@@ -562,6 +562,10 @@
                         <div class="slider-header"><span>Scale</span><span id="novelai-scale-val">5</span></div>
                         <input type="range" id="novelai-scale" min="1" max="20" step="0.5" value="5">
                     </div>
+                    <div class="slider-container">
+                        <div class="slider-header"><span>Reference Strength</span><span id="novelai-reference-strength-val">0.78</span></div>
+                        <input type="range" id="novelai-reference-strength" min="0" max="1" step="0.01" value="0.78">
+                    </div>
                     <div class="input-wrapper">
                         <input type="number" id="novelai-seed" placeholder="Seed (-1)">
                     </div>
@@ -1249,15 +1253,16 @@
 
                                     <div class="mag-field" style="margin-top: 14px;">
                                         <label class="mag-label">Reference Image <span class="separator">/</span> <span class="mag-zh">参考图</span></label>
-                                        <input type="file" id="chat-setting-novelai-reference-image" accept="image/*" class="file-input-hidden">
+                                        <input type="file" id="chat-setting-novelai-reference-image" accept="image/*" class="file-input-hidden" multiple>
                                         <div style="display:flex; align-items:center; gap:12px;">
                                             <label for="chat-setting-novelai-reference-image" class="mag-upload-preview is-clickable" style="width:78px; height:78px; border-radius:14px; flex-shrink:0; overflow:hidden; background: linear-gradient(135deg, rgba(0,0,0,0.05), rgba(0,0,0,0.12));">
                                                 <img id="chat-setting-novelai-reference-preview" src="" alt="Reference Image" style="width:100%; height:100%; object-fit:cover; display:none;">
                                                 <span id="chat-setting-novelai-reference-placeholder" style="font-size:11px; color: var(--mag-sec-text); text-align:center; line-height:1.4; padding:8px;">上传参考图</span>
                                             </label>
+                                            <span id="chat-setting-novelai-reference-count" style="font-size:12px; color: var(--mag-sec-text); min-width:88px;">未选择</span>
                                             <button type="button" id="chat-setting-novelai-reference-clear" class="mag-btn" style="padding:8px 12px; min-width: auto;">清除</button>
                                         </div>
-                                        <div style="font-size: 12px; color: var(--mag-sec-text); margin-top: 8px; line-height: 1.6;">生图时会附带这张参考图，用于参考人物脸和身材。</div>
+                                        <div style="font-size: 12px; color: var(--mag-sec-text); margin-top: 8px; line-height: 1.6;">生图时会附带参考图用于锁定人物脸和身材，最多建议 4 张。</div>
                                     </div>
                                 </div>
                             </div>

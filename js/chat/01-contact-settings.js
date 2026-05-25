@@ -4622,8 +4622,13 @@ function openChatSettings() {
     const novelaiReferenceInput = document.getElementById('chat-setting-novelai-reference-image');
     const novelaiReferencePreview = document.getElementById('chat-setting-novelai-reference-preview');
     const novelaiReferencePlaceholder = document.getElementById('chat-setting-novelai-reference-placeholder');
+    const novelaiReferenceCount = document.getElementById('chat-setting-novelai-reference-count');
     const novelaiReferenceClearBtn = document.getElementById('chat-setting-novelai-reference-clear');
-    const currentReferenceImage = String(contact.novelaiReferenceImage || '').trim();
+    const currentReferenceImages = (Array.isArray(contact.novelaiReferenceImages) ? contact.novelaiReferenceImages : [])
+        .map(item => String(item || '').trim())
+        .filter(Boolean);
+    const currentReferenceImage = currentReferenceImages[0] || String(contact.novelaiReferenceImage || '').trim();
+    const currentReferenceCount = currentReferenceImages.length || (currentReferenceImage ? 1 : 0);
     if (novelaiReferenceInput) {
         novelaiReferenceInput.value = '';
     }
@@ -4637,6 +4642,9 @@ function openChatSettings() {
     }
     if (novelaiReferencePlaceholder) {
         novelaiReferencePlaceholder.style.display = currentReferenceImage ? 'none' : 'block';
+    }
+    if (novelaiReferenceCount) {
+        novelaiReferenceCount.textContent = currentReferenceCount > 0 ? `已选择 ${currentReferenceCount} 张` : '未选择';
     }
 
     document.getElementById('chat-setting-context-limit').value = contact.contextLimit || '';
@@ -5517,6 +5525,7 @@ function handleSaveChatSettings() {
         contact.novelaiPreset = novelaiPreset;
         if (novelaiReferenceClearBtn && novelaiReferenceClearBtn.dataset.cleared === '1') {
             contact.novelaiReferenceImage = '';
+            contact.novelaiReferenceImages = [];
         }
     }
 
@@ -5620,13 +5629,30 @@ function handleSaveChatSettings() {
         }));
     }
 
-    if (!isGroupChat && novelaiReferenceImageInput && novelaiReferenceImageInput.files && novelaiReferenceImageInput.files[0]) {
+    if (!isGroupChat && novelaiReferenceImageInput && novelaiReferenceImageInput.files && novelaiReferenceImageInput.files.length > 0) {
         promises.push(new Promise(resolve => {
-            compressImagePreserveAlpha(novelaiReferenceImageInput.files[0], 1024, 0.86).then(base64 => {
-                contact.novelaiReferenceImage = base64;
+            const maxReferenceImages = 4;
+            const allPickedFiles = Array.from(novelaiReferenceImageInput.files);
+            const pickedFiles = allPickedFiles.slice(0, maxReferenceImages);
+            if (allPickedFiles.length > maxReferenceImages) {
+                if (typeof window.showChatToast === 'function') {
+                    window.showChatToast(`参考图最多使用 ${maxReferenceImages} 张，已自动截取前 ${maxReferenceImages} 张`, 2600);
+                }
+            }
+            Promise.all(
+                pickedFiles.map(file => (
+                    compressImagePreserveAlpha(file, 1024, 0.86).catch(err => {
+                        console.error('参考图压缩失败', err);
+                        return '';
+                    })
+                ))
+            ).then(images => {
+                const validImages = images.map(item => String(item || '').trim()).filter(Boolean);
+                contact.novelaiReferenceImages = validImages;
+                contact.novelaiReferenceImage = validImages[0] || '';
                 resolve();
             }).catch(err => {
-                console.error('参考图压缩失败', err);
+                console.error('参考图处理失败', err);
                 resolve();
             });
         }));

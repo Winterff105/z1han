@@ -7103,7 +7103,8 @@ ${hostModeExtra}
                     model: imageModel,
                     steps: 28,
                     scale: 5,
-                    referenceImage: contact ? (contact.novelaiReferenceImage || '') : '',
+                    referenceImage: contact ? ((Array.isArray(contact.novelaiReferenceImages) && contact.novelaiReferenceImages[0]) || contact.novelaiReferenceImage || '') : '',
+                    referenceImages: contact ? ((Array.isArray(contact.novelaiReferenceImages) ? contact.novelaiReferenceImages : []).filter(Boolean)) : [],
                     referenceStrength: window.iphoneSimState && window.iphoneSimState.novelaiSettings
                         ? window.iphoneSimState.novelaiSettings.referenceStrength
                         : undefined,
@@ -7505,7 +7506,8 @@ ${hostModeExtra}
                 width: width,
                 height: height,
                 seed: -1,
-                referenceImage: contact ? (contact.novelaiReferenceImage || '') : '',
+                referenceImage: contact ? ((Array.isArray(contact.novelaiReferenceImages) && contact.novelaiReferenceImages[0]) || contact.novelaiReferenceImage || '') : '',
+                referenceImages: contact ? ((Array.isArray(contact.novelaiReferenceImages) ? contact.novelaiReferenceImages : []).filter(Boolean)) : [],
                 referenceStrength: novelaiSettings.referenceStrength,
                 referenceInfoExtracted: novelaiSettings.referenceInfoExtracted
             });
@@ -9533,7 +9535,8 @@ ${charList}
                                         width: width,
                                         height: height,
                                         seed: -1,
-                                        referenceImage: personaContact ? (personaContact.novelaiReferenceImage || '') : '',
+                                        referenceImage: personaContact ? ((Array.isArray(personaContact.novelaiReferenceImages) && personaContact.novelaiReferenceImages[0]) || personaContact.novelaiReferenceImage || '') : '',
+                                        referenceImages: personaContact ? ((Array.isArray(personaContact.novelaiReferenceImages) ? personaContact.novelaiReferenceImages : []).filter(Boolean)) : [],
                                         referenceStrength: novelaiSettings.referenceStrength,
                                         referenceInfoExtracted: novelaiSettings.referenceInfoExtracted
                                     });
