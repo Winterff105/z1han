@@ -22,6 +22,51 @@ function summarizeChatImageDebugReference(referenceImage) {
     return { hasReference: true, kind: 'raw_base64_or_other', length: raw.length };
 }
 
+const CHAT_IMAGE_NO_PERSON_KEYWORDS = [
+    '不要人物', '不要人', '没有人物', '没人', '无人', '无人物', '纯场景', '空镜', '只要场景', '只要风景', '仅场景', '仅风景', '背景图',
+    'no people', 'no person', 'no human', 'no humans', 'without people', 'without person', 'without humans',
+    'empty scene', 'landscape only', 'scenery only', 'background only', 'no character'
+];
+const CHAT_IMAGE_SCENE_KEYWORDS = [
+    '场景', '风景', '景色', '街景', '建筑', '室内', '室外', '房间', '客厅', '卧室', '山', '海', '森林', '天空', '云', '草地', '城市', '自然',
+    'scene', 'scenery', 'landscape', 'background', 'architecture', 'interior', 'outdoor', 'nature', 'mountain', 'sea', 'forest', 'sky', 'cloud', 'cityscape'
+];
+const CHAT_IMAGE_FOOD_KEYWORDS = [
+    '美食', '食物', '菜', '饭', '面', '蛋糕', '饮料', '咖啡', '餐桌',
+    'food', 'dish', 'meal', 'dessert', 'drink', 'coffee'
+];
+const CHAT_IMAGE_PORTRAIT_KEYWORDS = [
+    '人像', '人物', '肖像', '自拍', '脸', '面部', '五官', '半身', '全身', '男生', '女生', '男人', '女人', '角色', '模特',
+    'portrait', 'selfie', 'face', 'facial', 'person', 'people', 'human', 'character', 'model', 'boy', 'girl', 'man', 'woman', 'upper body', 'full body'
+];
+const CHAT_IMAGE_NO_PERSON_NEGATIVE_TOKENS = ['no people', 'no person', 'no human', 'no humans', 'no character'];
+
+function includesAnyKeyword(text, keywords) {
+    const target = String(text || '').toLowerCase();
+    if (!target || !Array.isArray(keywords) || keywords.length === 0) return false;
+    return keywords.some((keyword) => {
+        const normalized = String(keyword || '').toLowerCase().trim();
+        return !!normalized && target.includes(normalized);
+    });
+}
+
+function mergeNegativePrompt(basePrompt, extraTokens = []) {
+    const normalizedBase = String(basePrompt || '').trim();
+    const baseParts = normalizedBase
+        ? normalizedBase.split(/[,，;\n]+/).map(item => String(item || '').trim()).filter(Boolean)
+        : [];
+    const seen = new Set(baseParts.map(item => item.toLowerCase()));
+    const merged = [...baseParts];
+    (Array.isArray(extraTokens) ? extraTokens : []).forEach((token) => {
+        const normalizedToken = String(token || '').trim();
+        const key = normalizedToken.toLowerCase();
+        if (!normalizedToken || seen.has(key)) return;
+        seen.add(key);
+        merged.push(normalizedToken);
+    });
+    return merged.join(', ');
+}
+
 function getContactReferenceImagesForImageGen(contact) {
     if (!contact || typeof contact !== 'object') return [];
     const list = Array.isArray(contact.novelaiReferenceImages) ? contact.novelaiReferenceImages : [];
@@ -29,6 +74,51 @@ function getContactReferenceImagesForImageGen(contact) {
     if (normalized.length > 0) return normalized;
     const fallback = String(contact.novelaiReferenceImage || '').trim();
     return fallback ? [fallback] : [];
+}
+
+function resolveChatImageReferencePolicy(contact, options = {}) {
+    const contactReferenceImages = getContactReferenceImagesForImageGen(contact);
+    const prompt = String(options.prompt || '').trim();
+    const rawText = String(options.rawText || '').trim();
+    const description = String(options.description || '').trim();
+    const negativePrompt = String(options.negativePrompt || '').trim();
+    const typeHint = String(options.typeHint || '').trim();
+    const combinedText = [prompt, rawText, description].filter(Boolean).join(' ');
+
+    const explicitNoPerson = includesAnyKeyword(combinedText, CHAT_IMAGE_NO_PERSON_KEYWORDS);
+    const sceneCue = includesAnyKeyword(combinedText, CHAT_IMAGE_SCENE_KEYWORDS)
+        || includesAnyKeyword(combinedText, CHAT_IMAGE_FOOD_KEYWORDS);
+    const portraitCue = includesAnyKeyword(combinedText, CHAT_IMAGE_PORTRAIT_KEYWORDS);
+    const sceneTypeHint = typeHint === 'scene' || typeHint === 'scenery' || typeHint === 'food';
+    const portraitTypeHint = typeHint === 'portrait';
+
+    let enableReference = contactReferenceImages.length > 0;
+    let reason = enableReference ? 'use_reference_default' : 'no_reference_configured';
+    if (enableReference && explicitNoPerson) {
+        enableReference = false;
+        reason = 'skip_reference_explicit_no_person';
+    } else if (enableReference && (sceneCue || sceneTypeHint) && !portraitCue && !portraitTypeHint) {
+        enableReference = false;
+        reason = 'skip_reference_scene_prompt';
+    }
+
+    const appliedReferenceImages = enableReference ? contactReferenceImages : [];
+    const shouldBoostNoPersonNegative = !enableReference && (explicitNoPerson || sceneCue || sceneTypeHint);
+    return {
+        referenceImages: appliedReferenceImages,
+        referenceImage: appliedReferenceImages[0] || '',
+        negativePrompt: shouldBoostNoPersonNegative
+            ? mergeNegativePrompt(negativePrompt, CHAT_IMAGE_NO_PERSON_NEGATIVE_TOKENS)
+            : negativePrompt,
+        referenceEnabled: enableReference,
+        reason,
+        explicitNoPerson,
+        sceneCue,
+        portraitCue,
+        sceneTypeHint,
+        portraitTypeHint,
+        sourceReferenceCount: contactReferenceImages.length
+    };
 }
 
 function logChatImageStage(stage, payload = {}) {
@@ -185,6 +275,13 @@ window.refreshAiImage = async function(msgId, event) {
     try {
          const contact = window.iphoneSimState.contacts.find(c => String(c.id) === String(contactId));
          const contactReferenceImages = getContactReferenceImagesForImageGen(contact);
+         const referencePolicy = resolveChatImageReferencePolicy(contact, {
+            prompt: msg.novelaiPrompt,
+            rawText: msg.content,
+            description: msg.description || '',
+            negativePrompt: msg.novelaiNegativePrompt || novelaiSettings.negativePrompt,
+            typeHint: detectImageType((msg.description || msg.novelaiPrompt || msg.content || ''))
+         });
          const defaultModel = imageProvider === 'custom'
             ? (novelaiSettings.customModel || novelaiSettings.model)
             : novelaiSettings.model;
@@ -193,14 +290,14 @@ window.refreshAiImage = async function(msgId, event) {
             key: imageApiKey,
             model: defaultModel,
             prompt: msg.novelaiPrompt,
-            negativePrompt: msg.novelaiNegativePrompt || novelaiSettings.negativePrompt,
+            negativePrompt: referencePolicy.negativePrompt,
             steps: novelaiSettings.steps || 28,
             scale: novelaiSettings.cfg || 5,
             seed: -1,
             width: novelaiSettings.width || 832,
             height: novelaiSettings.height || 1216,
-            referenceImage: contactReferenceImages[0] || '',
-            referenceImages: contactReferenceImages,
+            referenceImage: referencePolicy.referenceImage,
+            referenceImages: referencePolicy.referenceImages,
             referenceStrength: novelaiSettings.referenceStrength,
             referenceInfoExtracted: novelaiSettings.referenceInfoExtracted
         };
@@ -214,7 +311,12 @@ window.refreshAiImage = async function(msgId, event) {
             promptLength: String(genOptions.prompt || '').length,
             negativePromptLength: String(genOptions.negativePrompt || '').length,
             reference: summarizeChatImageDebugReference(genOptions.referenceImage),
-            referenceCount: genOptions.referenceImages.length
+            referenceCount: genOptions.referenceImages.length,
+            referencePolicy: {
+                enabled: referencePolicy.referenceEnabled,
+                reason: referencePolicy.reason,
+                sourceReferenceCount: referencePolicy.sourceReferenceCount
+            }
         });
 
         // 尝试从 preset 恢复参数
@@ -7320,20 +7422,27 @@ async function generateAiReply(instruction = null, targetContactId = null, optio
                         }
 
                         try {
-                            const contactReferenceImages = getContactReferenceImagesForImageGen(contact);
+                            const detectedType = detectImageType(rawImageContent || msg.content || msg.description || '');
+                            const referencePolicy = resolveChatImageReferencePolicy(contact, {
+                                prompt: finalPrompt,
+                                rawText: rawImageContent || msg.content || '',
+                                description: msg.description || '',
+                                negativePrompt: (preset && preset.settings && preset.settings.negativePrompt) || novelaiSettings.negativePrompt,
+                                typeHint: detectedType
+                            });
                             const genOptions = {
                                 provider: imageProvider,
                                 key: imageApiKey,
                                 model: (preset && preset.settings && preset.settings.model) || defaultImageModel,
                                 prompt: finalPrompt,
-                                negativePrompt: (preset && preset.settings && preset.settings.negativePrompt) || novelaiSettings.negativePrompt,
+                                negativePrompt: referencePolicy.negativePrompt,
                                 steps: (preset && preset.settings && preset.settings.steps) || novelaiSettings.steps,
                                 scale: (preset && preset.settings && preset.settings.scale) || novelaiSettings.cfg,
                                 seed: (preset && preset.settings && preset.settings.seed) !== undefined ? preset.settings.seed : -1,
                                 width: (preset && preset.settings && preset.settings.width) || novelaiSettings.width || 832,
                                 height: (preset && preset.settings && preset.settings.height) || novelaiSettings.height || 1216,
-                                referenceImage: contactReferenceImages[0] || '',
-                                referenceImages: contactReferenceImages,
+                                referenceImage: referencePolicy.referenceImage,
+                                referenceImages: referencePolicy.referenceImages,
                                 referenceStrength: novelaiSettings.referenceStrength,
                                 referenceInfoExtracted: novelaiSettings.referenceInfoExtracted
                             };
@@ -7348,7 +7457,13 @@ async function generateAiReply(instruction = null, targetContactId = null, optio
                                 promptLength: String(genOptions.prompt || '').length,
                                 negativePromptLength: String(genOptions.negativePrompt || '').length,
                                 reference: summarizeChatImageDebugReference(genOptions.referenceImage),
-                                referenceCount: genOptions.referenceImages.length
+                                referenceCount: genOptions.referenceImages.length,
+                                referencePolicy: {
+                                    enabled: referencePolicy.referenceEnabled,
+                                    reason: referencePolicy.reason,
+                                    sourceReferenceCount: referencePolicy.sourceReferenceCount,
+                                    detectedType
+                                }
                             });
 
                             // 先发送占位图片以占据正确的历史记录顺序
@@ -7601,20 +7716,27 @@ async function generateAiReply(instruction = null, targetContactId = null, optio
                     }
 
                     try {
-                        const contactReferenceImages = getContactReferenceImagesForImageGen(contact);
+                        const detectedType = detectImageType(imageToSend.content || imageToSend.desc || '');
+                        const referencePolicy = resolveChatImageReferencePolicy(contact, {
+                            prompt: finalPrompt,
+                            rawText: imageToSend.content || '',
+                            description: imageToSend.desc || '',
+                            negativePrompt: (preset && preset.settings && preset.settings.negativePrompt) || novelaiSettings.negativePrompt,
+                            typeHint: detectedType
+                        });
                         const genOptions = {
                             provider: imageProvider,
                             key: imageApiKey,
                             model: (preset && preset.settings && preset.settings.model) || defaultImageModel,
                             prompt: finalPrompt,
-                            negativePrompt: (preset && preset.settings && preset.settings.negativePrompt) || novelaiSettings.negativePrompt,
+                            negativePrompt: referencePolicy.negativePrompt,
                             steps: (preset && preset.settings && preset.settings.steps) || novelaiSettings.steps,
                             scale: (preset && preset.settings && preset.settings.scale) || novelaiSettings.cfg,
                             seed: (preset && preset.settings && preset.settings.seed) !== undefined ? preset.settings.seed : -1,
                             width: (preset && preset.settings && preset.settings.width) || novelaiSettings.width || 832,
                             height: (preset && preset.settings && preset.settings.height) || novelaiSettings.height || 1216,
-                            referenceImage: contactReferenceImages[0] || '',
-                            referenceImages: contactReferenceImages,
+                            referenceImage: referencePolicy.referenceImage,
+                            referenceImages: referencePolicy.referenceImages,
                             referenceStrength: novelaiSettings.referenceStrength,
                             referenceInfoExtracted: novelaiSettings.referenceInfoExtracted
                         };
@@ -7629,7 +7751,13 @@ async function generateAiReply(instruction = null, targetContactId = null, optio
                             promptLength: String(genOptions.prompt || '').length,
                             negativePromptLength: String(genOptions.negativePrompt || '').length,
                             reference: summarizeChatImageDebugReference(genOptions.referenceImage),
-                            referenceCount: genOptions.referenceImages.length
+                            referenceCount: genOptions.referenceImages.length,
+                            referencePolicy: {
+                                enabled: referencePolicy.referenceEnabled,
+                                reason: referencePolicy.reason,
+                                sourceReferenceCount: referencePolicy.sourceReferenceCount,
+                                detectedType
+                            }
                         });
 
                         // 先发送占位图片
