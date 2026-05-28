@@ -5066,28 +5066,55 @@
                     margin-bottom: 14px;
                 }
 
-                #memory-app .memory-refine-length-group {
-                    margin-bottom: 12px;
-                }
-
-                #memory-app .memory-refine-length-group input {
-                    width: 100%;
-                }
-
-                #memory-app .memory-refine-length-hint {
-                    margin-top: 6px;
-                    font-size: 12px;
-                    color: #666;
-                    line-height: 1.4;
-                }
-
                 #memory-app .memory-refine-confirm-actions {
                     display: flex;
                     gap: 8px;
+                    align-items: stretch;
                 }
 
-                #memory-app .memory-refine-confirm-actions button {
+                #memory-app .memory-refine-confirm-actions .ios-btn-block {
                     flex: 1;
+                    margin-top: 0;
+                    height: 52px;
+                    min-height: 52px;
+                    padding: 0 12px;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    line-height: 1.2;
+                }
+
+                #memory-app .memory-refine-preview-card {
+                    margin: 10px 0 14px;
+                    padding: 12px;
+                    border: 1px solid #e5e7eb;
+                    border-radius: 10px;
+                    background: #f9fafb;
+                    color: #1f2937;
+                    font-size: 13px;
+                    line-height: 1.6;
+                    white-space: pre-wrap;
+                    word-break: break-word;
+                    max-height: 44vh;
+                    overflow-y: auto;
+                }
+
+                #memory-app .memory-refine-preview-actions {
+                    display: flex;
+                    gap: 8px;
+                    align-items: stretch;
+                }
+
+                #memory-app .memory-refine-preview-actions .ios-btn-block {
+                    flex: 1;
+                    margin-top: 0;
+                    height: 52px;
+                    min-height: 52px;
+                    padding: 0 12px;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    line-height: 1.2;
                 }
 
                 #memory-app .memory-tags-input {
@@ -5499,16 +5526,30 @@
                     <div class="modal-body">
                         <div class="memory-refine-confirm-summary">
                             已选择 <span id="memory-refine-selected-count-modal">0</span> 条记忆。
-                            将生成 1 条精炼总览并归档。
-                        </div>
-                        <div class="setting-group memory-refine-length-group">
-                            <label for="memory-refine-target-chars">希望精炼结果字数</label>
-                            <input type="number" id="memory-refine-target-chars" min="80" max="3000" step="10" value="300">
-                            <div class="memory-refine-length-hint">将按“总结”同款提示词生成，目标字数允许小范围浮动。</div>
+                            将生成 1 条精炼总览并归档，完成后会先展示预览供你确认。
                         </div>
                         <div class="memory-refine-confirm-actions">
-                            <button id="cancel-memory-refine-confirm">取消</button>
+                            <button id="cancel-memory-refine-confirm" class="ios-btn-block secondary">取消</button>
                             <button id="confirm-memory-refine-btn" class="ios-btn-block">确认精炼归档</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="memory-refine-preview-modal" class="modal hidden">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h3>精炼结果预览</h3>
+                        <button class="close-btn" id="close-memory-refine-preview">&times;</button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="memory-refine-confirm-summary">
+                            精炼已完成，请先确认内容，再决定是否替换原记忆。
+                        </div>
+                        <div id="memory-refine-preview-content" class="memory-refine-preview-card"></div>
+                        <div class="memory-refine-preview-actions">
+                            <button id="keep-memory-refine-preview-btn" class="ios-btn-block secondary">保留精炼，不替换原记忆</button>
+                            <button id="replace-memory-refine-preview-btn" class="ios-btn-block">替换原记忆</button>
                         </div>
                     </div>
                 </div>
