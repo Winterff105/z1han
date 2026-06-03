@@ -10435,8 +10435,16 @@ function setupChatListeners() {
                     }
                     return;
                 }
+                if (item.id === 'chat-more-location-btn') {
+                    e.stopPropagation();
+                    closeAllPanels();
+                    if (typeof window.openLocationApp === 'function') {
+                        window.openLocationApp();
+                    }
+                    return;
+                }
 
-                if (item.id === 'chat-more-photo-btn' || item.id === 'chat-more-camera-btn' || item.id === 'chat-more-transfer-btn' || item.id === 'chat-more-red-packet-btn' || item.id === 'chat-more-group-poll-btn' || item.id === 'chat-more-group-relay-btn' || item.id === 'chat-more-group-meeting-btn' || item.id === 'chat-more-memory-btn' || item.id === 'chat-more-location-btn' || item.id === 'chat-more-regenerate-btn' || item.id === 'chat-more-voice-btn' || item.id === 'chat-more-video-call-btn' || item.id === 'chat-more-screen-share-btn' || item.id === 'chat-more-fire-buddy-btn' || item.id === 'chat-more-food-btn' || item.id === 'chat-more-nav-btn') return;
+                if (item.id === 'chat-more-photo-btn' || item.id === 'chat-more-camera-btn' || item.id === 'chat-more-transfer-btn' || item.id === 'chat-more-red-packet-btn' || item.id === 'chat-more-group-poll-btn' || item.id === 'chat-more-group-relay-btn' || item.id === 'chat-more-group-meeting-btn' || item.id === 'chat-more-memory-btn' || item.id === 'chat-more-regenerate-btn' || item.id === 'chat-more-voice-btn' || item.id === 'chat-more-video-call-btn' || item.id === 'chat-more-screen-share-btn' || item.id === 'chat-more-fire-buddy-btn' || item.id === 'chat-more-food-btn' || item.id === 'chat-more-nav-btn') return;
                 
                 e.stopPropagation();
                 const label = item.querySelector('.more-label').textContent;
@@ -10652,13 +10660,6 @@ function setupChatListeners() {
         chatMoreMemoryBtn.addEventListener('click', () => {
             if (window.openMemoryApp) window.openMemoryApp();
             document.getElementById('chat-more-panel').classList.add('hidden');
-        });
-    }
-
-    const chatMoreLocationBtn = document.getElementById('chat-more-location-btn');
-    if (chatMoreLocationBtn) {
-        chatMoreLocationBtn.addEventListener('click', () => {
-            if (window.openLocationApp) window.openLocationApp();
         });
     }
 
