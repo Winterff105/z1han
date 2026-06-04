@@ -113,6 +113,8 @@
     const PLANNER_ALLOWED_TYPE_SET = new Set(PLANNER_ALLOWED_TYPES);
     const PLANNER_AUTO_ADJUST_DEFAULT_LIMIT = 5;
     const PLANNER_DAILY_TWIST_PROBABILITY = 0.18;
+    const PLANNER_AMAP_VENUE_CACHE_TTL = 10 * 60 * 1000;
+    const plannerAmapVenueSearchCache = new Map();
 
     function padPlannerNumber(value) {
         return String(value).padStart(2, '0');
@@ -638,17 +640,18 @@
         return lines.join('\n');
     }
 
-    function getPlannerRecentChatContext(contact, limit = 12) {
+    function getPlannerRecentChatContext(contact, userPersona = null, limit = 12) {
         if (!contact) return '';
         const stateRoot = window.iphoneSimState || {};
         const history = Array.isArray(stateRoot.chatHistory && stateRoot.chatHistory[contact.id]) ? stateRoot.chatHistory[contact.id] : [];
         if (!history.length) return '';
         const contactLabel = String(contact.remark || contact.name || '联系人').trim() || '联系人';
+        const userLabel = String(userPersona && userPersona.name ? userPersona.name : '用户').trim() || '用户';
 
         return history
             .slice(-Math.max(1, limit))
             .map((message) => {
-                const role = message && message.role === 'user' ? '用户' : contactLabel;
+                const role = message && message.role === 'user' ? userLabel : contactLabel;
                 const content = clampPlannerText(message && message.content ? message.content : '', 160);
                 return content ? `${role}：${content}` : '';
             })
@@ -656,17 +659,255 @@
             .join('\n');
     }
 
+    function getPlannerResolvedUserPersonaContext(contact) {
+        const stateRoot = window.iphoneSimState || {};
+        const personas = Array.isArray(stateRoot.userPersonas) ? stateRoot.userPersonas : [];
+        const userProfile = stateRoot.userProfile && typeof stateRoot.userProfile === 'object' ? stateRoot.userProfile : {};
+        const resolvedPersonaId = contact && contact.userPersonaId
+            ? contact.userPersonaId
+            : stateRoot.currentUserPersonaId;
+        let matchedPersona = null;
+
+        if (resolvedPersonaId !== null && resolvedPersonaId !== undefined && resolvedPersonaId !== '') {
+            matchedPersona = personas.find((item) => String(item && item.id) === String(resolvedPersonaId)) || null;
+        }
+
+        return {
+            name: String((matchedPersona && matchedPersona.name) || userProfile.name || '用户').trim() || '用户',
+            prompt: clampPlannerText(
+                (contact && contact.userPersonaPromptOverride) || (matchedPersona && matchedPersona.aiPrompt) || '',
+                1800
+            )
+        };
+    }
+
+    function normalizePlannerLocationText(location) {
+        if (!location) return '';
+        if (typeof location === 'string') return String(location).trim();
+        const formattedAddress = String(location.formattedAddress || '').trim();
+        if (formattedAddress) return formattedAddress;
+        return [
+            location.country,
+            location.province,
+            location.city,
+            location.district,
+            location.detail,
+            location.query
+        ]
+            .map((part) => String(part || '').trim())
+            .filter(Boolean)
+            .filter((part, index, list) => list.indexOf(part) === index)
+            .join(' ');
+    }
+
+    function formatPlannerVenueDistance(distanceMeters) {
+        const value = Number(distanceMeters);
+        if (!Number.isFinite(value) || value <= 0) return '';
+        if (value >= 1000) {
+            const km = value / 1000;
+            return km >= 10 ? `${km.toFixed(0)}km` : `${km.toFixed(1)}km`;
+        }
+        return `${Math.round(value)}m`;
+    }
+
+    async function fetchPlannerAmapJson(path, params = {}) {
+        const settings = window.iphoneSimState && window.iphoneSimState.amapSettings;
+        const webKey = String((settings && (settings.webKey || settings.key)) || '').trim();
+        if (!webKey) {
+            throw new Error('AMap Web 服务 Key 未配置');
+        }
+
+        const url = new URL(`https://restapi.amap.com${path}`);
+        url.searchParams.set('key', webKey);
+        url.searchParams.set('output', 'json');
+        Object.keys(params).forEach((key) => {
+            const value = params[key];
+            if (value !== undefined && value !== null && value !== '') {
+                url.searchParams.set(key, String(value));
+            }
+        });
+
+        const response = await fetch(url.toString(), { method: 'GET' });
+        const rawText = await response.text().catch(() => '');
+        if (!response.ok) {
+            throw new Error(`AMap HTTP ${response.status}`);
+        }
+
+        let data = null;
+        try {
+            data = rawText ? JSON.parse(rawText) : {};
+        } catch (error) {
+            throw new Error('AMap 返回非 JSON');
+        }
+
+        if (String(data.status || '') !== '1') {
+            throw new Error(String(data.info || 'AMap 调用失败'));
+        }
+
+        return data;
+    }
+
+    async function searchPlannerAmapNearbyVenues(contactLocation, options = {}) {
+        if (!contactLocation) return [];
+        const lng = Number(contactLocation.lng);
+        const lat = Number(contactLocation.lat);
+        if (!Number.isFinite(lng) || !Number.isFinite(lat)) return [];
+
+        const keywordList = Array.isArray(options.keywords) ? options.keywords : [];
+        const keywords = [
+            ...keywordList,
+            String(options.keyword || '').trim(),
+            String(options.fallbackKeyword || '').trim()
+        ].map((item) => String(item || '').trim()).filter(Boolean);
+        const uniqueKeywords = keywords.filter((item, index, list) => list.indexOf(item) === index);
+        const radius = Math.max(1000, Math.min(8000, Number(options.radius) || 4000));
+        const limit = Math.max(2, Math.min(6, Number(options.limit) || 4));
+        const typeValue = String(options.types || '').trim();
+        const cacheKey = [
+            lng.toFixed(4),
+            lat.toFixed(4),
+            uniqueKeywords.join(','),
+            typeValue,
+            radius,
+            limit
+        ].join('|');
+        const cached = plannerAmapVenueSearchCache.get(cacheKey);
+        if (cached && Date.now() - cached.updateTime < PLANNER_AMAP_VENUE_CACHE_TTL) {
+            return Array.isArray(cached.items) ? cached.items : [];
+        }
+
+        const requestBase = {
+            location: `${lng},${lat}`,
+            radius,
+            sortrule: 'distance',
+            offset: limit,
+            page: 1,
+            extensions: 'all'
+        };
+        if (typeValue) {
+            requestBase.types = typeValue;
+        }
+
+        let pois = [];
+        for (let i = 0; i < uniqueKeywords.length; i += 1) {
+            const keyword = uniqueKeywords[i];
+            const data = await fetchPlannerAmapJson('/v3/place/around', {
+                ...requestBase,
+                keywords: keyword
+            }).catch(() => null);
+            pois = data && Array.isArray(data.pois) ? data.pois : [];
+            if (pois.length) break;
+        }
+
+        const items = pois
+            .map((poi) => {
+                const bizExt = poi && poi.biz_ext && typeof poi.biz_ext === 'object' ? poi.biz_ext : {};
+                const distanceMeters = Number(poi && poi.distance);
+                const businessArea = String((poi && (poi.business_area || poi.businessArea)) || '').trim();
+                const address = [
+                    businessArea,
+                    poi && poi.address
+                ].map((part) => String(part || '').trim()).filter(Boolean).join(' ');
+
+                return {
+                    id: String((poi && poi.id) || '').trim(),
+                    name: String((poi && poi.name) || '').trim(),
+                    typeLabel: String(options.label || '').trim(),
+                    distanceMeters: Number.isFinite(distanceMeters) ? distanceMeters : null,
+                    distanceText: formatPlannerVenueDistance(distanceMeters),
+                    rating: String(bizExt.rating || '').trim(),
+                    cost: String(bizExt.cost || '').trim() ? `¥${String(bizExt.cost || '').trim()}` : '',
+                    businessArea,
+                    shortAddress: String(address || '').trim().length > 30 ? `${String(address || '').trim().slice(0, 30)}…` : String(address || '').trim()
+                };
+            })
+            .filter((item) => item.name)
+            .slice(0, limit);
+
+        plannerAmapVenueSearchCache.set(cacheKey, {
+            updateTime: Date.now(),
+            items
+        });
+
+        return items;
+    }
+
+    function formatPlannerVenueCandidateLines(items, emptyText = '暂无稳定结果') {
+        if (!Array.isArray(items) || !items.length) {
+            return [`- ${emptyText}`];
+        }
+
+        return items.flatMap((item, index) => {
+            const meta = [];
+            if (item.distanceText) meta.push(`距离约 ${item.distanceText}`);
+            if (item.rating) meta.push(`评分 ${item.rating}`);
+            if (item.cost) meta.push(`人均 ${item.cost}`);
+            if (item.typeLabel) meta.push(item.typeLabel);
+            if (item.businessArea) meta.push(item.businessArea);
+            const lines = [`${index + 1}. ${item.name}${meta.length ? `｜${meta.join('｜')}` : ''}`];
+            if (item.shortAddress) lines.push(`   位置：${item.shortAddress}`);
+            return lines;
+        });
+    }
+
+    async function buildPlannerAmapVenueContext(contact) {
+        const settings = window.iphoneSimState && window.iphoneSimState.amapSettings;
+        const hasAmapKey = !!String((settings && (settings.webKey || settings.key)) || '').trim();
+        if (!hasAmapKey || !contact || typeof window.getAmapContactLocation !== 'function') return '';
+
+        const contactLocation = await window.getAmapContactLocation(contact.id).catch(() => null);
+        if (!contactLocation || !Number.isFinite(Number(contactLocation.lng)) || !Number.isFinite(Number(contactLocation.lat))) {
+            return '';
+        }
+
+        const locationLabel = normalizePlannerLocationText(contactLocation) || normalizePlannerLocationText(contact.location) || '未知位置';
+        const [foodItems, cinemaItems] = await Promise.all([
+            searchPlannerAmapNearbyVenues(contactLocation, {
+                keyword: '美食',
+                fallbackKeyword: '餐厅',
+                types: '050000',
+                radius: 4000,
+                limit: 4,
+                label: '餐饮'
+            }).catch(() => []),
+            searchPlannerAmapNearbyVenues(contactLocation, {
+                keyword: '电影院',
+                fallbackKeyword: '影城',
+                radius: 8000,
+                limit: 3,
+                label: '影院'
+            }).catch(() => [])
+        ]);
+
+        return [
+            '【高德附近真实候选】',
+            `- 联系人所在地：${locationLabel}`,
+            '- 如果计划里出现出门、吃饭、看电影等内容，请优先使用下面的真实地点候选，不要写成“随便吃点”“出去看看”“看个电影”这种笼统表达。',
+            '- 餐饮候选：',
+            ...formatPlannerVenueCandidateLines(foodItems),
+            '- 看电影候选：',
+            ...formatPlannerVenueCandidateLines(cinemaItems, '暂无稳定结果'),
+            '- 具体化要求：出门要写去哪里，吃饭要写具体吃什么或去哪家店，看电影要写影院名和具体片名，不能只给抽象动作。'
+        ].join('\n');
+    }
+
     function buildPlannerPromptContext(contact) {
         const contactLabel = String(contact && (contact.remark || contact.name) || '联系人').trim() || '联系人';
         const persona = String(contact && contact.persona ? contact.persona : '无').trim() || '无';
+        const userPersona = getPlannerResolvedUserPersonaContext(contact);
+        const locationText = normalizePlannerLocationText(contact && (contact.locationResolved || contact.location));
         const worldbookContext = getPlannerWorldbookContext(contact);
         const memoryContext = getPlannerMemoryContext(contact);
-        const chatContext = getPlannerRecentChatContext(contact);
+        const chatContext = getPlannerRecentChatContext(contact, userPersona);
 
         return [
             `【联系人信息】`,
             `- 姓名：${contactLabel}`,
             `- 人设：${persona}`,
+            locationText ? `- 地点：${locationText}` : '',
+            `【用户人设】`,
+            `- 用户名：${userPersona.name || '用户'}`,
+            `- 人设：${userPersona.prompt || '无'}`,
             worldbookContext ? `\n【关联世界书】\n${worldbookContext}` : '',
             memoryContext ? `\n【记忆内容】\n${memoryContext}` : '',
             chatContext ? `\n【最近聊天上下文】\n${chatContext}` : ''
@@ -993,11 +1234,12 @@
         return text;
     }
 
-    function buildPlannerMessageContextFromHistory(messages, contactLabel) {
+    function buildPlannerMessageContextFromHistory(messages, contactLabel, userPersona = null) {
         if (!Array.isArray(messages) || !messages.length) return '';
+        const userLabel = String(userPersona && userPersona.name ? userPersona.name : '用户').trim() || '用户';
         return messages
             .map((message, index) => {
-                const role = message && message.role === 'user' ? '用户' : contactLabel;
+                const role = message && message.role === 'user' ? userLabel : contactLabel;
                 const content = clampPlannerText(message && message.content ? message.content : '', 180);
                 return content ? `${index + 1}. ${role}：${content}` : '';
             })
@@ -1049,12 +1291,28 @@
         }
 
         if (plan.daily && typeof plan.daily === 'object') {
+            const dailySummary = String(plan.daily.summary || '').trim();
+            const dailyChips = normalizeStringList(plan.daily.chips, []);
             const dailyEntries = Array.isArray(plan.daily.entries) ? plan.daily.entries.slice().sort((a, b) => getPlannerTimeMinutes(a.time) - getPlannerTimeMinutes(b.time)) : [];
             const visibleEntries = dailyEntries.filter((entry) => getPlannerTimeMinutes(entry && entry.time) <= currentMinutes);
             const futureEntries = dailyEntries.filter((entry) => getPlannerTimeMinutes(entry && entry.time) > currentMinutes);
             lines.push(`【今日行程】截至 ${formatPlannerClockTime(now)}`);
-            lines.push(`- 已发生：${visibleEntries.length ? visibleEntries.map((entry) => `${entry.time} ${clampPlannerText(entry.title || '事项', 24)}`).join('；') : '无'}`);
-            lines.push(`- 后续待调整：${futureEntries.length ? futureEntries.map((entry) => `${entry.time} ${clampPlannerText(entry.title || '事项', 24)}`).join('；') : '无'}`);
+            if (dailySummary) {
+                lines.push(`- 概要：${clampPlannerText(dailySummary, 140)}`);
+            }
+            if (dailyChips.length) {
+                lines.push(`- 标签：${dailyChips.slice(0, 4).map((chip) => clampPlannerText(chip, 24)).join('、')}`);
+            }
+            lines.push(`- 已发生：${visibleEntries.length ? visibleEntries.map((entry) => {
+                const title = clampPlannerText(entry.title || '事项', 24);
+                const desc = clampPlannerText(entry.desc || entry.note || entry.description || '', 48);
+                return desc ? `${entry.time} ${title}｜${desc}` : `${entry.time} ${title}`;
+            }).join('；') : '无'}`);
+            lines.push(`- 后续待调整：${futureEntries.length ? futureEntries.map((entry) => {
+                const title = clampPlannerText(entry.title || '事项', 24);
+                const desc = clampPlannerText(entry.desc || entry.note || entry.description || '', 48);
+                return desc ? `${entry.time} ${title}｜${desc}` : `${entry.time} ${title}`;
+            }).join('；') : '无'}`);
         }
 
         return lines.join('\n');
@@ -1075,6 +1333,7 @@
         const contact = getPlannerTargetContact();
         const contactLabel = String(contact && (contact.remark || contact.name) || '当前联系人').trim() || '当前联系人';
         const contactContext = buildPlannerPromptContext(contact);
+        const amapVenueContext = await buildPlannerAmapVenueContext(contact);
         const dateContext = getPlannerDateContext();
         const now = new Date();
         const currentMonthLabel = `${dateContext.monthNameEn} ${dateContext.year}`;
@@ -1086,7 +1345,7 @@
         const messages = [
             {
                 role: 'system',
-                content: '你是一个中文日程规划助手。你会根据联系人设定、世界书、记忆和最近聊天上下文，为位置页一次性生成月计划、周计划和整天行程。三者必须共享同一主题和节奏，不能像彼此无关的三块内容。请把联系人写成一个真实生活中的人，计划里要体现社交、出行、吃饭、休息、临时变动和日常琐事，不要像模板化排班。请只输出严格 JSON，不要输出 Markdown、解释、代码块或额外文本。'
+                content: '你是一个中文日程规划助手。你会根据联系人设定、用户人设、世界书、记忆和最近聊天上下文，为位置页一次性生成月计划、周计划和整天行程。三者必须共享同一主题和节奏，不能像彼此无关的三块内容。请把联系人写成一个真实生活中的人，计划里要体现社交、出行、吃饭、休息、临时变动和日常琐事，不要像模板化排班。请只输出严格 JSON，不要输出 Markdown、解释、代码块或额外文本。'
             },
             {
                 role: 'user',
@@ -1099,6 +1358,8 @@
                     `当前生成时刻：${currentTimeLabel}。`,
                     '',
                     contactContext ? `上下文：\n${contactContext}` : '上下文：无',
+                    '',
+                    amapVenueContext ? `高德真实候选：\n${amapVenueContext}` : '高德真实候选：无',
                     '',
                     `活人感要求：\n${humanLifeGuidance}`,
                     '',
@@ -1205,7 +1466,9 @@
             : (apiUrl.endsWith('/') ? `${apiUrl}chat/completions` : `${apiUrl}/chat/completions`);
         const contact = getPlannerTargetContact();
         const contactLabel = String(contact && (contact.remark || contact.name) || '当前联系人').trim() || '当前联系人';
+        const userPersona = getPlannerResolvedUserPersonaContext(contact);
         const contactContext = buildPlannerPromptContext(contact);
+        const amapVenueContext = await buildPlannerAmapVenueContext(contact);
         const dateContext = getPlannerDateContext();
         const now = options.now instanceof Date && !Number.isNaN(options.now.getTime()) ? new Date(options.now) : new Date();
         const currentMonthLabel = `${dateContext.monthNameEn} ${dateContext.year}`;
@@ -1213,13 +1476,13 @@
         const currentDateLabel = formatPlannerDateKey(now);
         const currentTimeLabel = formatPlannerClockTime(now);
         const currentPlanSnapshot = buildPlannerPlanSnapshot(options.basePlan || state.generatedPlan, now);
-        const adjustmentContext = buildPlannerMessageContextFromHistory(Array.isArray(options.adjustmentMessages) ? options.adjustmentMessages : [], contactLabel);
+        const adjustmentContext = buildPlannerMessageContextFromHistory(Array.isArray(options.adjustmentMessages) ? options.adjustmentMessages : [], contactLabel, userPersona);
         const humanLifeGuidance = buildPlannerHumanLifeGuidance();
 
         const messages = [
             {
                 role: 'system',
-                content: '你是一个中文日程调整助手。你会根据联系人设定、世界书、记忆、最近聊天和当前计划快照，为位置页调整月计划、周计划和整天行程。请把联系人写成一个真实生活中的人，计划里要体现社交、出门、吃饭、路上、休息、临时改期和真实的生活节奏，不要像模板化排班。请只输出严格 JSON，不要输出 Markdown、解释、代码块或额外文本。'
+                content: '你是一个中文日程调整助手。你会根据联系人设定、用户人设、世界书、记忆、最近聊天和当前计划快照，为位置页调整月计划、周计划和整天行程。请把联系人写成一个真实生活中的人，计划里要体现社交、出门、吃饭、路上、休息、临时改期和真实的生活节奏，不要像模板化排班。请只输出严格 JSON，不要输出 Markdown、解释、代码块或额外文本。'
             },
             {
                 role: 'user',
@@ -1232,6 +1495,8 @@
                     `当前调整时刻：${currentTimeLabel}。`,
                     '',
                     contactContext ? `上下文：\n${contactContext}` : '上下文：无',
+                    '',
+                    amapVenueContext ? `高德真实候选：\n${amapVenueContext}` : '高德真实候选：无',
                     '',
                     `活人感要求：\n${humanLifeGuidance}`,
                     '',
@@ -1621,21 +1886,36 @@
                 position: fixed;
                 inset: 0;
                 z-index: 180;
-                display: none;
+                display: flex;
                 align-items: center;
                 justify-content: center;
                 padding: 18px;
-                background: rgba(255, 255, 255, 0.36);
-                backdrop-filter: blur(12px);
-                -webkit-backdrop-filter: blur(12px);
+                background: transparent;
+                opacity: 0;
+                pointer-events: none;
+                transition: opacity 0.22s ease;
+                will-change: opacity;
+                transform: translateZ(0);
+                isolation: isolate;
+                contain: paint;
             }
             .day-preview-overlay.active {
-                display: flex;
-                animation: fadeIn 0.2s forwards;
+                opacity: 1;
+                pointer-events: auto;
             }
             .day-preview-backdrop {
-                position: absolute;
+                position: fixed;
                 inset: 0;
+                background: rgba(255, 255, 255, 0.36);
+                backdrop-filter: blur(12px) saturate(120%);
+                -webkit-backdrop-filter: blur(12px) saturate(120%);
+                opacity: 0;
+                transition: opacity 0.22s ease;
+                will-change: opacity, backdrop-filter;
+                transform: translateZ(0);
+            }
+            .day-preview-overlay.active .day-preview-backdrop {
+                opacity: 1;
             }
             .day-preview-card {
                 position: relative;
@@ -1648,17 +1928,16 @@
                 background: rgba(255, 255, 255, 0.98);
                 box-shadow: 0 18px 70px rgba(0, 0, 0, 0.16);
                 padding: 18px;
-                transform: translateY(10px) scale(0.98);
+                transform: translate3d(0, 10px, 0) scale(0.98);
                 opacity: 0;
+                transition: transform 0.24s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.24s cubic-bezier(0.16, 1, 0.3, 1);
+                will-change: transform, opacity;
+                backface-visibility: hidden;
+                -webkit-font-smoothing: antialiased;
             }
             .day-preview-overlay.active .day-preview-card {
-                animation: dayPreviewPop 0.24s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-            }
-            @keyframes dayPreviewPop {
-                to {
-                    transform: translateY(0) scale(1);
-                    opacity: 1;
-                }
+                transform: translate3d(0, 0, 0) scale(1);
+                opacity: 1;
             }
             .day-preview-head {
                 display: flex;
@@ -2677,4 +2956,3 @@
         bootstrap();
     }
 })();
-
