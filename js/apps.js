@@ -2203,6 +2203,17 @@ function resolveNaturalSummaryMode(options = {}) {
     return 'auto';
 }
 
+function resolveNaturalSummaryStyle(options = {}) {
+    if (options && options.useChatSummaryFlow === true) {
+        return 'chat';
+    }
+    const explicitStyle = String(options && options.summaryStyle || '').trim().toLowerCase();
+    if (explicitStyle === 'chat') {
+        return 'chat';
+    }
+    return 'native';
+}
+
 function getNaturalSummaryLengthRange(messageCount, mode = 'auto') {
     const config = NATURAL_SUMMARY_LENGTH_POLICY[mode === 'manual' ? 'manual' : 'auto'];
     const rawCount = Number(messageCount);
@@ -8848,27 +8859,31 @@ async function generateChannelNaturalSummary(contact, textMessages, options = {}
     const resolvedUserName = actorNames.userLabel;
     const contactLabel = actorNames.contactLabel;
     const mode = resolveNaturalSummaryMode(options);
-    const channel = ['chat', 'meeting', 'call', 'live_link'].includes(String(options.channel || '').trim())
+    const requestedChannel = ['chat', 'meeting', 'call', 'live_link'].includes(String(options.channel || '').trim())
         ? String(options.channel || '').trim()
         : 'chat';
+    const summaryStyle = resolveNaturalSummaryStyle(options);
+    const summaryChannel = summaryStyle === 'chat' ? 'chat' : requestedChannel;
     const totalMessageCount = Number.isFinite(Number(options.totalMessageCount))
         ? Number(options.totalMessageCount)
         : normalizedMessages.length;
     const sourceMessageCount = Number.isFinite(Number(options.sourceMessageCount))
         ? Number(options.sourceMessageCount)
         : sourceMessages.length;
-    const lengthRange = getChannelNaturalSummaryLengthRange(totalMessageCount, channel, mode, options.rangeOverride || null);
+    const lengthRange = getChannelNaturalSummaryLengthRange(totalMessageCount, summaryChannel, mode, options.rangeOverride || null);
     const sourceTag = String(options.source || 'auto_summary').trim() || 'auto_summary';
 
     console.log('[summary-natural-start]', {
         mode,
+        summaryStyle,
+        sourceChannel: requestedChannel,
         sourceCount: sourceMessageCount,
         textCount: normalizedMessages.length,
         target: lengthRange.target,
         min: lengthRange.min,
         max: lengthRange.max,
         source: sourceTag,
-        channel
+        channel: summaryChannel
     });
 
     const settings = options.settings && options.settings.url && options.settings.key
@@ -8882,7 +8897,9 @@ async function generateChannelNaturalSummary(contact, textMessages, options = {}
     const dateStr = `${now.getFullYear()}年${now.getMonth() + 1}月${now.getDate()}日`;
     const timeStr = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
     const runtimeContext = {
-        channel,
+        channel: summaryChannel,
+        sourceChannel: requestedChannel,
+        summaryStyle,
         mode,
         rangeLabel: String(options.rangeLabel || '').trim(),
         totalMessageCount,
@@ -8892,7 +8909,7 @@ async function generateChannelNaturalSummary(contact, textMessages, options = {}
         userLabel: resolvedUserName,
         contactLabel,
         persona: String(contact.persona || '傲娇、温柔').trim(),
-        detailModeHint: getNaturalSummaryDetailHintByChannel(channel, options.detailModeHint),
+        detailModeHint: getNaturalSummaryDetailHintByChannel(summaryChannel, options.detailModeHint),
         range: lengthRange
     };
 
@@ -8932,11 +8949,12 @@ async function generateChannelNaturalSummary(contact, textMessages, options = {}
 
     console.log('[summary-natural-first-pass]', {
         mode,
+        summaryStyle,
         outputChars: countSummaryChars(summary),
         target: lengthRange.target,
         min: lengthRange.min,
         max: lengthRange.max,
-        channel
+        channel: summaryChannel
     });
 
     if (!summary) {
@@ -8945,9 +8963,10 @@ async function generateChannelNaturalSummary(contact, textMessages, options = {}
 
     console.log('[summary-natural-final]', {
         mode,
+        summaryStyle,
         outputChars: countSummaryChars(summary),
         finalStage: 'first_pass',
-        channel
+        channel: summaryChannel
     });
 
     return {
@@ -8972,6 +8991,7 @@ async function generateSummary(contact, messages, range, options = {}) {
     try {
         const result = await generateChannelNaturalSummary(contact, textMessages, {
             channel: 'chat',
+            summaryStyle: 'chat',
             source: options.source || 'auto_summary',
             rangeLabel: String(range || ''),
             summaryPromptMode: options.summaryPromptMode,
