@@ -1014,12 +1014,23 @@ window.refreshAiImage = async function(msgId, event) {
             imageLength: String(base64Image || '').length
         });
 
-        // 更新消息
-        msg.type = 'image';
-        msg.content = base64Image;
-        
-        saveConfig();
-        refreshChatImageResultViews(contactId, msg.channel || 'wechat');
+        const applied = await applyGeneratedImageToPlaceholderMessage(
+            contactId,
+            msg,
+            base64Image,
+            msg.novelaiPrompt,
+            msg.novelaiNegativePrompt,
+            msg.channel || 'wechat'
+        );
+
+        if (!applied) {
+            // 兜底：如果没有命中占位消息，也直接更新当前消息内容
+            msg.type = 'image';
+            msg.content = base64Image;
+            delete msg._hiddenBySanitizer;
+            saveConfig();
+            refreshChatImageResultViews(contactId, msg.channel || 'wechat', msg.id || null, base64Image);
+        }
 
     } catch (e) {
         console.error("Regeneration failed", e);
@@ -2343,17 +2354,32 @@ function appendMessageToUI(text, isUser, type = 'text', description = null, repl
         `;
     } else if (type === 'virtual_image') {
         const imgId = `virtual-img-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+        const overlayId = `overlay-${imgId}`;
         const descText = description || '无描述';
         const cleanDesc = descText.replace(/^\[图片描述\][:：]?\s*/, '');
         
         contentHtml = `
-            <div class="virtual-image-container" style="position: relative; cursor: zoom-in; display: flex; justify-content: center; align-items: center;">
-                <img id="${imgId}" src="${text}" alt="${cleanDesc || '图片'}" loading="lazy" decoding="async" style="max-width: 200px; border-radius: 4px; display: block; width: auto; height: auto; cursor: zoom-in;" onclick="showImagePreview(this)">
-                <div class="virtual-image-overlay" style="position: absolute; left: 0; right: 0; bottom: 0; background: linear-gradient(to top, rgba(0, 0, 0, 0.72), transparent); border-radius: 4px; padding: 18px 10px 6px; box-sizing: border-box; pointer-events: none;">
-                    <div style="font-size: 13px; color: #fff; line-height: 1.4; overflow-y: auto; max-height: 100%; text-align: left; white-space: pre-wrap;">${cleanDesc}</div>
+            <div class="virtual-image-container" style="position: relative; cursor: pointer; display: flex; justify-content: center; align-items: center;">
+                <img id="${imgId}" src="${text}" loading="lazy" decoding="async" style="max-width: 200px; border-radius: 4px; display: block; width: auto; height: auto; cursor: pointer;">
+                <div id="${overlayId}" class="virtual-image-overlay" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(255, 255, 255, 0.8); border-radius: 4px; display: flex; align-items: center; justify-content: center; padding: 10px; box-sizing: border-box; opacity: 0; transition: opacity 0.3s; pointer-events: none;">
+                    <div style="font-size: 14px; color: #333; line-height: 1.4; overflow-y: auto; max-height: 100%; text-align: center; white-space: pre-wrap;">${cleanDesc}</div>
                 </div>
             </div>
         `;
+
+        setTimeout(() => {
+            const imgEl = document.getElementById(imgId);
+            const container = imgEl ? imgEl.parentElement : null;
+            const overlay = document.getElementById(overlayId);
+
+            if (container && overlay) {
+                container.onclick = () => {
+                    const isVisible = overlay.style.opacity === '1';
+                    overlay.style.opacity = isVisible ? '0' : '1';
+                    overlay.style.pointerEvents = isVisible ? 'none' : 'auto';
+                };
+            }
+        }, 0);
     } else if (type === 'description') {
         contentHtml = text;
     } else {
