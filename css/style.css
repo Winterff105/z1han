@@ -8419,6 +8419,35 @@ body.image-preview-open {
     touch-action: none;
 }
 
+/* Prevent iOS long-press text selection on the home screens and dock */
+#pages-container .home-screen-page,
+#pages-container .home-screen-page *,
+#phone-pages-container .home-screen-page,
+#phone-pages-container .home-screen-page *,
+.dock-bar,
+.dock-bar *,
+#phone-dock-bar,
+#phone-dock-bar * {
+    -webkit-user-select: none !important;
+    user-select: none !important;
+    -webkit-touch-callout: none !important;
+}
+
+#pages-container .home-screen-page input,
+#pages-container .home-screen-page textarea,
+#pages-container .home-screen-page select,
+#pages-container .home-screen-page [contenteditable="true"],
+#pages-container .home-screen-page [contenteditable="plaintext-only"],
+#phone-pages-container .home-screen-page input,
+#phone-pages-container .home-screen-page textarea,
+#phone-pages-container .home-screen-page select,
+#phone-pages-container .home-screen-page [contenteditable="true"],
+#phone-pages-container .home-screen-page [contenteditable="plaintext-only"] {
+    -webkit-user-select: text !important;
+    user-select: text !important;
+    -webkit-touch-callout: default !important;
+}
+
 
 
 
