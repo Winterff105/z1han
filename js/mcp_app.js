@@ -31,6 +31,34 @@
         }[ch]));
     }
 
+    function parseKeywordList(value) {
+        return String(value || '')
+            .split(/[,，;；\n]+/)
+            .map((item) => item.trim().toLowerCase())
+            .filter(Boolean);
+    }
+
+    function serverMatchesKeywords(server, userText) {
+        const keywords = parseKeywordList(server && server.keywords);
+        if (!keywords.length) return true;
+        const text = String(userText || '').toLowerCase();
+        if (!text) return false;
+        return keywords.some((keyword) => text.includes(keyword));
+    }
+
+    function scrollFormIntoView() {
+        const nameInput = $('mcp-server-name');
+        if (!nameInput) return;
+        if (typeof nameInput.scrollIntoView === 'function') {
+            nameInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+        try {
+            nameInput.focus({ preventScroll: true });
+        } catch (error) {
+            nameInput.focus();
+        }
+    }
+
     function normalizeBoundContactIds(value) {
         if (!Array.isArray(value)) return [];
         const seen = new Set();
@@ -70,6 +98,7 @@
             args: String(raw && raw.args || '').trim(),
             token: String(raw && raw.token || '').trim(),
             notes: String(raw && raw.notes || '').trim(),
+            keywords: String(raw && raw.keywords || '').trim(),
             enabled: raw && raw.enabled === true,
             boundContactIds: normalizeBoundContactIds(raw && raw.boundContactIds),
             tools: Array.isArray(raw && raw.tools) ? raw.tools.map(normalizeTool) : [],
@@ -109,7 +138,9 @@
         const logs = Array.isArray(next.logs) ? next.logs.slice(0, MAX_LOGS).map(normalizeLog) : [];
         const presets = Array.isArray(next.presets) ? next.presets.map(normalizePreset) : [];
         let activeServerId = String(next.activeServerId || '').trim();
-        if (servers.length > 0 && !servers.some((server) => server.id === activeServerId)) {
+        // Only repair a non-empty-but-missing id; keep an intentionally empty id
+        // (empty = "new draft" mode) so it isn't forced back to the first server.
+        if (activeServerId && servers.length > 0 && !servers.some((server) => server.id === activeServerId)) {
             activeServerId = servers[0].id;
         }
         return {
@@ -322,6 +353,7 @@
             args: String($('mcp-server-args') && $('mcp-server-args').value || '').trim(),
             token: String($('mcp-server-token') && $('mcp-server-token').value || '').trim(),
             notes: String($('mcp-server-notes') && $('mcp-server-notes').value || '').trim(),
+            keywords: String($('mcp-server-keywords') && $('mcp-server-keywords').value || '').trim(),
             enabled: !!($('mcp-server-enabled') && $('mcp-server-enabled').checked)
         };
     }
@@ -334,6 +366,7 @@
         $('mcp-server-args').value = server && server.args || '';
         $('mcp-server-token').value = server && server.token || '';
         $('mcp-server-notes').value = server && server.notes || '';
+        if ($('mcp-server-keywords')) $('mcp-server-keywords').value = server && server.keywords || '';
         $('mcp-server-enabled').checked = !!(server && server.enabled);
         updateTransportVisibility();
         renderPreview();
@@ -386,6 +419,7 @@
             const isActive = !!(activeServer && activeServer.id === server.id);
             const toolCount = Array.isArray(server.tools) ? server.tools.length : 0;
             const bindCount = Array.isArray(server.boundContactIds) ? server.boundContactIds.length : 0;
+            const keywords = String(server.keywords || '').trim();
             const healthText = server.lastToolSyncError
                 ? `tools 刷新失败`
                 : (toolCount > 0 ? `${toolCount} 个 tools` : 'tools 未同步');
@@ -393,23 +427,22 @@
                 <article class="mcp-server-item ${isActive ? 'active' : ''}" data-server-id="${escapeHtml(server.id)}">
                     <div class="mcp-server-item-head">
                         <div>
-                            <div class="mcp-server-name">${escapeHtml(server.name)}</div>
+                            <div class="mcp-server-name">${escapeHtml(server.name)}${isActive ? ' <span class="mcp-server-editing">编辑中</span>' : ''}</div>
                             <div class="mcp-server-meta">${escapeHtml(transportLabel(server.transport))} · ${escapeHtml(describeServer(server))}</div>
                         </div>
-                        <div class="mcp-server-chip-group">
-                            <span class="mcp-server-chip ${server.enabled ? 'is-enabled' : ''}">${server.enabled ? '已启用' : '已停用'}</span>
-                            ${isActive ? '<span class="mcp-server-chip">当前</span>' : ''}
-                        </div>
+                        <label class="mcp-switch" title="${server.enabled ? '已启用，点击停用' : '已停用，点击启用'}">
+                            <input type="checkbox" data-action="toggle-enable" ${server.enabled ? 'checked' : ''}>
+                            <span class="mcp-switch-track"></span>
+                        </label>
                     </div>
-                    <div class="mcp-server-notes">${escapeHtml(server.notes || getBrowserSupportText(server))}</div>
                     <div class="mcp-server-extra">
+                        <span>${server.enabled ? '已启用' : '已停用'}</span>
                         <span>联系人 ${escapeHtml(String(bindCount))}</span>
                         <span>${escapeHtml(healthText)}</span>
-                        <span>${escapeHtml(getBrowserSupportText(server))}</span>
+                        <span>关键词：${keywords ? escapeHtml(keywords) : '未设置'}</span>
                     </div>
                     <div class="mcp-server-actions">
-                        <button type="button" class="mcp-mini-btn" data-action="load">加载</button>
-                        <button type="button" class="mcp-mini-btn primary" data-action="toggle-enable">${server.enabled ? '关闭' : '启用'}</button>
+                        <button type="button" class="mcp-mini-btn primary" data-action="edit">编辑</button>
                         <button type="button" class="mcp-mini-btn" data-action="refresh-tools">刷新 tools</button>
                         <button type="button" class="mcp-mini-btn danger" data-action="delete">删除</button>
                     </div>
@@ -500,7 +533,8 @@
             toolNames: activeServer && Array.isArray(activeServer.tools)
                 ? activeServer.tools.map((tool) => tool.name)
                 : [],
-            notes: form.notes
+            notes: form.notes,
+            keywords: form.keywords
         };
         preview.textContent = JSON.stringify(payload, null, 2);
     }
@@ -564,7 +598,6 @@
     }
 
     function upsertServerFromForm(options = {}) {
-        const appState = getAppState();
         const form = readForm();
         if (!form.name) {
             pushLog('请先填写节点名称', 'warn');
@@ -579,7 +612,7 @@
             return null;
         }
 
-        const currentId = String(appState.activeServerId || '').trim();
+        const currentId = String(getAppState().activeServerId || '').trim();
         const existing = currentId ? getServerById(currentId) : null;
         const nextId = existing ? existing.id : createId();
         const payload = normalizeServer({
@@ -597,6 +630,7 @@
             updatedAt: Date.now()
         });
 
+        const appState = getAppState();
         const index = appState.servers.findIndex((server) => server.id === payload.id);
         if (index >= 0) {
             appState.servers[index] = payload;
@@ -1044,7 +1078,9 @@
 
     async function prepareChatTooling(contactId, options = {}) {
         const autoDiscover = options && options.autoDiscover !== false;
-        const servers = getBoundEnabledServers(contactId);
+        const userText = options && options.userText;
+        const servers = getBoundEnabledServers(contactId)
+            .filter((server) => serverMatchesKeywords(server, userText));
         const tools = [];
         const toolIndex = Object.create(null);
         const usedNames = new Set();
@@ -1136,8 +1172,11 @@
         }
     }
 
-    function getToolSummariesForContact(contactId) {
-        return getBoundEnabledServers(contactId).map((server) => ({
+    function getToolSummariesForContact(contactId, options = {}) {
+        const userText = options && options.userText;
+        return getBoundEnabledServers(contactId)
+            .filter((server) => serverMatchesKeywords(server, userText))
+            .map((server) => ({
             serverId: server.id,
             serverName: server.name,
             tools: Array.isArray(server.tools) ? server.tools.map((tool) => ({
@@ -1200,6 +1239,7 @@
             args,
             token,
             notes: String(raw.notes || raw.description || '').trim(),
+            keywords: String(raw.keywords || raw.triggers || '').trim(),
             enabled: raw.enabled === true
         };
     }
@@ -1297,7 +1337,6 @@
         persistState();
         input.value = '';
         selectServer(appState.activeServerId);
-        renderPresets();
         pushLog(`已从 JSON 导入 ${drafts.length} 个节点（新增 ${created}，更新 ${updated}）`, 'good');
         setStatus('good', '导入完成', `新增 ${created} 个、更新 ${updated} 个节点。`);
     }
@@ -1318,6 +1357,7 @@
                 if (server.token) entry.headers = { Authorization: `Bearer ${server.token}` };
             }
             if (server.notes) entry.notes = server.notes;
+            if (server.keywords) entry.keywords = server.keywords;
             mcpServers[key] = entry;
         });
         return JSON.stringify({ mcpServers }, null, 2);
@@ -1349,118 +1389,6 @@
         setStatus('good', copied ? '已复制' : '已生成', copied ? '配置 JSON 已复制到剪贴板。' : '已填入文本框，可手动复制。');
     }
 
-    function handleSavePreset() {
-        const nameInput = $('mcp-preset-name');
-        let name = nameInput ? String(nameInput.value || '').trim() : '';
-        if (!name) {
-            name = String(window.prompt('请输入预设名称：') || '').trim();
-        }
-        if (!name) {
-            pushLog('请先填写预设名称', 'warn');
-            return;
-        }
-
-        const appState = getAppState();
-        if (!appState.servers.length) {
-            pushLog('当前没有可保存的节点', 'warn');
-            return;
-        }
-
-        const preset = normalizePreset({
-            name,
-            createdAt: Date.now(),
-            servers: appState.servers.map((server) => JSON.parse(JSON.stringify(server)))
-        });
-
-        const existingIndex = appState.presets.findIndex((item) => item.name === name);
-        if (existingIndex >= 0) {
-            preset.id = appState.presets[existingIndex].id;
-            appState.presets[existingIndex] = preset;
-        } else {
-            appState.presets.unshift(preset);
-        }
-
-        if (nameInput) nameInput.value = '';
-        persistState();
-        renderPresets();
-        pushLog(`已保存预设「${name}」（${preset.servers.length} 个节点）`, 'good');
-        setStatus('good', '预设已保存', `「${name}」包含 ${preset.servers.length} 个节点。`);
-    }
-
-    function applyPreset(presetId) {
-        const appState = getAppState();
-        const preset = appState.presets.find((item) => item.id === presetId);
-        if (!preset) return;
-        if (!window.confirm(`应用预设「${preset.name}」将用其中的 ${preset.servers.length} 个节点覆盖当前节点列表，是否继续？`)) {
-            return;
-        }
-
-        appState.servers = preset.servers.map((server) => normalizeServer({ ...server, id: createId() }));
-        appState.activeServerId = appState.servers[0] ? appState.servers[0].id : '';
-        runtime.sessions = Object.create(null);
-        persistState();
-
-        if (appState.activeServerId) {
-            selectServer(appState.activeServerId);
-        } else {
-            handleNewDraft();
-        }
-        renderPresets();
-        pushLog(`已应用预设「${preset.name}」（${preset.servers.length} 个节点）`, 'good');
-    }
-
-    function deletePreset(presetId) {
-        const appState = getAppState();
-        const preset = appState.presets.find((item) => item.id === presetId);
-        if (!preset) return;
-        if (!window.confirm(`确定删除预设「${preset.name}」吗？`)) {
-            return;
-        }
-        appState.presets = appState.presets.filter((item) => item.id !== presetId);
-        persistState();
-        renderPresets();
-        pushLog(`已删除预设「${preset.name}」`, 'warn');
-    }
-
-    async function handleExportPreset(presetId) {
-        const preset = getAppState().presets.find((item) => item.id === presetId);
-        if (!preset) return;
-        const json = buildStandardMcpJson(preset.servers);
-        const copied = await copyTextToClipboard(json);
-        const input = $('mcp-import-input');
-        if (input) input.value = json;
-        pushLog(copied ? `已复制预设「${preset.name}」的 JSON` : `已生成预设「${preset.name}」的 JSON（见文本框）`, 'good');
-    }
-
-    function renderPresets() {
-        const list = $('mcp-preset-list');
-        if (!list) return;
-        const presets = getAppState().presets || [];
-
-        if (!presets.length) {
-            list.innerHTML = '<div class="mcp-empty">还没有保存的预设</div>';
-            return;
-        }
-
-        list.innerHTML = presets.map((preset) => {
-            const serverNames = preset.servers.map((server) => server.name).filter(Boolean).join('、') || '空配置';
-            return `
-                <article class="mcp-preset-item" data-preset-id="${escapeHtml(preset.id)}">
-                    <div class="mcp-preset-item-head">
-                        <div class="mcp-preset-name">${escapeHtml(preset.name)}</div>
-                        <div class="mcp-preset-meta">${escapeHtml(String(preset.servers.length))} 个节点 · ${escapeHtml(formatTime(preset.createdAt))}</div>
-                    </div>
-                    <div class="mcp-preset-servers">${escapeHtml(serverNames)}</div>
-                    <div class="mcp-server-actions">
-                        <button type="button" class="mcp-mini-btn primary" data-preset-action="apply">应用</button>
-                        <button type="button" class="mcp-mini-btn" data-preset-action="export">复制 JSON</button>
-                        <button type="button" class="mcp-mini-btn danger" data-preset-action="delete">删除</button>
-                    </div>
-                </article>
-            `;
-        }).join('');
-    }
-
     function bindEvents() {
         const transport = $('mcp-server-transport');
         if (transport && !transport.dataset.bound) {
@@ -1478,6 +1406,7 @@
             'mcp-server-args',
             'mcp-server-token',
             'mcp-server-notes',
+            'mcp-server-keywords',
             'mcp-server-enabled'
         ].forEach((id) => {
             const input = $(id);
@@ -1550,31 +1479,6 @@
             importClearBtn.dataset.bound = '1';
         }
 
-        const presetSaveBtn = $('mcp-preset-save-btn');
-        if (presetSaveBtn && !presetSaveBtn.dataset.bound) {
-            presetSaveBtn.addEventListener('click', handleSavePreset);
-            presetSaveBtn.dataset.bound = '1';
-        }
-
-        const presetList = $('mcp-preset-list');
-        if (presetList && !presetList.dataset.bound) {
-            presetList.addEventListener('click', (event) => {
-                const card = event.target.closest('[data-preset-id]');
-                if (!card) return;
-                const presetId = String(card.dataset.presetId || '').trim();
-                const actionEl = event.target.closest('[data-preset-action]');
-                const action = actionEl ? actionEl.dataset.presetAction : '';
-                if (action === 'apply') {
-                    applyPreset(presetId);
-                } else if (action === 'delete') {
-                    deletePreset(presetId);
-                } else if (action === 'export') {
-                    void handleExportPreset(presetId);
-                }
-            });
-            presetList.dataset.bound = '1';
-        }
-
         const bindAllBtn = $('mcp-bind-all-btn');
         if (bindAllBtn && !bindAllBtn.dataset.bound) {
             bindAllBtn.addEventListener('click', () => setAllBindings(true));
@@ -1598,15 +1502,41 @@
 
         const list = $('mcp-server-list');
         if (list && !list.dataset.bound) {
-            list.addEventListener('click', async (event) => {
+            list.addEventListener('change', (event) => {
+                const input = event.target.closest('input[data-action="toggle-enable"]');
+                if (!input) return;
                 const card = event.target.closest('[data-server-id]');
                 if (!card) return;
                 const serverId = String(card.dataset.serverId || '').trim();
-                const action = event.target.closest('[data-action]') && event.target.closest('[data-action]').dataset.action || 'load';
+                const server = getServerById(serverId);
+                if (!server) return;
+                const shouldEnable = input.checked;
+                updateServer(serverId, (draft) => ({
+                    ...draft,
+                    enabled: shouldEnable,
+                    lastHealth: shouldEnable ? draft.lastHealth : 'disabled',
+                    updatedAt: Date.now()
+                }));
+                persistState();
+                renderServers();
+                renderPreview();
+                refreshSummary();
+                pushLog(`${shouldEnable ? '已启用' : '已停用'}节点「${server.name}」`, shouldEnable ? 'good' : 'idle');
+            });
+
+            list.addEventListener('click', async (event) => {
+                const actionEl = event.target.closest('[data-action]');
+                if (!actionEl) return;
+                const action = actionEl.dataset.action;
+                if (action === 'toggle-enable') return; // 由 change 事件处理
+                const card = event.target.closest('[data-server-id]');
+                if (!card) return;
+                const serverId = String(card.dataset.serverId || '').trim();
                 const server = getServerById(serverId);
                 if (!server) return;
 
                 if (action === 'delete') {
+                    if (!window.confirm(`确定删除节点「${server.name}」吗？`)) return;
                     const appState = getAppState();
                     appState.servers = appState.servers.filter((item) => item.id !== serverId);
                     if (appState.activeServerId === serverId) {
@@ -1623,31 +1553,20 @@
                     return;
                 }
 
-                selectServer(serverId);
-
-                if (action === 'toggle-enable') {
-                    updateServer(serverId, (draft) => ({
-                        ...draft,
-                        enabled: !draft.enabled,
-                        lastHealth: draft.enabled ? 'disabled' : draft.lastHealth,
-                        updatedAt: Date.now()
-                    }));
-                    persistState();
-                    renderServers();
-                    renderPreview();
-                    refreshSummary();
-                    pushLog(`${server.enabled ? '已停用' : '已启用'}节点「${server.name}」`, server.enabled ? 'idle' : 'good');
+                if (action === 'edit') {
+                    selectServer(serverId);
+                    scrollFormIntoView();
+                    pushLog(`正在编辑「${server.name}」，改完点“保存配置”即可更新`, 'idle');
                     return;
                 }
 
                 if (action === 'refresh-tools') {
+                    selectServer(serverId);
                     try {
                         await discoverServerTools(serverId);
                     } catch (error) {}
                     return;
                 }
-
-                pushLog(`已加载节点「${server.name}」`, 'idle');
             });
             list.dataset.bound = '1';
         }
@@ -1674,7 +1593,6 @@
     function renderMcpApp() {
         migrateLegacyStateIfNeeded();
         bindEvents();
-        renderPresets();
         const active = getActiveServer();
         if (active) {
             applyForm(active);

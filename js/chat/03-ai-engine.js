@@ -6744,17 +6744,31 @@ async function generateAiReply(instruction = null, targetContactId = null, optio
 
         const cleanKey = settings.key ? settings.key.replace(/[^\x00-\x7F]/g, "").trim() : '';
         await normalizeAiRequestMessageImages(messages);
+        let recentUserTextForMcp = '';
+        for (let i = messages.length - 1; i >= 0; i--) {
+            if (messages[i] && messages[i].role === 'user') {
+                const content = messages[i].content;
+                if (typeof content === 'string') {
+                    recentUserTextForMcp = content;
+                } else if (Array.isArray(content)) {
+                    recentUserTextForMcp = content
+                        .map(part => (part && typeof part.text === 'string') ? part.text : '')
+                        .join(' ');
+                }
+                break;
+            }
+        }
         let mcpTooling = { tools: [], toolIndex: {} };
         if (window.MCPBridge && typeof window.MCPBridge.prepareChatTooling === 'function') {
             try {
-                mcpTooling = await window.MCPBridge.prepareChatTooling(contactId, { autoDiscover: true });
+                mcpTooling = await window.MCPBridge.prepareChatTooling(contactId, { autoDiscover: true, userText: recentUserTextForMcp });
             } catch (mcpToolingError) {
                 console.warn('Failed to prepare MCP tooling for chat.', mcpToolingError);
                 mcpTooling = { tools: [], toolIndex: {} };
             }
         }
         const mcpToolSummaries = window.MCPBridge && typeof window.MCPBridge.getToolSummariesForContact === 'function'
-            ? window.MCPBridge.getToolSummariesForContact(contactId)
+            ? window.MCPBridge.getToolSummariesForContact(contactId, { userText: recentUserTextForMcp })
             : [];
         if (Array.isArray(mcpTooling.tools) && mcpTooling.tools.length > 0) {
             messages.push({

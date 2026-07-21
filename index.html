@@ -60,7 +60,7 @@
     <link rel="stylesheet" href="css/messages_app.css">
     <link rel="stylesheet" href="css/phone_delivery_app.css">
     <link rel="stylesheet" href="css/chat_ootd.css">
-    <link rel="stylesheet" href="css/mcp_app.css">
+    <link rel="stylesheet" href="css/mcp_app.css?v=20260721b">
 </head>
 <body>
     <div class="screen-container" id="screen-container">
@@ -9871,6 +9871,11 @@
                             <label for="mcp-server-notes">备注</label>
                             <textarea id="mcp-server-notes" class="mcp-textarea" placeholder="记录用途、工具范围或接入说明"></textarea>
                         </div>
+                        <div class="mcp-field">
+                            <label for="mcp-server-keywords">触发关键词（可选）</label>
+                            <input id="mcp-server-keywords" class="mcp-input" type="text" placeholder="用逗号分隔，例如：咖啡, 点单, 瑞幸">
+                            <div class="mcp-field-help">留空＝启用并绑定后一直提供工具；填了＝聊天里出现任一关键词时，才把该节点的 tools 提供给 AI 调用。</div>
+                        </div>
                         <div class="mcp-actions">
                             <button id="mcp-save-btn" class="mcp-btn primary" type="button">保存配置</button>
                             <button id="mcp-connect-btn" class="mcp-btn secondary" type="button">接入当前节点</button>
@@ -9885,13 +9890,13 @@
                 <section class="mcp-panel">
                     <div class="mcp-panel-title">
                         <i class="fas fa-server"></i>
-                        已保存节点
+                        MCP 管理
                     </div>
                     <div id="mcp-server-list" class="mcp-server-list"></div>
                 </section>
             </div>
 
-            <div class="mcp-grid mcp-secondary-grid">
+            <div class="mcp-grid" style="grid-template-columns: 1fr;">
                 <section class="mcp-panel">
                     <div class="mcp-panel-title">
                         <i class="fas fa-file-import"></i>
@@ -9909,21 +9914,6 @@
                             <button id="mcp-import-clear-btn" class="mcp-btn ghost" type="button">清空</button>
                         </div>
                     </div>
-                </section>
-
-                <section class="mcp-panel">
-                    <div class="mcp-panel-title">
-                        <i class="fas fa-bookmark"></i>
-                        配置预设
-                    </div>
-                    <div class="mcp-field">
-                        <input id="mcp-preset-name" class="mcp-input" type="text" placeholder="预设名称，例如：工作用节点">
-                    </div>
-                    <div class="mcp-actions" style="margin: 12px 0;">
-                        <button id="mcp-preset-save-btn" class="mcp-btn primary" type="button">保存当前为预设</button>
-                    </div>
-                    <div id="mcp-preset-list" class="mcp-preset-list"></div>
-                    <div class="mcp-note">预设会保存当前所有节点的完整配置；应用预设会用预设中的节点覆盖当前节点列表。</div>
                 </section>
             </div>
 
@@ -9991,7 +9981,7 @@
     <script src="js/mood_flora.js"></script>
     <script src="js/preset_app.js"></script>
     <script src="js/home.js"></script>
-    <script src="js/mcp_app.js?v=20260721"></script>
+    <script src="js/mcp_app.js?v=20260721b"></script>
     <script src="js/studio_app.js"></script>
     <script src="js/studio_toolbar.js"></script>
     <script src="js/studio_toolbar_preview.js"></script>
@@ -10001,7 +9991,7 @@
     <script src="js/check_phone_health.js"></script>
     <script src="js/chat/01-contact-settings.js"></script>
     <script src="js/chat/02-message-bank.js"></script>
-    <script src="js/chat/03-ai-engine.js"></script>
+    <script src="js/chat/03-ai-engine.js?v=20260721b"></script>
     <script src="js/location_schedule_v1.js"></script>
     <script src="js/chat/04-media-init.js"></script>
     <script src="js/chat/05-addressbook-friends.js"></script>
