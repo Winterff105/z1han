@@ -93,10 +93,21 @@
         };
     }
 
+    function normalizePreset(raw) {
+        const next = raw && typeof raw === 'object' ? raw : {};
+        return {
+            id: String(next.id || '').trim() || createId(),
+            name: String(next.name || '').trim() || '未命名预设',
+            createdAt: Number(next.createdAt || Date.now()),
+            servers: Array.isArray(next.servers) ? next.servers.map(normalizeServer) : []
+        };
+    }
+
     function normalizePersistedState(raw) {
         const next = raw && typeof raw === 'object' ? raw : {};
         const servers = Array.isArray(next.servers) ? next.servers.map(normalizeServer) : [];
         const logs = Array.isArray(next.logs) ? next.logs.slice(0, MAX_LOGS).map(normalizeLog) : [];
+        const presets = Array.isArray(next.presets) ? next.presets.map(normalizePreset) : [];
         let activeServerId = String(next.activeServerId || '').trim();
         if (servers.length > 0 && !servers.some((server) => server.id === activeServerId)) {
             activeServerId = servers[0].id;
@@ -104,7 +115,8 @@
         return {
             servers,
             activeServerId,
-            logs
+            logs,
+            presets
         };
     }
 
@@ -141,6 +153,7 @@
         const appState = getAppState();
         appState.servers = Array.isArray(appState.servers) ? appState.servers.map(normalizeServer) : [];
         appState.logs = Array.isArray(appState.logs) ? appState.logs.slice(0, MAX_LOGS).map(normalizeLog) : [];
+        appState.presets = Array.isArray(appState.presets) ? appState.presets.map(normalizePreset) : [];
         mirrorStateToLocalStorage();
         if (typeof window.saveConfig === 'function') {
             Promise.resolve(window.saveConfig()).catch((error) => {
@@ -1145,6 +1158,309 @@
         } catch (error) {}
     }
 
+    function serverDraftFromEntry(name, entry) {
+        const raw = entry && typeof entry === 'object' ? entry : {};
+        const url = String(raw.url || raw.endpoint || raw.serverUrl || raw.baseUrl || '').trim();
+        const command = String(raw.command || '').trim();
+        let args = raw.args;
+        if (Array.isArray(args)) {
+            args = args.map((item) => String(item)).join(' ');
+        } else {
+            args = String(args || '').trim();
+        }
+
+        let transport = String(raw.transport || raw.type || '').toLowerCase().trim();
+        if (transport === 'streamable-http' || transport === 'streamablehttp' || transport === 'streamable_http' || transport === 'streamable') {
+            transport = 'http';
+        }
+        if (!['http', 'sse', 'stdio'].includes(transport)) {
+            if (command) {
+                transport = 'stdio';
+            } else if (/\bsse\b|\/sse(\/|\?|$)/i.test(url)) {
+                transport = 'sse';
+            } else {
+                transport = 'http';
+            }
+        }
+
+        let token = String(raw.token || raw.apiKey || raw.api_key || '').trim();
+        const headers = raw.headers && typeof raw.headers === 'object' && !Array.isArray(raw.headers) ? raw.headers : null;
+        if (!token && headers) {
+            const authKey = Object.keys(headers).find((key) => key.toLowerCase() === 'authorization');
+            if (authKey) {
+                token = String(headers[authKey] || '').replace(/^Bearer\s+/i, '').trim();
+            }
+        }
+
+        return {
+            name: String(name || raw.name || '').trim() || '未命名节点',
+            transport,
+            endpoint: transport === 'stdio' ? '' : url,
+            command,
+            args,
+            token,
+            notes: String(raw.notes || raw.description || '').trim(),
+            enabled: raw.enabled === true
+        };
+    }
+
+    function parseMcpImportText(text) {
+        const trimmed = String(text || '').trim();
+        if (!trimmed) {
+            throw new Error('请先粘贴 JSON 内容');
+        }
+
+        let parsed;
+        try {
+            parsed = JSON.parse(trimmed);
+        } catch (error) {
+            throw new Error(`JSON 解析失败：${(error && error.message) || '格式不正确'}`);
+        }
+
+        const drafts = [];
+        if (parsed && typeof parsed === 'object' && parsed.mcpServers && typeof parsed.mcpServers === 'object' && !Array.isArray(parsed.mcpServers)) {
+            Object.keys(parsed.mcpServers).forEach((key) => {
+                drafts.push(serverDraftFromEntry(key, parsed.mcpServers[key]));
+            });
+        } else if (parsed && typeof parsed === 'object' && Array.isArray(parsed.servers)) {
+            parsed.servers.forEach((entry) => drafts.push(serverDraftFromEntry(entry && entry.name, entry)));
+        } else if (Array.isArray(parsed)) {
+            parsed.forEach((entry) => drafts.push(serverDraftFromEntry(entry && entry.name, entry)));
+        } else if (parsed && typeof parsed === 'object') {
+            const looksLikeSingleServer = parsed.url || parsed.endpoint || parsed.command || parsed.transport || parsed.type;
+            if (looksLikeSingleServer) {
+                drafts.push(serverDraftFromEntry(parsed.name, parsed));
+            } else {
+                Object.keys(parsed).forEach((key) => {
+                    const entry = parsed[key];
+                    if (entry && typeof entry === 'object') {
+                        drafts.push(serverDraftFromEntry(key, entry));
+                    }
+                });
+            }
+        }
+
+        if (!drafts.length) {
+            throw new Error('没有解析到有效的 MCP 节点');
+        }
+        return drafts;
+    }
+
+    function handleImportJson() {
+        const input = $('mcp-import-input');
+        if (!input) return;
+
+        let drafts;
+        try {
+            drafts = parseMcpImportText(input.value);
+        } catch (error) {
+            const message = String((error && error.message) || error || '导入失败');
+            setStatus('warn', '导入失败', message);
+            pushLog(`导入 JSON 失败：${message}`, 'error');
+            return;
+        }
+
+        const appState = getAppState();
+        let created = 0;
+        let updated = 0;
+        let firstId = '';
+
+        drafts.forEach((draft) => {
+            const existing = appState.servers.find((server) => server.name === draft.name);
+            if (existing) {
+                const merged = normalizeServer({
+                    ...existing,
+                    ...draft,
+                    id: existing.id,
+                    enabled: existing.enabled,
+                    boundContactIds: existing.boundContactIds,
+                    tools: existing.tools,
+                    updatedAt: Date.now()
+                });
+                const index = appState.servers.findIndex((server) => server.id === existing.id);
+                appState.servers[index] = merged;
+                if (!firstId) firstId = merged.id;
+                updated += 1;
+            } else {
+                const nextServer = normalizeServer({
+                    ...draft,
+                    id: createId(),
+                    updatedAt: Date.now()
+                });
+                appState.servers.unshift(nextServer);
+                if (!firstId) firstId = nextServer.id;
+                created += 1;
+            }
+        });
+
+        if (firstId) appState.activeServerId = firstId;
+        persistState();
+        input.value = '';
+        selectServer(appState.activeServerId);
+        renderPresets();
+        pushLog(`已从 JSON 导入 ${drafts.length} 个节点（新增 ${created}，更新 ${updated}）`, 'good');
+        setStatus('good', '导入完成', `新增 ${created} 个、更新 ${updated} 个节点。`);
+    }
+
+    function buildStandardMcpJson(serverList) {
+        const servers = Array.isArray(serverList) ? serverList : getServers();
+        const mcpServers = {};
+        servers.forEach((server) => {
+            const key = String(server.name || server.id || '未命名节点').trim() || '未命名节点';
+            const entry = {};
+            if (server.transport === 'stdio') {
+                entry.type = 'stdio';
+                if (server.command) entry.command = server.command;
+                if (server.args) entry.args = server.args.split(/\s+/).filter(Boolean);
+            } else {
+                entry.type = server.transport === 'sse' ? 'sse' : 'http';
+                if (server.endpoint) entry.url = server.endpoint;
+                if (server.token) entry.headers = { Authorization: `Bearer ${server.token}` };
+            }
+            if (server.notes) entry.notes = server.notes;
+            mcpServers[key] = entry;
+        });
+        return JSON.stringify({ mcpServers }, null, 2);
+    }
+
+    async function copyTextToClipboard(text) {
+        try {
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                await navigator.clipboard.writeText(text);
+                return true;
+            }
+        } catch (error) {
+            console.warn('Failed to copy MCP JSON to clipboard.', error);
+        }
+        return false;
+    }
+
+    async function handleCopyConfigJson() {
+        const servers = getServers();
+        if (!servers.length) {
+            pushLog('当前没有可复制的节点配置', 'warn');
+            return;
+        }
+        const json = buildStandardMcpJson(servers);
+        const copied = await copyTextToClipboard(json);
+        const input = $('mcp-import-input');
+        if (input) input.value = json;
+        pushLog(copied ? '已复制当前 MCP 配置 JSON' : '已生成当前 MCP 配置 JSON（见上方文本框）', 'good');
+        setStatus('good', copied ? '已复制' : '已生成', copied ? '配置 JSON 已复制到剪贴板。' : '已填入文本框，可手动复制。');
+    }
+
+    function handleSavePreset() {
+        const nameInput = $('mcp-preset-name');
+        let name = nameInput ? String(nameInput.value || '').trim() : '';
+        if (!name) {
+            name = String(window.prompt('请输入预设名称：') || '').trim();
+        }
+        if (!name) {
+            pushLog('请先填写预设名称', 'warn');
+            return;
+        }
+
+        const appState = getAppState();
+        if (!appState.servers.length) {
+            pushLog('当前没有可保存的节点', 'warn');
+            return;
+        }
+
+        const preset = normalizePreset({
+            name,
+            createdAt: Date.now(),
+            servers: appState.servers.map((server) => JSON.parse(JSON.stringify(server)))
+        });
+
+        const existingIndex = appState.presets.findIndex((item) => item.name === name);
+        if (existingIndex >= 0) {
+            preset.id = appState.presets[existingIndex].id;
+            appState.presets[existingIndex] = preset;
+        } else {
+            appState.presets.unshift(preset);
+        }
+
+        if (nameInput) nameInput.value = '';
+        persistState();
+        renderPresets();
+        pushLog(`已保存预设「${name}」（${preset.servers.length} 个节点）`, 'good');
+        setStatus('good', '预设已保存', `「${name}」包含 ${preset.servers.length} 个节点。`);
+    }
+
+    function applyPreset(presetId) {
+        const appState = getAppState();
+        const preset = appState.presets.find((item) => item.id === presetId);
+        if (!preset) return;
+        if (!window.confirm(`应用预设「${preset.name}」将用其中的 ${preset.servers.length} 个节点覆盖当前节点列表，是否继续？`)) {
+            return;
+        }
+
+        appState.servers = preset.servers.map((server) => normalizeServer({ ...server, id: createId() }));
+        appState.activeServerId = appState.servers[0] ? appState.servers[0].id : '';
+        runtime.sessions = Object.create(null);
+        persistState();
+
+        if (appState.activeServerId) {
+            selectServer(appState.activeServerId);
+        } else {
+            handleNewDraft();
+        }
+        renderPresets();
+        pushLog(`已应用预设「${preset.name}」（${preset.servers.length} 个节点）`, 'good');
+    }
+
+    function deletePreset(presetId) {
+        const appState = getAppState();
+        const preset = appState.presets.find((item) => item.id === presetId);
+        if (!preset) return;
+        if (!window.confirm(`确定删除预设「${preset.name}」吗？`)) {
+            return;
+        }
+        appState.presets = appState.presets.filter((item) => item.id !== presetId);
+        persistState();
+        renderPresets();
+        pushLog(`已删除预设「${preset.name}」`, 'warn');
+    }
+
+    async function handleExportPreset(presetId) {
+        const preset = getAppState().presets.find((item) => item.id === presetId);
+        if (!preset) return;
+        const json = buildStandardMcpJson(preset.servers);
+        const copied = await copyTextToClipboard(json);
+        const input = $('mcp-import-input');
+        if (input) input.value = json;
+        pushLog(copied ? `已复制预设「${preset.name}」的 JSON` : `已生成预设「${preset.name}」的 JSON（见文本框）`, 'good');
+    }
+
+    function renderPresets() {
+        const list = $('mcp-preset-list');
+        if (!list) return;
+        const presets = getAppState().presets || [];
+
+        if (!presets.length) {
+            list.innerHTML = '<div class="mcp-empty">还没有保存的预设</div>';
+            return;
+        }
+
+        list.innerHTML = presets.map((preset) => {
+            const serverNames = preset.servers.map((server) => server.name).filter(Boolean).join('、') || '空配置';
+            return `
+                <article class="mcp-preset-item" data-preset-id="${escapeHtml(preset.id)}">
+                    <div class="mcp-preset-item-head">
+                        <div class="mcp-preset-name">${escapeHtml(preset.name)}</div>
+                        <div class="mcp-preset-meta">${escapeHtml(String(preset.servers.length))} 个节点 · ${escapeHtml(formatTime(preset.createdAt))}</div>
+                    </div>
+                    <div class="mcp-preset-servers">${escapeHtml(serverNames)}</div>
+                    <div class="mcp-server-actions">
+                        <button type="button" class="mcp-mini-btn primary" data-preset-action="apply">应用</button>
+                        <button type="button" class="mcp-mini-btn" data-preset-action="export">复制 JSON</button>
+                        <button type="button" class="mcp-mini-btn danger" data-preset-action="delete">删除</button>
+                    </div>
+                </article>
+            `;
+        }).join('');
+    }
+
     function bindEvents() {
         const transport = $('mcp-server-transport');
         if (transport && !transport.dataset.bound) {
@@ -1209,6 +1525,54 @@
         if (newBtn && !newBtn.dataset.bound) {
             newBtn.addEventListener('click', handleNewDraft);
             newBtn.dataset.bound = '1';
+        }
+
+        const importBtn = $('mcp-import-btn');
+        if (importBtn && !importBtn.dataset.bound) {
+            importBtn.addEventListener('click', handleImportJson);
+            importBtn.dataset.bound = '1';
+        }
+
+        const importCopyBtn = $('mcp-import-copy-btn');
+        if (importCopyBtn && !importCopyBtn.dataset.bound) {
+            importCopyBtn.addEventListener('click', () => {
+                void handleCopyConfigJson();
+            });
+            importCopyBtn.dataset.bound = '1';
+        }
+
+        const importClearBtn = $('mcp-import-clear-btn');
+        if (importClearBtn && !importClearBtn.dataset.bound) {
+            importClearBtn.addEventListener('click', () => {
+                const input = $('mcp-import-input');
+                if (input) input.value = '';
+            });
+            importClearBtn.dataset.bound = '1';
+        }
+
+        const presetSaveBtn = $('mcp-preset-save-btn');
+        if (presetSaveBtn && !presetSaveBtn.dataset.bound) {
+            presetSaveBtn.addEventListener('click', handleSavePreset);
+            presetSaveBtn.dataset.bound = '1';
+        }
+
+        const presetList = $('mcp-preset-list');
+        if (presetList && !presetList.dataset.bound) {
+            presetList.addEventListener('click', (event) => {
+                const card = event.target.closest('[data-preset-id]');
+                if (!card) return;
+                const presetId = String(card.dataset.presetId || '').trim();
+                const actionEl = event.target.closest('[data-preset-action]');
+                const action = actionEl ? actionEl.dataset.presetAction : '';
+                if (action === 'apply') {
+                    applyPreset(presetId);
+                } else if (action === 'delete') {
+                    deletePreset(presetId);
+                } else if (action === 'export') {
+                    void handleExportPreset(presetId);
+                }
+            });
+            presetList.dataset.bound = '1';
         }
 
         const bindAllBtn = $('mcp-bind-all-btn');
@@ -1310,6 +1674,7 @@
     function renderMcpApp() {
         migrateLegacyStateIfNeeded();
         bindEvents();
+        renderPresets();
         const active = getActiveServer();
         if (active) {
             applyForm(active);

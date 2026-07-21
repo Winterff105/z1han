@@ -584,7 +584,8 @@ const state = {
     mcp: {
         servers: [],
         activeServerId: '',
-        logs: []
+        logs: [],
+        presets: []
     },
     wallet: {
         balance: 0.00,
@@ -2613,10 +2614,12 @@ async function loadConfig() {
             state.mcp = Object.assign({
                 servers: [],
                 activeServerId: '',
-                logs: []
+                logs: [],
+                presets: []
             }, state.mcp || {});
             if (!Array.isArray(state.mcp.servers)) state.mcp.servers = [];
             if (!Array.isArray(state.mcp.logs)) state.mcp.logs = [];
+            if (!Array.isArray(state.mcp.presets)) state.mcp.presets = [];
             if (!state.aiSettings2) state.aiSettings2 = { url: '', key: '', model: '', temperature: 0.7 };
             if (!state.aiPresets2) state.aiPresets2 = [];
             if (!state.whisperSettings) state.whisperSettings = { url: '', key: '', model: 'whisper-1' };

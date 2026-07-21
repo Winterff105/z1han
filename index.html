@@ -9894,6 +9894,42 @@
             <div class="mcp-grid mcp-secondary-grid">
                 <section class="mcp-panel">
                     <div class="mcp-panel-title">
+                        <i class="fas fa-file-import"></i>
+                        粘贴 JSON 配置
+                    </div>
+                    <div class="mcp-form">
+                        <div class="mcp-field">
+                            <label for="mcp-import-input">直接把 MCP 配置 JSON 贴进来</label>
+                            <textarea id="mcp-import-input" class="mcp-textarea mcp-import-input" spellcheck="false" placeholder='支持标准格式，例如：&#10;{&#10;  &quot;mcpServers&quot;: {&#10;    &quot;filesystem&quot;: {&#10;      &quot;command&quot;: &quot;npx&quot;,&#10;      &quot;args&quot;: [&quot;-y&quot;, &quot;@modelcontextprotocol/server-filesystem&quot;, &quot;/path&quot;]&#10;    },&#10;    &quot;remote&quot;: {&#10;      &quot;url&quot;: &quot;https://example.com/mcp&quot;,&#10;      &quot;headers&quot;: { &quot;Authorization&quot;: &quot;Bearer xxx&quot; }&#10;    }&#10;  }&#10;}'></textarea>
+                            <div class="mcp-field-help">支持 {"mcpServers": {...}} 标准格式，也支持单个节点对象或节点数组。导入时若节点名相同会更新原节点，否则新建。</div>
+                        </div>
+                        <div class="mcp-actions">
+                            <button id="mcp-import-btn" class="mcp-btn primary" type="button">导入 JSON</button>
+                            <button id="mcp-import-copy-btn" class="mcp-btn secondary" type="button">复制当前配置</button>
+                            <button id="mcp-import-clear-btn" class="mcp-btn ghost" type="button">清空</button>
+                        </div>
+                    </div>
+                </section>
+
+                <section class="mcp-panel">
+                    <div class="mcp-panel-title">
+                        <i class="fas fa-bookmark"></i>
+                        配置预设
+                    </div>
+                    <div class="mcp-field">
+                        <input id="mcp-preset-name" class="mcp-input" type="text" placeholder="预设名称，例如：工作用节点">
+                    </div>
+                    <div class="mcp-actions" style="margin: 12px 0;">
+                        <button id="mcp-preset-save-btn" class="mcp-btn primary" type="button">保存当前为预设</button>
+                    </div>
+                    <div id="mcp-preset-list" class="mcp-preset-list"></div>
+                    <div class="mcp-note">预设会保存当前所有节点的完整配置；应用预设会用预设中的节点覆盖当前节点列表。</div>
+                </section>
+            </div>
+
+            <div class="mcp-grid mcp-secondary-grid">
+                <section class="mcp-panel">
+                    <div class="mcp-panel-title">
                         <i class="fas fa-user-tag"></i>
                         联系人绑定
                     </div>
