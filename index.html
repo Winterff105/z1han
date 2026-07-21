@@ -60,6 +60,7 @@
     <link rel="stylesheet" href="css/messages_app.css">
     <link rel="stylesheet" href="css/phone_delivery_app.css">
     <link rel="stylesheet" href="css/chat_ootd.css">
+    <link rel="stylesheet" href="css/mcp_app.css">
 </head>
 <body>
     <div class="screen-container" id="screen-container">
@@ -5478,6 +5479,18 @@
                         <div class="setting-group">
                             <label>向量检索参数</label>
                             <div class="memory-days-grid">
+                                <div class="memory-days-item" style="grid-column: 1 / -1;">
+                                    <label for="modal-memory-vector-endpoint">Embedding API URL</label>
+                                    <input type="text" id="modal-memory-vector-endpoint" placeholder="例如：https://your-api.example.com/v1">
+                                </div>
+                                <div class="memory-days-item" style="grid-column: 1 / -1;">
+                                    <label for="modal-memory-vector-api-key">Embedding API Key</label>
+                                    <input type="password" id="modal-memory-vector-api-key" placeholder="输入你自己的密钥">
+                                </div>
+                                <div class="memory-days-item" style="grid-column: 1 / -1;">
+                                    <label for="modal-memory-vector-model">Embedding Model</label>
+                                    <input type="text" id="modal-memory-vector-model" placeholder="例如：BAAI/bge-m3">
+                                </div>
                                 <div class="memory-days-item">
                                     <label for="modal-memory-vector-topk">TopK</label>
                                     <input type="number" id="modal-memory-vector-topk" min="1" max="30" step="1">
@@ -5487,9 +5500,11 @@
                                     <input type="number" id="modal-memory-vector-min-similarity" min="0.05" max="0.99" step="0.01">
                                 </div>
                             </div>
+                            <div class="memory-setting-hint">请填写你自己的 Embedding 服务地址与密钥。地址填基础路径即可，系统会自动补成 `/embeddings`。</div>
                             <div class="memory-setting-hint">默认推荐 TopK=8，最低相似度=0.35。</div>
                         </div>
                         <button id="memory-vector-rebuild-btn" class="ios-btn-block" type="button">重建当前联系人的向量索引</button>
+                        <button id="memory-export-mcp-btn" class="ios-btn-block" type="button">导出当前联系人的 MCP 记忆 JSON</button>
                         <button id="save-memory-settings-btn" class="ios-btn-block">保存</button>
                     </div>
                 </div>
@@ -9776,6 +9791,149 @@
         </div>
     </div>
 
+    <div id="mcp-app" class="app-screen hidden" style="background: linear-gradient(180deg, #f9fbfd 0%, #eef3f8 100%); color: #1f2937; z-index: 220; overflow: hidden;">
+        <div class="app-header mcp-header">
+            <button id="close-mcp-app" class="back-btn" type="button">
+                <i class="fas fa-chevron-left"></i> 返回
+            </button>
+            <div class="header-title">MCP 接入中心</div>
+        </div>
+
+        <div class="mcp-app-shell">
+            <section class="mcp-hero">
+                <div>
+                    <div class="mcp-kicker">Model Context Protocol</div>
+                    <h2>把外部工具接进你的 AI 工作流</h2>
+                    <p>创建和管理 MCP 节点、绑定到指定联系人、查看可调用 tools，并在聊天时让 AI 直接调用已绑定的 MCP 能力。</p>
+                </div>
+                <div class="mcp-hero-badge"><i class="fas fa-plug"></i></div>
+            </section>
+
+            <div class="mcp-stats">
+                <div class="mcp-stat">
+                    <div class="mcp-stat-label">已保存节点</div>
+                    <div class="mcp-stat-value" id="mcp-server-count">0</div>
+                </div>
+                <div class="mcp-stat">
+                    <div class="mcp-stat-label">当前节点</div>
+                    <div class="mcp-stat-value" id="mcp-active-server-name">未选择</div>
+                </div>
+                <div class="mcp-stat">
+                    <div class="mcp-stat-label">连接状态</div>
+                    <div class="mcp-stat-value" id="mcp-status-text">未配置</div>
+                </div>
+            </div>
+            <div id="mcp-status-hint" class="mcp-status-hint">先创建一个 MCP 节点，再把它绑定到需要使用工具的联系人。</div>
+
+            <div class="mcp-grid">
+                <section class="mcp-panel">
+                    <div class="mcp-panel-title">
+                        <i class="fas fa-gear"></i>
+                        连接配置
+                    </div>
+                    <div class="mcp-form">
+                        <div class="mcp-field">
+                            <label for="mcp-server-name">节点名称</label>
+                            <input id="mcp-server-name" class="mcp-input" type="text" placeholder="例如：本地文件工具">
+                        </div>
+                        <div class="mcp-field">
+                            <label for="mcp-server-transport">传输方式</label>
+                            <select id="mcp-server-transport" class="mcp-select">
+                                <option value="http">HTTP / Streamable</option>
+                                <option value="sse">SSE</option>
+                                <option value="stdio">stdio</option>
+                            </select>
+                        </div>
+                        <div class="mcp-field" id="mcp-endpoint-field">
+                            <label for="mcp-server-endpoint">服务地址</label>
+                            <input id="mcp-server-endpoint" class="mcp-input" type="text" placeholder="http://127.0.0.1:3000/mcp">
+                        </div>
+                        <div class="mcp-field" id="mcp-command-field" style="display:none;">
+                            <label for="mcp-server-command">启动命令</label>
+                            <input id="mcp-server-command" class="mcp-input" type="text" placeholder="npx -y @modelcontextprotocol/server-filesystem">
+                        </div>
+                        <div class="mcp-field" id="mcp-args-field" style="display:none;">
+                            <label for="mcp-server-args">命令参数</label>
+                            <input id="mcp-server-args" class="mcp-input" type="text" placeholder="--path C:\\Projects">
+                        </div>
+                        <div class="mcp-field">
+                            <label for="mcp-server-token">访问令牌</label>
+                            <input id="mcp-server-token" class="mcp-input" type="password" placeholder="可选">
+                        </div>
+                        <div class="mcp-field">
+                            <label class="mcp-toggle" for="mcp-server-enabled">
+                                <span>启用到聊天</span>
+                                <input id="mcp-server-enabled" type="checkbox">
+                            </label>
+                            <div class="mcp-field-help">启用后，只有被绑定到的联系人聊天时才会向 AI 暴露该节点的 tools。</div>
+                        </div>
+                        <div class="mcp-field">
+                            <label for="mcp-server-notes">备注</label>
+                            <textarea id="mcp-server-notes" class="mcp-textarea" placeholder="记录用途、工具范围或接入说明"></textarea>
+                        </div>
+                        <div class="mcp-actions">
+                            <button id="mcp-save-btn" class="mcp-btn primary" type="button">保存配置</button>
+                            <button id="mcp-connect-btn" class="mcp-btn secondary" type="button">接入当前节点</button>
+                            <button id="mcp-refresh-tools-btn" class="mcp-btn secondary" type="button">刷新 tools</button>
+                            <button id="mcp-disconnect-btn" class="mcp-btn ghost" type="button">断开</button>
+                            <button id="mcp-demo-btn" class="mcp-btn ghost" type="button">填入示例</button>
+                            <button id="mcp-new-btn" class="mcp-btn ghost" type="button">新建草稿</button>
+                        </div>
+                    </div>
+                </section>
+
+                <section class="mcp-panel">
+                    <div class="mcp-panel-title">
+                        <i class="fas fa-server"></i>
+                        已保存节点
+                    </div>
+                    <div id="mcp-server-list" class="mcp-server-list"></div>
+                </section>
+            </div>
+
+            <div class="mcp-grid mcp-secondary-grid">
+                <section class="mcp-panel">
+                    <div class="mcp-panel-title">
+                        <i class="fas fa-user-tag"></i>
+                        联系人绑定
+                    </div>
+                    <div class="mcp-inline-actions">
+                        <button id="mcp-bind-all-btn" class="mcp-mini-btn" type="button">全部绑定</button>
+                        <button id="mcp-bind-clear-btn" class="mcp-mini-btn" type="button">清空绑定</button>
+                    </div>
+                    <div id="mcp-contact-bind-list" class="mcp-contact-bind-list"></div>
+                    <div class="mcp-note">只有“已启用 + 已绑定”的节点，才会在对应联系人聊天时提供给 AI 调用。</div>
+                </section>
+
+                <section class="mcp-panel">
+                    <div class="mcp-panel-title">
+                        <i class="fas fa-screwdriver-wrench"></i>
+                        可调用 Tools
+                    </div>
+                    <div id="mcp-tool-list" class="mcp-tool-list"></div>
+                    <div class="mcp-note">浏览器端优先支持 HTTP/可直连的 MCP 服务；stdio 类型适合交给后端代理或本地桥接。</div>
+                </section>
+            </div>
+
+            <section class="mcp-panel mcp-log-panel">
+                <div class="mcp-panel-title">
+                    <i class="fas fa-list"></i>
+                    运行日志
+                </div>
+                <div id="mcp-log-list" class="mcp-log-list"></div>
+                <div class="mcp-note">提示：这里会记录节点接入、tools 刷新和 AI 实际调用 MCP 工具的情况。</div>
+            </section>
+
+            <section class="mcp-panel">
+                <div class="mcp-panel-title">
+                    <i class="fas fa-code"></i>
+                    当前配置预览
+                </div>
+                <pre id="mcp-config-preview" class="mcp-config-preview"></pre>
+            </section>
+        </div>
+    </div>
+
     <!-- 音频元素 -->
     <audio id="bg-music" loop></audio>
 
@@ -9797,6 +9955,7 @@
     <script src="js/mood_flora.js"></script>
     <script src="js/preset_app.js"></script>
     <script src="js/home.js"></script>
+    <script src="js/mcp_app.js"></script>
     <script src="js/studio_app.js"></script>
     <script src="js/studio_toolbar.js"></script>
     <script src="js/studio_toolbar_preview.js"></script>

@@ -15,7 +15,56 @@
     const SYNC_LOOKBACK_MS = 5 * 60 * 1000;
     const SYNC_FUTURE_SKEW_TOLERANCE_MS = 2 * 60 * 1000;
     const OFFLINE_PUSH_SETTINGS_BACKUP_KEY = 'offlinePushSyncSettings';
+    const NETWORK_SUSPEND_MS = 5 * 60 * 1000;
     let syncInFlightPromise = null;
+    const runtime = {
+        suspendedUntil: 0,
+        lastSuspendedReason: '',
+        lastLoggedSuppressedKey: ''
+    };
+
+    function isNetworkLikeOfflineError(error) {
+        const text = String(error && error.message || error || '').trim();
+        if (!text) return false;
+        return /failed to fetch|networkerror|load failed|cors|preflight|fetch api cannot load/i.test(text);
+    }
+
+    function isOfflineSyncSuspended() {
+        return Number(runtime.suspendedUntil || 0) > Date.now();
+    }
+
+    function suspendOfflineSync(error, ms = NETWORK_SUSPEND_MS) {
+        runtime.suspendedUntil = Date.now() + Math.max(30000, Number(ms) || NETWORK_SUSPEND_MS);
+        runtime.lastSuspendedReason = String(error && error.message || error || 'offline push sync suspended').trim();
+    }
+
+    function resumeOfflineSyncAfterSuccess() {
+        runtime.suspendedUntil = 0;
+        runtime.lastSuspendedReason = '';
+        runtime.lastLoggedSuppressedKey = '';
+    }
+
+    function buildSuspendedOfflineError() {
+        const remainingMs = Math.max(0, Number(runtime.suspendedUntil || 0) - Date.now());
+        const remainingSec = Math.ceil(remainingMs / 1000);
+        const hint = runtime.lastSuspendedReason ? ` (${runtime.lastSuspendedReason})` : '';
+        return new Error(`offline push sync suspended for ${remainingSec}s${hint}`);
+    }
+
+    function logOfflineSyncError(label, error, options = {}) {
+        const silent = !!(options && options.silent);
+        if (silent) return;
+        if (isNetworkLikeOfflineError(error)) {
+            return;
+        }
+        if (error && /offline push sync suspended/i.test(String(error.message || error))) {
+            const key = `${label}::${String(error.message || error)}`;
+            if (runtime.lastLoggedSuppressedKey === key) return;
+            runtime.lastLoggedSuppressedKey = key;
+            return;
+        }
+        console.error(label, error);
+    }
 
     function readLocalBackupState() {
         try {
@@ -119,11 +168,23 @@
     async function apiFetch(path, init) {
         const state = getState();
         if (!state.apiBaseUrl) throw new Error('offline push apiBaseUrl is not configured');
-        const response = await fetch(`${state.apiBaseUrl.replace(/\/$/, '')}${path}`, Object.assign({
-            headers: {
-                'Content-Type': 'application/json'
+        if (isOfflineSyncSuspended()) {
+            throw buildSuspendedOfflineError();
+        }
+        let response = null;
+        try {
+            response = await fetch(`${state.apiBaseUrl.replace(/\/$/, '')}${path}`, Object.assign({
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            }, init || {}));
+            resumeOfflineSyncAfterSuccess();
+        } catch (error) {
+            if (isNetworkLikeOfflineError(error)) {
+                suspendOfflineSync(error);
             }
-        }, init || {}));
+            throw error;
+        }
         if (!response.ok) {
             const text = await response.text().catch(() => '');
             throw new Error(`API ${response.status}: ${text || response.statusText}`);
@@ -135,7 +196,19 @@
     async function fetchBackendHealth() {
         const state = getState();
         if (!state.apiBaseUrl) return null;
-        const response = await fetch(`${state.apiBaseUrl.replace(/\/$/, '')}/health`, { cache: 'no-store' });
+        if (isOfflineSyncSuspended()) {
+            throw buildSuspendedOfflineError();
+        }
+        let response = null;
+        try {
+            response = await fetch(`${state.apiBaseUrl.replace(/\/$/, '')}/health`, { cache: 'no-store' });
+            resumeOfflineSyncAfterSuccess();
+        } catch (error) {
+            if (isNetworkLikeOfflineError(error)) {
+                suspendOfflineSync(error);
+            }
+            throw error;
+        }
         if (!response.ok) {
             throw new Error(`HTTP ${response.status}`);
         }
@@ -154,7 +227,7 @@
                 return backendKey;
             }
         } catch (err) {
-            console.error('[offline-push-sync] ensureVapidPublicKey failed', err);
+            logOfflineSyncError('[offline-push-sync] ensureVapidPublicKey failed', err);
         }
         return '';
     }
@@ -674,7 +747,8 @@
             const state = getState();
             if (!state.enabled || !state.apiBaseUrl) return;
             if (document.hidden) return;
-            syncMessages().catch(err => console.error('[offline-push-sync] auto sync failed', err));
+            if (isOfflineSyncSuspended()) return;
+            syncMessages().catch(err => logOfflineSyncError('[offline-push-sync] auto sync failed', err));
         }, AUTO_SYNC_INTERVAL_MS);
     }
 
@@ -786,7 +860,7 @@
                 })
             });
         } catch (err) {
-            console.error('[offline-push-sync] uploadContactConfig failed', err);
+            logOfflineSyncError('[offline-push-sync] uploadContactConfig failed', err);
         }
     }
 
@@ -809,7 +883,7 @@
                 })
             });
         } catch (err) {
-            console.error('[offline-push-sync] uploadAiProfile failed', err);
+            logOfflineSyncError('[offline-push-sync] uploadAiProfile failed', err);
         }
     }
 
@@ -833,7 +907,7 @@
                 })
             });
         } catch (err) {
-            console.error('[offline-push-sync] uploadChatContext failed', err);
+            logOfflineSyncError('[offline-push-sync] uploadChatContext failed', err);
         }
     }
 
@@ -868,7 +942,7 @@
                 memoryContext = window.buildMemoryContextByPolicy(contact, lightweightHistory, 'chat-text') || '';
             }
         } catch (err) {
-            console.error('[offline-push-sync] buildMemoryContextByPolicy failed', err);
+            logOfflineSyncError('[offline-push-sync] buildMemoryContextByPolicy failed', err);
         }
 
         let timeContext = '';
@@ -877,7 +951,7 @@
                 timeContext = window.buildRealtimeTimeContext(contact.id) || '';
             }
         } catch (err) {
-            console.error('[offline-push-sync] buildRealtimeTimeContext failed', err);
+            logOfflineSyncError('[offline-push-sync] buildRealtimeTimeContext failed', err);
         }
 
         let calendarContext = '';
@@ -886,7 +960,7 @@
                 calendarContext = window.buildCalendarPromptContext() || '';
             }
         } catch (err) {
-            console.error('[offline-push-sync] buildCalendarPromptContext failed', err);
+            logOfflineSyncError('[offline-push-sync] buildCalendarPromptContext failed', err);
         }
 
         let itineraryContext = '';
@@ -895,7 +969,7 @@
                 itineraryContext = await window.getCurrentItineraryInfo(contact.id) || '';
             }
         } catch (err) {
-            console.error('[offline-push-sync] getCurrentItineraryInfo failed', err);
+            logOfflineSyncError('[offline-push-sync] getCurrentItineraryInfo failed', err);
         }
 
         let lookusContext = '';
@@ -920,7 +994,7 @@
                 }
             }
         } catch (err) {
-            console.error('[offline-push-sync] build LookUs context failed', err);
+            logOfflineSyncError('[offline-push-sync] build LookUs context failed', err);
         }
 
         let meetingContext = '';
@@ -937,7 +1011,7 @@
                 }
             }
         } catch (err) {
-            console.error('[offline-push-sync] build meeting context failed', err);
+            logOfflineSyncError('[offline-push-sync] build meeting context failed', err);
         }
 
         const importantStateContext = '';
@@ -952,7 +1026,7 @@
                 frontendSystemPrompt = systemMessage ? String(systemMessage.content || "") : "";
             }
         } catch (err) {
-            console.error('[offline-push-sync] build frontend system prompt failed', err);
+            logOfflineSyncError('[offline-push-sync] build frontend system prompt failed', err);
         }
 
         try {
@@ -973,7 +1047,7 @@
                 })
             });
         } catch (err) {
-            console.error('[offline-push-sync] uploadPromptContext failed', err);
+            logOfflineSyncError('[offline-push-sync] uploadPromptContext failed', err);
         }
     }
 
@@ -998,7 +1072,7 @@
             await uploadChatContext(contactId);
             await uploadPromptContext(contactId);
         } catch (err) {
-            console.error('[offline-push-sync] uploadChatSnapshot failed', err);
+            logOfflineSyncError('[offline-push-sync] uploadChatSnapshot failed', err);
         }
     }
 
@@ -1018,7 +1092,7 @@
                     if (currentId) uploadChatSnapshot(currentId);
                 }
             } catch (err) {
-                console.error('[offline-push-sync] save patch failed', err);
+                logOfflineSyncError('[offline-push-sync] save patch failed', err);
             }
             return result;
         };
@@ -1064,25 +1138,26 @@
                     return tasks;
                 }));
             } catch (err) {
-                console.error('[offline-push-sync] flushStateToBackend failed', err);
+                logOfflineSyncError('[offline-push-sync] flushStateToBackend failed', err);
             }
         };
         const scheduleForegroundCatchUpSync = () => {
             [0, 600, 1800, 3600].forEach((delay) => {
                 window.setTimeout(() => {
-                    syncMessages().catch(err => console.error('[offline-push-sync] foreground sync failed', err));
+                    if (isOfflineSyncSuspended()) return;
+                    syncMessages().catch(err => logOfflineSyncError('[offline-push-sync] foreground sync failed', err));
                 }, delay);
             });
         };
         document.addEventListener('visibilitychange', () => {
             if (document.hidden) {
-                flushStateToBackend().catch(err => console.error('[offline-push-sync] hidden flush failed', err));
+                flushStateToBackend().catch(err => logOfflineSyncError('[offline-push-sync] hidden flush failed', err));
             } else {
                 scheduleForegroundCatchUpSync();
             }
         });
         window.addEventListener('pagehide', () => {
-            flushStateToBackend().catch(err => console.error('[offline-push-sync] pagehide flush failed', err));
+            flushStateToBackend().catch(err => logOfflineSyncError('[offline-push-sync] pagehide flush failed', err));
         });
         window.addEventListener('focus', () => {
             scheduleForegroundCatchUpSync();
@@ -1101,7 +1176,7 @@
                             injectRemoteMessages(pushedMessages);
                         }
                     } catch (err) {
-                        console.error('[offline-push-sync] inject push payload failed', err);
+                        logOfflineSyncError('[offline-push-sync] inject push payload failed', err);
                     }
                     schedulePushTriggeredSync();
                     return;
@@ -1113,15 +1188,15 @@
                         injectRemoteMessages(pushedMessages);
                     }
                 } catch (err) {
-                    console.error('[offline-push-sync] inject push payload before open failed', err);
+                    logOfflineSyncError('[offline-push-sync] inject push payload before open failed', err);
                 }
                 try {
                     await syncMessages();
                 } catch (err) {
-                    console.error(err);
+                    logOfflineSyncError('[offline-push-sync] sync after push open failed', err);
                 }
                 if (payload.contactId && typeof window.openChat === 'function') {
-                    try { window.openChat(resolveLocalContactId(payload.contactId)); } catch (err) { console.error(err); }
+                    try { window.openChat(resolveLocalContactId(payload.contactId)); } catch (err) { logOfflineSyncError('[offline-push-sync] openChat from push failed', err); }
                 }
             });
         }
@@ -1130,7 +1205,8 @@
     function scheduleStartupCatchUpSync() {
         STARTUP_CATCH_UP_SYNC_DELAYS_MS.forEach((delay) => {
             window.setTimeout(() => {
-                syncMessages().catch(err => console.error('[offline-push-sync] startup catch-up sync failed', err));
+                if (isOfflineSyncSuspended()) return;
+                syncMessages().catch(err => logOfflineSyncError('[offline-push-sync] startup catch-up sync failed', err));
             }, delay);
         });
     }

@@ -5491,8 +5491,8 @@ function getDefaultMemorySettingsRuntime() {
         },
         vectorRetrieval: {
             enabled: false,
-            endpoint: 'https://api.siliconflow.cn/v1',
-            apiKey: 'sk-tpkfgtmytrfvabkejzzyccvfeqkgwvnqxobpendlnmokojik',
+            endpoint: '',
+            apiKey: '',
             model: 'BAAI/bge-m3',
             topK: 8,
             minSimilarity: 0.35,
@@ -6706,12 +6706,98 @@ function rejectMemoryCandidate(candidateId) {
     renderMemoryList();
 }
 
+function buildMcpMemoryRecord(memory, contact) {
+    if (!memory || !String(memory.content || '').trim()) return null;
+    const tags = normalizeMemoryTags(memory.memoryTags, 'long_term');
+    const fallbackImportance = getDefaultImportanceByTags(tags, 'long_term');
+    const owner = tags.includes('state') ? getMemoryStateOwner(memory, 'user') : '';
+    const contactName = contact ? String(contact.remark || contact.nickname || contact.name || '').trim() : '';
+    return {
+        external_id: `wechat-memory-${String(memory.contactId || '')}-${String(memory.id || '')}`,
+        text: String(memory.content || '').trim(),
+        memory_type: tags[0] || 'long_term',
+        tags,
+        importance: getMemoryImportance(memory, fallbackImportance),
+        created_at: Number(memory.time || Date.now()),
+        updated_at: Number(memory.time || Date.now()),
+        review_status: String(memory.reviewStatus || 'approved'),
+        metadata: {
+            source_app: 'wechat-memory',
+            contact_id: String(memory.contactId || ''),
+            contact_name: contactName,
+            title: String(memory.title || ''),
+            range: String(memory.range || ''),
+            type: String(memory.type || ''),
+            source: String(memory.source || 'manual'),
+            confidence: clampFloat(memory.confidence, 0.8, 0, 1),
+            state_owner: owner,
+            state_meta: memory.stateMeta && typeof memory.stateMeta === 'object' ? memory.stateMeta : null,
+            refined_meta: memory.refinedMeta && typeof memory.refinedMeta === 'object' ? memory.refinedMeta : null
+        }
+    };
+}
+
+function buildMcpMemoryExportPayload(contactId, options = {}) {
+    ensureMemoryCollections();
+    const cid = String(contactId || '').trim();
+    if (!cid) return null;
+    const contact = Array.isArray(window.iphoneSimState && window.iphoneSimState.contacts)
+        ? window.iphoneSimState.contacts.find(item => String(item && item.id) === cid)
+        : null;
+    const includePending = !!(options && options.includePending);
+    const approved = getContactMemories(cid, true)
+        .filter(memory => memory && (includePending || String(memory.reviewStatus || 'approved') === 'approved'))
+        .sort((a, b) => Number(a && a.time || 0) - Number(b && b.time || 0));
+    const records = approved
+        .map(memory => buildMcpMemoryRecord(memory, contact))
+        .filter(Boolean);
+
+    return {
+        schema_version: 'mcp-memory-import-v1',
+        exported_at: Date.now(),
+        source: {
+            app: 'z1han-wechat-memory',
+            contact_id: cid,
+            contact_name: contact ? String(contact.remark || contact.nickname || contact.name || '').trim() : ''
+        },
+        import_hint: {
+            suggested_tool: 'batch_import_memories',
+            suggested_upsert_key: 'external_id'
+        },
+        memories: records
+    };
+}
+
+async function exportCurrentContactMemoriesForMcp() {
+    const contactId = window.iphoneSimState && window.iphoneSimState.currentChatContactId;
+    if (!contactId) {
+        if (typeof showNotification === 'function') showNotification('请先打开一个聊天', 1800);
+        return null;
+    }
+    const payload = buildMcpMemoryExportPayload(contactId);
+    if (!payload || !Array.isArray(payload.memories) || payload.memories.length === 0) {
+        if (typeof showNotification === 'function') showNotification('当前联系人没有可导出的已通过记忆', 2200);
+        return null;
+    }
+    const text = JSON.stringify(payload, null, 2);
+    window.__lastMcpMemoryExportPayload = text;
+    const copied = typeof copyTextToClipboard === 'function'
+        ? await copyTextToClipboard(text)
+        : false;
+    if (typeof showNotification === 'function') {
+        showNotification(copied ? `MCP 记忆 JSON 已复制（${payload.memories.length} 条）` : `已生成 MCP 记忆 JSON（${payload.memories.length} 条）`, 2400, copied ? 'success' : undefined);
+    }
+    return payload;
+}
+
 window.getMemorySettingsV2 = ensureMemorySettingsV2;
 window.createMemoryCandidate = createMemoryCandidate;
 window.createOrMergeApprovedMemory = createOrMergeApprovedMemory;
 window.approveMemoryCandidate = approveMemoryCandidate;
 window.rejectMemoryCandidate = rejectMemoryCandidate;
 window.syncLegacyPerceptionAndState = syncLegacyPerceptionAndState;
+window.buildMcpMemoryExportPayload = buildMcpMemoryExportPayload;
+window.exportCurrentContactMemoriesForMcp = exportCurrentContactMemoriesForMcp;
 
 function getMemoryImportanceThreshold(settings, contact, bucket) {
     const base = settings && settings.injectImportanceMin && typeof settings.injectImportanceMin === 'object'
@@ -6820,8 +6906,8 @@ const MEMORY_VECTOR_BUCKET_PRIORITY = {
     long_term: 1
 };
 const BUILTIN_MEMORY_VECTOR_EMBEDDING = Object.freeze({
-    endpoint: 'https://api.siliconflow.cn/v1',
-    apiKey: 'sk-tpkfgtmytrfvabkejzzyccvfeqkgwvnqxobpendlnmokojik',
+    endpoint: '',
+    apiKey: '',
     model: 'BAAI/bge-m3'
 });
 const memoryVectorIndexCache = new Map();
@@ -8671,6 +8757,12 @@ function openMemorySettings() {
     const vectorSettings = settings.vectorRetrieval || {};
     const vectorEnabledEl = document.getElementById('modal-memory-vector-enabled');
     if (vectorEnabledEl) vectorEnabledEl.checked = !!vectorSettings.enabled;
+    const vectorEndpointEl = document.getElementById('modal-memory-vector-endpoint');
+    if (vectorEndpointEl) vectorEndpointEl.value = String(vectorSettings.endpoint || '');
+    const vectorApiKeyEl = document.getElementById('modal-memory-vector-api-key');
+    if (vectorApiKeyEl) vectorApiKeyEl.value = String(vectorSettings.apiKey || '');
+    const vectorModelEl = document.getElementById('modal-memory-vector-model');
+    if (vectorModelEl) vectorModelEl.value = String(vectorSettings.model || 'BAAI/bge-m3');
     const vectorTopKEl = document.getElementById('modal-memory-vector-topk');
     if (vectorTopKEl) vectorTopKEl.value = String(clampInt(vectorSettings.topK, 8, 1, 30));
     const vectorMinSimilarityEl = document.getElementById('modal-memory-vector-min-similarity');
@@ -8726,13 +8818,16 @@ function handleSaveMemorySettings() {
         ? settings.vectorRetrieval
         : {};
     const vectorEnabledEl = document.getElementById('modal-memory-vector-enabled');
+    const vectorEndpointEl = document.getElementById('modal-memory-vector-endpoint');
+    const vectorApiKeyEl = document.getElementById('modal-memory-vector-api-key');
+    const vectorModelEl = document.getElementById('modal-memory-vector-model');
     const vectorTopKEl = document.getElementById('modal-memory-vector-topk');
     const vectorMinSimilarityEl = document.getElementById('modal-memory-vector-min-similarity');
     settings.vectorRetrieval = {
         enabled: vectorEnabledEl ? !!vectorEnabledEl.checked : !!currentVector.enabled,
-        endpoint: String(BUILTIN_MEMORY_VECTOR_EMBEDDING.endpoint || '').trim(),
-        apiKey: String(BUILTIN_MEMORY_VECTOR_EMBEDDING.apiKey || '').trim(),
-        model: String(BUILTIN_MEMORY_VECTOR_EMBEDDING.model || 'BAAI/bge-m3').trim(),
+        endpoint: vectorEndpointEl ? String(vectorEndpointEl.value || '').trim() : String(currentVector.endpoint || BUILTIN_MEMORY_VECTOR_EMBEDDING.endpoint || '').trim(),
+        apiKey: vectorApiKeyEl ? String(vectorApiKeyEl.value || '').trim() : String(currentVector.apiKey || BUILTIN_MEMORY_VECTOR_EMBEDDING.apiKey || '').trim(),
+        model: vectorModelEl ? String(vectorModelEl.value || '').trim() || 'BAAI/bge-m3' : String(currentVector.model || BUILTIN_MEMORY_VECTOR_EMBEDDING.model || 'BAAI/bge-m3').trim(),
         topK: vectorTopKEl ? clampInt(vectorTopKEl.value, clampInt(currentVector.topK, 8, 1, 30), 1, 30) : clampInt(currentVector.topK, 8, 1, 30),
         minSimilarity: vectorMinSimilarityEl
             ? clampFloat(vectorMinSimilarityEl.value, clampFloat(currentVector.minSimilarity, 0.35, 0.05, 0.99), 0.05, 0.99)
@@ -10951,6 +11046,7 @@ function setupAppsListeners() {
     const closeMemorySettingsBtn = document.getElementById('close-memory-settings');
     const saveMemorySettingsBtn = document.getElementById('save-memory-settings-btn');
     const memoryVectorRebuildBtn = document.getElementById('memory-vector-rebuild-btn');
+    const memoryExportMcpBtn = document.getElementById('memory-export-mcp-btn');
     const memoryVectorErrorModal = document.getElementById('memory-vector-error-modal');
     const closeMemoryVectorErrorBtn = document.getElementById('close-memory-vector-error');
     const copyMemoryVectorErrorLogBtn = document.getElementById('copy-memory-vector-error-log-btn');
@@ -11310,6 +11406,11 @@ function setupAppsListeners() {
                 memoryVectorRebuildBtn.disabled = false;
                 memoryVectorRebuildBtn.textContent = originalText;
             }
+        });
+    }
+    if (memoryExportMcpBtn) {
+        memoryExportMcpBtn.addEventListener('click', async () => {
+            await exportCurrentContactMemoriesForMcp();
         });
     }
 

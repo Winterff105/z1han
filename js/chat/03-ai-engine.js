@@ -4669,14 +4669,25 @@ function extractTextFromAiResponsePart(part) {
 
     if (typeof part !== 'object') return '';
 
+    if (part.type === 'text' && typeof part.text === 'string') return part.text;
     if (typeof part.text === 'string') return part.text;
     if (part.text && typeof part.text.value === 'string') return part.text.value;
     if (typeof part.value === 'string') return part.value;
     if (typeof part.content === 'string') return part.content;
     if (typeof part.output_text === 'string') return part.output_text;
+    if (typeof part.reasoning === 'string') return part.reasoning;
 
     if (Array.isArray(part.content)) {
         return part.content.map(item => extractTextFromAiResponsePart(item)).filter(Boolean).join('\n');
+    }
+    if (part.content && Array.isArray(part.content.parts)) {
+        return part.content.parts.map(item => extractTextFromAiResponsePart(item)).filter(Boolean).join('\n');
+    }
+    if (Array.isArray(part.parts)) {
+        return part.parts.map(item => extractTextFromAiResponsePart(item)).filter(Boolean).join('\n');
+    }
+    if (Array.isArray(part.candidates)) {
+        return part.candidates.map(item => extractTextFromAiResponsePart(item)).filter(Boolean).join('\n');
     }
 
     return '';
@@ -4685,11 +4696,17 @@ function extractTextFromAiResponsePart(part) {
 function extractReplyContentFromAiResponse(data) {
     const choice = data && Array.isArray(data.choices) ? data.choices[0] : null;
     const message = choice && choice.message ? choice.message : null;
+    const candidate0 = data && Array.isArray(data.candidates) ? data.candidates[0] : null;
 
     const candidates = [
         { source: 'choices[0].message.content', value: message ? message.content : null },
+        { source: 'choices[0].message.parts', value: message ? message.parts : null },
+        { source: 'choices[0].message.content.parts', value: message && message.content && typeof message.content === 'object' ? message.content.parts : null },
         { source: 'choices[0].text', value: choice ? choice.text : null },
         { source: 'choices[0].delta.content', value: choice && choice.delta ? choice.delta.content : null },
+        { source: 'choices[0].delta.parts', value: choice && choice.delta ? choice.delta.parts : null },
+        { source: 'candidates[0].content.parts', value: candidate0 && candidate0.content ? candidate0.content.parts : null },
+        { source: 'candidates[0].content', value: candidate0 ? candidate0.content : null },
         { source: 'output_text', value: data ? data.output_text : null },
         { source: 'output[0].content', value: data && Array.isArray(data.output) && data.output[0] ? data.output[0].content : null }
     ];
@@ -4708,6 +4725,517 @@ function extractReplyContentFromAiResponse(data) {
         content: '',
         source: null
     };
+}
+
+function extractLatestUserTextFromPromptMessages(messages) {
+    const safeMessages = Array.isArray(messages) ? messages : [];
+    for (let index = safeMessages.length - 1; index >= 0; index -= 1) {
+        const message = safeMessages[index];
+        if (!message || message.role !== 'user') continue;
+        const text = extractTextFromAiResponsePart(message.content).trim();
+        if (text) return text;
+    }
+    return '';
+}
+
+function buildMcpFollowupFocusInstruction(messages) {
+    const latestUserText = extractLatestUserTextFromPromptMessages(messages);
+    if (!latestUserText) {
+        return '你现在要基于刚刚的工具结果继续回答用户当前这一轮的问题，不要回到更早一轮的话题，也不要重复已经完成过的动作。';
+    }
+    return [
+        '你现在必须优先回答用户当前这一轮最后一条消息，不要回复更早一轮的请求，也不要重复上一轮已经说过的话。',
+        `用户最后一条消息是：${JSON.stringify(latestUserText)}`,
+        '请把刚刚的工具结果当作回答这条消息的依据，直接自然作答。',
+        '如果用户是在追问、确认、核对结果，就直接围绕这次追问回答，不要再复述之前“已经帮你做了什么”。'
+    ].join('\n');
+}
+
+function getPrimaryAiResponseMessage(data) {
+    const choice = data && Array.isArray(data.choices) ? data.choices[0] : null;
+    return choice && choice.message && typeof choice.message === 'object'
+        ? choice.message
+        : null;
+}
+
+function normalizeLegacyFunctionCallToToolCall(functionCall, index = 0) {
+    if (!functionCall || typeof functionCall !== 'object') return null;
+    const name = String(functionCall.name || functionCall.functionName || '').trim();
+    if (!name) return null;
+    const args = functionCall.arguments !== undefined
+        ? functionCall.arguments
+        : (functionCall.args !== undefined ? functionCall.args : {});
+    return {
+        id: `legacy_function_call_${index + 1}`,
+        type: 'function',
+        function: {
+            name,
+            arguments: typeof args === 'string' ? args : JSON.stringify(args || {})
+        }
+    };
+}
+
+function collectFunctionCallPartsFromContent(value, results = []) {
+    if (value === null || value === undefined) return results;
+    if (Array.isArray(value)) {
+        value.forEach((item) => collectFunctionCallPartsFromContent(item, results));
+        return results;
+    }
+    if (typeof value !== 'object') return results;
+
+    const directFunctionCall = value.functionCall || value.function_call;
+    if (directFunctionCall && typeof directFunctionCall === 'object') {
+        const normalized = normalizeLegacyFunctionCallToToolCall(directFunctionCall, results.length);
+        if (normalized) results.push(normalized);
+    }
+
+    if (value.content) collectFunctionCallPartsFromContent(value.content, results);
+    if (value.parts) collectFunctionCallPartsFromContent(value.parts, results);
+    if (value.candidates) collectFunctionCallPartsFromContent(value.candidates, results);
+    if (value.message) collectFunctionCallPartsFromContent(value.message, results);
+    return results;
+}
+
+function extractToolCallsFromAiResponse(data) {
+    const message = getPrimaryAiResponseMessage(data);
+    if (Array.isArray(message && message.tool_calls) && message.tool_calls.length > 0) {
+        return message.tool_calls;
+    }
+    if (message && message.function_call && typeof message.function_call === 'object') {
+        const normalized = normalizeLegacyFunctionCallToToolCall(message.function_call, 0);
+        return normalized ? [normalized] : [];
+    }
+    const candidateCalls = collectFunctionCallPartsFromContent(data, []);
+    return candidateCalls;
+}
+
+function normalizeAssistantToolLoopMessage(message) {
+    const safeMessage = message && typeof message === 'object' ? message : {};
+    const normalized = {
+        role: 'assistant',
+        content: safeMessage.content == null ? '' : safeMessage.content
+    };
+    if (Array.isArray(safeMessage.tool_calls) && safeMessage.tool_calls.length > 0) {
+        normalized.tool_calls = safeMessage.tool_calls.map((toolCall, index) => {
+            const functionPayload = toolCall && toolCall.function && typeof toolCall.function === 'object'
+                ? toolCall.function
+                : {};
+            return {
+                id: String(toolCall && toolCall.id || `tool_call_${index + 1}`).trim() || `tool_call_${index + 1}`,
+                type: 'function',
+                function: {
+                    name: String(functionPayload.name || '').trim(),
+                    arguments: typeof functionPayload.arguments === 'string'
+                        ? functionPayload.arguments
+                        : JSON.stringify(functionPayload.arguments || {})
+                }
+            };
+        });
+    }
+    return normalized;
+}
+
+async function resolveAiToolCallsWithMcp(initialData, requestMessages, requestCompletion, context = {}) {
+    const mcpBridge = window.MCPBridge;
+    const toolIndex = context && context.toolIndex && typeof context.toolIndex === 'object'
+        ? context.toolIndex
+        : null;
+    if (!mcpBridge || typeof mcpBridge.executeChatToolCall !== 'function' || !toolIndex) {
+        return {
+            data: initialData,
+            requestMessages,
+            usedTools: []
+        };
+    }
+
+    let data = initialData;
+    const conversationMessages = Array.isArray(requestMessages)
+        ? requestMessages.map((message) => cloneAiPromptHistoryMessage(message))
+        : [];
+    const usedTools = [];
+
+    for (let round = 0; round < 4; round++) {
+        const toolCalls = extractToolCallsFromAiResponse(data);
+        if (!toolCalls.length) {
+            break;
+        }
+
+        const aiMessage = getPrimaryAiResponseMessage(data);
+        conversationMessages.push(normalizeAssistantToolLoopMessage(aiMessage));
+
+        for (const toolCall of toolCalls) {
+            const result = await mcpBridge.executeChatToolCall(toolCall, toolIndex);
+            const functionPayload = toolCall && toolCall.function && typeof toolCall.function === 'object'
+                ? toolCall.function
+                : {};
+            const toolCallId = String(toolCall && toolCall.id || '').trim() || `tool_call_${usedTools.length + 1}`;
+            const toolName = String(functionPayload.name || '').trim() || 'mcp_tool';
+            usedTools.push({
+                ok: !!(result && result.ok),
+                name: toolName,
+                meta: result && result.meta ? result.meta : null
+            });
+            conversationMessages.push({
+                role: 'tool',
+                tool_call_id: toolCallId,
+                name: toolName,
+                content: String(result && result.content || 'MCP tool returned no content.')
+            });
+        }
+
+        const focusedFollowupMessages = [
+            ...conversationMessages,
+            {
+                role: 'system',
+                content: buildMcpFollowupFocusInstruction(requestMessages)
+            }
+        ];
+        data = await requestCompletion(focusedFollowupMessages);
+    }
+
+    return {
+        data,
+        requestMessages: conversationMessages,
+        usedTools
+    };
+}
+
+function normalizeManualMcpToolLookupKey(value) {
+    return String(value || '')
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9_]+/g, '_')
+        .replace(/^_+|_+$/g, '');
+}
+
+function buildManualMcpToolLookup(toolIndex) {
+    const lookup = Object.create(null);
+    if (!toolIndex || typeof toolIndex !== 'object') {
+        return lookup;
+    }
+
+    Object.entries(toolIndex).forEach(([openAiName, meta]) => {
+        const safeMeta = meta && typeof meta === 'object' ? meta : null;
+        if (!safeMeta) return;
+        const aliasCandidates = [
+            openAiName,
+            safeMeta.toolName,
+            safeMeta.serverName && safeMeta.toolName ? `${safeMeta.serverName}_${safeMeta.toolName}` : '',
+            safeMeta.serverName && safeMeta.toolName ? `${safeMeta.serverName}/${safeMeta.toolName}` : ''
+        ];
+        aliasCandidates.forEach((alias) => {
+            const key = normalizeManualMcpToolLookupKey(alias);
+            if (!key) return;
+            lookup[key] = {
+                openAiName,
+                meta: safeMeta
+            };
+        });
+    });
+
+    return lookup;
+}
+
+function normalizeManualMcpToolArguments(rawArgs, sourceObject = null) {
+    if (typeof rawArgs === 'string' && rawArgs.trim()) {
+        try {
+            rawArgs = JSON.parse(repairPotentialJsonString(rawArgs));
+        } catch (error) {
+            rawArgs = { _raw: rawArgs };
+        }
+    }
+
+    if (rawArgs && typeof rawArgs === 'object' && !Array.isArray(rawArgs)) {
+        return rawArgs;
+    }
+
+    const fallback = {};
+    const source = sourceObject && typeof sourceObject === 'object' && !Array.isArray(sourceObject)
+        ? sourceObject
+        : null;
+    if (!source) return fallback;
+
+    const reservedKeys = new Set([
+        'type',
+        'mcp_tool',
+        'mcpTool',
+        'tool',
+        'tool_name',
+        'toolName',
+        'name',
+        'function',
+        'arguments',
+        'args',
+        'parameters',
+        'input',
+        'payload'
+    ]);
+
+    Object.keys(source).forEach((key) => {
+        if (reservedKeys.has(key)) return;
+        fallback[key] = source[key];
+    });
+
+    return fallback;
+}
+
+function tryNormalizeManualMcpToolDirective(candidate, lookup) {
+    if (!candidate) return null;
+
+    const tryExtractFromObject = (value) => {
+        if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+
+        const functionPayload = value.function && typeof value.function === 'object'
+            ? value.function
+            : null;
+        const toolNameCandidates = [
+            value.mcp_tool,
+            value.mcpTool,
+            value.tool,
+            value.tool_name,
+            value.toolName,
+            value.name,
+            functionPayload && functionPayload.name
+        ];
+
+        let matched = null;
+        for (const candidateName of toolNameCandidates) {
+            const key = normalizeManualMcpToolLookupKey(candidateName);
+            if (!key || !lookup[key]) continue;
+            matched = lookup[key];
+            break;
+        }
+        if (!matched) return null;
+
+        const rawArgs = functionPayload && functionPayload.arguments !== undefined
+            ? functionPayload.arguments
+            : (value.arguments !== undefined
+                ? value.arguments
+                : (value.args !== undefined
+                    ? value.args
+                    : (value.parameters !== undefined
+                        ? value.parameters
+                        : (value.input !== undefined ? value.input : value.payload))));
+
+        return {
+            openAiName: matched.openAiName,
+            meta: matched.meta,
+            arguments: normalizeManualMcpToolArguments(rawArgs, value),
+            rawDirective: value
+        };
+    };
+
+    const parsed = candidate && typeof candidate === 'object' && !Array.isArray(candidate)
+        ? candidate
+        : null;
+    if (parsed) {
+        return tryExtractFromObject(parsed);
+    }
+
+    const text = String(candidate || '').trim();
+    if (!text) return null;
+
+    const parseTargets = [text, stripMarkdownCodeFences(text), repairPotentialJsonString(text)];
+    const jsonBlocks = extractJsonBlocksFromText(text);
+    if (Array.isArray(jsonBlocks) && jsonBlocks.length > 0) {
+        parseTargets.push(...jsonBlocks);
+    }
+
+    for (const current of parseTargets) {
+        const normalizedCurrent = String(current || '').trim();
+        if (!normalizedCurrent) continue;
+        try {
+            const value = JSON.parse(normalizedCurrent);
+            if (Array.isArray(value)) {
+                for (const item of value) {
+                    const matched = tryExtractFromObject(item);
+                    if (matched) return matched;
+                }
+                continue;
+            }
+            const matched = tryExtractFromObject(value);
+            if (matched) return matched;
+        } catch (error) {}
+    }
+
+    return null;
+}
+
+function buildManualMcpToolFallbackReply(toolDirective, toolResult) {
+    const toolName = String(toolDirective && toolDirective.meta && toolDirective.meta.toolName || 'MCP tool').trim() || 'MCP tool';
+    const serverName = String(toolDirective && toolDirective.meta && toolDirective.meta.serverName || 'MCP').trim() || 'MCP';
+    const text = String(toolResult && toolResult.text || '').trim();
+    if (!text) {
+        return `我已经调用了 ${serverName} 的 ${toolName}，不过它这次没有返回可显示的内容。`;
+    }
+    return `我已经调用了 ${serverName} 的 ${toolName}，结果如下：\n${text}`;
+}
+
+function formatMcpToolNoticeName(item) {
+    const serverName = String(item && item.meta && item.meta.serverName || '').trim();
+    const toolName = String(item && item.meta && item.meta.toolName || item && item.name || '').trim();
+    if (serverName && toolName) return `${serverName} / ${toolName}`;
+    return toolName || serverName || 'MCP tool';
+}
+
+function buildMcpToolSystemNoticeText(usedTools) {
+    const safeUsedTools = Array.isArray(usedTools) ? usedTools.filter(Boolean) : [];
+    if (!safeUsedTools.length) return '';
+
+    const successNames = safeUsedTools.filter(item => item.ok).map(formatMcpToolNoticeName);
+    const failedNames = safeUsedTools.filter(item => !item.ok).map(formatMcpToolNoticeName);
+    const successText = successNames.length > 0 ? successNames.join('、') : '';
+    const failedText = failedNames.length > 0 ? failedNames.join('、') : '';
+
+    if (successText && failedText) {
+        return `调用了 MCP 工具：${successText}；执行失败：${failedText}`;
+    }
+    if (successText) {
+        return `调用了 MCP 工具：${successText}`;
+    }
+    if (failedText) {
+        return `尝试调用 MCP 工具，但执行失败：${failedText}`;
+    }
+    return '';
+}
+
+function appendMcpToolSystemNotice(contactId, usedTools) {
+    const noticeText = buildMcpToolSystemNoticeText(usedTools);
+    if (!noticeText || typeof window.sendMessage !== 'function') return null;
+    return window.sendMessage(`[系统消息]: ${noticeText}`, false, 'text', null, contactId, {
+        ignoreReplyingState: true,
+        bypassWechatBlock: true,
+        showNotification: false
+    });
+}
+
+async function executeManualMcpToolDirective(toolDirective, requestMessages, requestCompletion) {
+    const mcpBridge = window.MCPBridge;
+    if (!toolDirective || !toolDirective.meta || !mcpBridge || typeof mcpBridge.callTool !== 'function') {
+        return {
+            data: null,
+            requestMessages,
+            usedTools: []
+        };
+    }
+
+    const toolResult = await mcpBridge.callTool(
+        toolDirective.meta.serverId,
+        toolDirective.meta.toolName,
+        toolDirective.arguments
+    );
+    const conversationMessages = Array.isArray(requestMessages)
+        ? requestMessages.map((message) => cloneAiPromptHistoryMessage(message))
+        : [];
+    conversationMessages.push({
+        role: 'assistant',
+        content: JSON.stringify({
+            mcp_tool: toolDirective.openAiName,
+            arguments: toolDirective.arguments
+        })
+    });
+    conversationMessages.push({
+        role: 'system',
+        content:
+            `你上一条消息里的 JSON MCP 指令已经由系统执行完成。\n` +
+            `工具：${toolDirective.meta.serverName} / ${toolDirective.meta.toolName}\n` +
+            `参数：${JSON.stringify(toolDirective.arguments || {}, null, 2)}\n\n` +
+            `工具结果如下，请直接根据结果回复用户：\n${String(toolResult && toolResult.text || '').trim() || '（无返回内容）'}\n\n` +
+            `不要再输出 JSON，不要解释 MCP 协议，不要只重复工具名。\n\n` +
+            `${buildMcpFollowupFocusInstruction(requestMessages)}`
+    });
+
+    let finalData = null;
+    try {
+        finalData = await requestCompletion(conversationMessages, { disableTools: true });
+    } catch (followupError) {
+        console.warn('Manual MCP fallback follow-up completion failed.', followupError);
+        finalData = {
+            choices: [{
+                finish_reason: 'stop',
+                message: {
+                    role: 'assistant',
+                    content: buildManualMcpToolFallbackReply(toolDirective, toolResult)
+                }
+            }]
+        };
+    }
+
+    return {
+        data: finalData,
+        requestMessages: conversationMessages,
+        usedTools: [{
+            ok: true,
+            name: toolDirective.openAiName,
+            meta: toolDirective.meta,
+            manual: true
+        }]
+    };
+}
+
+async function resolveManualMcpToolDirective(initialData, requestMessages, requestCompletion, context = {}) {
+    const toolIndex = context && context.toolIndex && typeof context.toolIndex === 'object'
+        ? context.toolIndex
+        : null;
+    const mcpBridge = window.MCPBridge;
+    if (!toolIndex || !mcpBridge || typeof mcpBridge.callTool !== 'function' || typeof requestCompletion !== 'function') {
+        return {
+            data: initialData,
+            requestMessages,
+            usedTools: []
+        };
+    }
+
+    if (extractToolCallsFromAiResponse(initialData).length > 0) {
+        return {
+            data: initialData,
+            requestMessages,
+            usedTools: []
+        };
+    }
+
+    const replyInfo = extractReplyContentFromAiResponse(initialData);
+    const toolLookup = buildManualMcpToolLookup(toolIndex);
+    const toolDirective = tryNormalizeManualMcpToolDirective(replyInfo.content, toolLookup);
+    if (!toolDirective) {
+        return {
+            data: initialData,
+            requestMessages,
+            usedTools: []
+        };
+    }
+
+    console.log('[AI Debug] manual MCP tool directive detected', {
+        openAiName: toolDirective.openAiName,
+        serverName: toolDirective.meta && toolDirective.meta.serverName,
+        toolName: toolDirective.meta && toolDirective.meta.toolName,
+        arguments: toolDirective.arguments
+    });
+
+    try {
+        return await executeManualMcpToolDirective(toolDirective, requestMessages, requestCompletion);
+    } catch (toolError) {
+        const errorText = String(toolError && toolError.message || toolError || '未知错误');
+        console.warn('Manual MCP fallback tool call failed.', toolError);
+        return {
+            data: {
+                choices: [{
+                    finish_reason: 'stop',
+                    message: {
+                        role: 'assistant',
+                        content: `我本来准备调用 MCP 工具 ${toolDirective.meta.toolName}，但这次执行失败了：${errorText}`
+                    }
+                }]
+            },
+            requestMessages,
+            usedTools: [{
+                ok: false,
+                name: toolDirective.openAiName,
+                meta: toolDirective.meta,
+                manual: true
+            }]
+        };
+    }
 }
 
 function normalizeAiRequestImageUrl(url) {
@@ -6205,7 +6733,7 @@ async function generateAiReply(instruction = null, targetContactId = null, optio
     }
 
     try {
-        const messages = await window.buildAiPromptMessages(contactId, instruction, options);
+        let messages = await window.buildAiPromptMessages(contactId, instruction, options);
         if (!Array.isArray(messages) || messages.length === 0) {
             throw new Error('AI上下文为空，未能构建有效请求');
         }
@@ -6216,6 +6744,24 @@ async function generateAiReply(instruction = null, targetContactId = null, optio
 
         const cleanKey = settings.key ? settings.key.replace(/[^\x00-\x7F]/g, "").trim() : '';
         await normalizeAiRequestMessageImages(messages);
+        let mcpTooling = { tools: [], toolIndex: {} };
+        if (window.MCPBridge && typeof window.MCPBridge.prepareChatTooling === 'function') {
+            try {
+                mcpTooling = await window.MCPBridge.prepareChatTooling(contactId, { autoDiscover: true });
+            } catch (mcpToolingError) {
+                console.warn('Failed to prepare MCP tooling for chat.', mcpToolingError);
+                mcpTooling = { tools: [], toolIndex: {} };
+            }
+        }
+        const mcpToolSummaries = window.MCPBridge && typeof window.MCPBridge.getToolSummariesForContact === 'function'
+            ? window.MCPBridge.getToolSummariesForContact(contactId)
+            : [];
+        if (Array.isArray(mcpTooling.tools) && mcpTooling.tools.length > 0) {
+            messages.push({
+                role: 'system',
+                content: '如需外部能力，优先直接调用可用工具，不要把工具名、参数或 JSON 指令当作聊天内容发给用户。工具执行后，再只围绕用户当前这一轮的问题自然回复。'
+            });
+        }
         const outgoingImageParts = messages.reduce((list, message, index) => {
             if (Array.isArray(message.content)) {
                 message.content.forEach(part => {
@@ -6241,6 +6787,18 @@ async function generateAiReply(instruction = null, targetContactId = null, optio
             fetchUrl,
             model: settings.model,
             messageCount: messages.length,
+            mcpToolCount: Array.isArray(mcpTooling.tools) ? mcpTooling.tools.length : 0,
+            mcpToolNames: Array.isArray(mcpTooling.tools)
+                ? mcpTooling.tools.map(tool => tool && tool.function && tool.function.name).filter(Boolean)
+                : [],
+            mcpToolCatalog: Array.isArray(mcpToolSummaries)
+                ? mcpToolSummaries.map((serverSummary) => ({
+                    serverName: String(serverSummary && serverSummary.serverName || '').trim(),
+                    toolNames: Array.isArray(serverSummary && serverSummary.tools)
+                        ? serverSummary.tools.map(tool => String(tool && tool.name || '').trim()).filter(Boolean)
+                        : []
+                }))
+                : [],
             outgoingImageUrlCount: outgoingImageParts.length,
             outgoingImages: outgoingImageParts,
             lastUserContentType: Array.isArray(lastUserMessage && lastUserMessage.content)
@@ -6252,46 +6810,90 @@ async function generateAiReply(instruction = null, targetContactId = null, optio
                     : { type: part && part.type ? part.type : typeof part, text: part && part.text ? String(part.text).slice(0, 120) : '' })
                 : String((lastUserMessage && lastUserMessage.content) || '').slice(0, 240)
         });
-        const requestController = typeof AbortController === 'function' ? new AbortController() : null;
-        const requestTimeout = requestController
-            ? setTimeout(() => {
-                try {
-                    requestController.abort();
-                } catch (abortError) {}
-            }, requestTimeoutMs)
-            : null;
-        let response = null;
+        const requestCompletion = async (requestMessages, completionOptions = {}) => {
+            const requestController = typeof AbortController === 'function' ? new AbortController() : null;
+            const requestTimeout = requestController
+                ? setTimeout(() => {
+                    try {
+                        requestController.abort();
+                    } catch (abortError) {}
+                }, requestTimeoutMs)
+                : null;
+            let response = null;
+            const requestBody = {
+                model: settings.model,
+                messages: requestMessages,
+                temperature: settings.temperature
+            };
+            const canUseMcpTools = !completionOptions.disableTools
+                && Array.isArray(mcpTooling.tools)
+                && mcpTooling.tools.length > 0;
+            if (canUseMcpTools) {
+                requestBody.tools = mcpTooling.tools;
+                requestBody.tool_choice = 'auto';
+            }
+            try {
+                response = await fetch(fetchUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${cleanKey}`
+                    },
+                    body: JSON.stringify(requestBody),
+                    signal: requestController ? requestController.signal : undefined
+                });
+            } catch (requestError) {
+                if (requestController && requestController.signal && requestController.signal.aborted) {
+                    throw new Error(`AI 请求超时（${Math.round(requestTimeoutMs / 1000)}秒），请重试`);
+                }
+                throw requestError;
+            } finally {
+                if (requestTimeout) {
+                    clearTimeout(requestTimeout);
+                }
+            }
+
+            if (!response.ok) {
+                throw new Error(`API Error: ${response.status}`);
+            }
+
+            return response.json();
+        };
+
+        let data = null;
+        let usedMcpToolingInRequest = Array.isArray(mcpTooling.tools) && mcpTooling.tools.length > 0;
         try {
-            response = await fetch(fetchUrl, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${cleanKey}`
-                },
-                body: JSON.stringify({
-                    model: settings.model,
-                    messages: messages,
-                    temperature: settings.temperature
-                }),
-                signal: requestController ? requestController.signal : undefined
-            });
-        } catch (requestError) {
-            if (requestController && requestController.signal && requestController.signal.aborted) {
-                throw new Error(`AI 请求超时（${Math.round(requestTimeoutMs / 1000)}秒），请重试`);
+            data = await requestCompletion(messages);
+        } catch (initialCompletionError) {
+            const shouldFallbackToPlainReply = usedMcpToolingInRequest
+                && /\bAPI Error:\s*(400|404|409|415|422|500|501)\b/i.test(String(initialCompletionError && initialCompletionError.message || ''));
+            if (!shouldFallbackToPlainReply) {
+                throw initialCompletionError;
             }
-            throw requestError;
-        } finally {
-            if (requestTimeout) {
-                clearTimeout(requestTimeout);
+            console.warn('AI completion with MCP tools failed, retrying without tools.', initialCompletionError);
+            usedMcpToolingInRequest = false;
+            if (typeof window.showChatToast === 'function') {
+                window.showChatToast('当前 AI 接口不稳定支持 tools，本轮已自动降级为普通回复', 2400);
             }
+            data = await requestCompletion(messages, { disableTools: true });
         }
-
-        if (!response.ok) {
-            throw new Error(`API Error: ${response.status}`);
-        }
-
-        const data = await response.json();
         console.log('AI API Response:', data);
+        console.log('[AI Debug] response shape', {
+            finishReason: data && data.choices && data.choices[0] ? data.choices[0].finish_reason : null,
+            hasPrimaryMessage: !!getPrimaryAiResponseMessage(data),
+            toolCallCount: extractToolCallsFromAiResponse(data).length,
+            primaryMessagePreview: (() => {
+                const primaryMessage = getPrimaryAiResponseMessage(data);
+                if (!primaryMessage || typeof primaryMessage !== 'object') return null;
+                return {
+                    role: primaryMessage.role || null,
+                    hasContent: primaryMessage.content !== undefined && primaryMessage.content !== null,
+                    contentType: Array.isArray(primaryMessage.content) ? 'array' : typeof primaryMessage.content,
+                    hasFunctionCall: !!primaryMessage.function_call,
+                    hasToolCalls: Array.isArray(primaryMessage.tool_calls) && primaryMessage.tool_calls.length > 0
+                };
+            })()
+        });
 
         if (data.error) {
             console.error('API Error Response:', data.error);
@@ -6303,6 +6905,51 @@ async function generateAiReply(instruction = null, targetContactId = null, optio
             throw new Error('API返回数据格式异常，请检查控制台日志');
         }
 
+        if (usedMcpToolingInRequest && Array.isArray(mcpTooling.tools) && mcpTooling.tools.length > 0) {
+            const toolResolution = await resolveAiToolCallsWithMcp(
+                data,
+                messages,
+                requestCompletion,
+                { toolIndex: mcpTooling.toolIndex }
+            );
+            data = toolResolution.data;
+            messages = toolResolution.requestMessages;
+            if (Array.isArray(toolResolution.usedTools) && toolResolution.usedTools.length > 0) {
+                appendMcpToolSystemNotice(contactId, toolResolution.usedTools);
+            }
+            if (Array.isArray(toolResolution.usedTools) && toolResolution.usedTools.length > 0 && typeof window.showChatToast === 'function') {
+                const toolNames = toolResolution.usedTools
+                    .map((item) => item && item.meta && item.meta.toolName ? item.meta.toolName : (item && item.name || 'tool'))
+                    .slice(0, 3)
+                    .join('、');
+                window.showChatToast(`AI 已调用 MCP 工具：${toolNames}`, 2200);
+            }
+            if (!data || !data.choices || !data.choices.length) {
+                throw new Error('工具调用后未收到有效 AI 回复');
+            }
+        }
+
+        if (Array.isArray(mcpTooling.tools) && mcpTooling.tools.length > 0) {
+            const manualToolResolution = await resolveManualMcpToolDirective(
+                data,
+                messages,
+                requestCompletion,
+                { toolIndex: mcpTooling.toolIndex }
+            );
+            data = manualToolResolution.data;
+            messages = manualToolResolution.requestMessages;
+            if (Array.isArray(manualToolResolution.usedTools) && manualToolResolution.usedTools.length > 0) {
+                appendMcpToolSystemNotice(contactId, manualToolResolution.usedTools);
+            }
+            if (Array.isArray(manualToolResolution.usedTools) && manualToolResolution.usedTools.length > 0 && typeof window.showChatToast === 'function') {
+                const toolNames = manualToolResolution.usedTools
+                    .map((item) => item && item.meta && item.meta.toolName ? item.meta.toolName : (item && item.name || 'tool'))
+                    .slice(0, 3)
+                    .join('、');
+                window.showChatToast(`AI 已通过后备通道调用 MCP 工具：${toolNames}`, 2400);
+            }
+        }
+
         const extractedReply = extractReplyContentFromAiResponse(data);
         console.log('[AI Debug] extracted reply content', {
             source: extractedReply.source,
@@ -6310,7 +6957,51 @@ async function generateAiReply(instruction = null, targetContactId = null, optio
             preview: extractedReply.content.slice(0, 240)
         });
 
-        if (!extractedReply.content) {
+        let displayableReplyContent = extractedReply.content;
+        if (!displayableReplyContent && usedMcpToolingInRequest) {
+            try {
+                const forcedPlainData = await requestCompletion(messages, { disableTools: true });
+                const forcedPlainReply = extractReplyContentFromAiResponse(forcedPlainData);
+                if (forcedPlainReply.content) {
+                    data = forcedPlainData;
+                    displayableReplyContent = forcedPlainReply.content;
+                }
+            } catch (forcePlainError) {
+                console.warn('Fallback plain-text completion after MCP tool round failed.', forcePlainError);
+            }
+        }
+
+        if (displayableReplyContent && Array.isArray(mcpTooling.tools) && mcpTooling.tools.length > 0) {
+            const rescueLookup = buildManualMcpToolLookup(mcpTooling.toolIndex);
+            const rescueDirective = tryNormalizeManualMcpToolDirective(displayableReplyContent, rescueLookup);
+            if (rescueDirective) {
+                console.warn('[AI Debug] late manual MCP directive rescue triggered', {
+                    openAiName: rescueDirective.openAiName,
+                    serverName: rescueDirective.meta && rescueDirective.meta.serverName,
+                    toolName: rescueDirective.meta && rescueDirective.meta.toolName
+                });
+                try {
+                    const rescuedResolution = await executeManualMcpToolDirective(
+                        rescueDirective,
+                        messages,
+                        requestCompletion
+                    );
+                    data = rescuedResolution.data || data;
+                    messages = rescuedResolution.requestMessages || messages;
+                    if (Array.isArray(rescuedResolution.usedTools) && rescuedResolution.usedTools.length > 0) {
+                        appendMcpToolSystemNotice(contactId, rescuedResolution.usedTools);
+                    }
+                    const rescuedReply = extractReplyContentFromAiResponse(data);
+                    if (rescuedReply && rescuedReply.content) {
+                        displayableReplyContent = rescuedReply.content;
+                    }
+                } catch (lateRescueError) {
+                    console.warn('Late manual MCP directive rescue failed.', lateRescueError);
+                }
+            }
+        }
+
+        if (!displayableReplyContent) {
             console.warn('AI response contained no displayable content:', data);
             if (typeof window.showChatToast === 'function') {
                 window.showChatToast('这次 AI 没有返回可显示的回复，请重试', 2500);
@@ -6318,7 +7009,7 @@ async function generateAiReply(instruction = null, targetContactId = null, optio
             return false;
         }
 
-        let replyContent = extractedReply.content;
+        let replyContent = displayableReplyContent;
 
         replyContent = replyContent.replace(/<thinking>[\s\S]*?<\/thinking>/g, '')
                                    .replace(/<think>[\s\S]*?<\/think>/g, '')

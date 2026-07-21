@@ -581,6 +581,11 @@ const state = {
         lastFetchedAt: 0,
         cacheTtlMs: 60000
     },
+    mcp: {
+        servers: [],
+        activeServerId: '',
+        logs: []
+    },
     wallet: {
         balance: 0.00,
         transactions: [] // { id, type: 'income'|'expense', amount, title, time, relatedId }
@@ -1690,7 +1695,8 @@ const knownApps = {
     'lookus-app': { name: 'LookUS', icon: 'fas fa-eye', color: '#FF2D55' },
     'preset-app': { name: '预设', icon: 'fas fa-sliders-h', color: '#111111' },
     'music-app': { name: 'Music', icon: 'fas fa-music', color: '#FF2D55' },
-    'studio-app': { name: 'Studio', icon: 'fas fa-pen-ruler', color: '#8B5CF6' }
+    'studio-app': { name: 'Studio', icon: 'fas fa-pen-ruler', color: '#8B5CF6' },
+    'mcp-app': { name: 'MCP', icon: 'fas fa-plug', color: '#9FB7CA' }
 };
 
 function compressImage(file, maxWidth = 1024, quality = 0.7, options = {}) {
@@ -2369,6 +2375,9 @@ function handleAppClick(appId, appName) {
         if (appId === 'bank-app' && window.initBankAppView) {
             window.initBankAppView();
         }
+        if (appId === 'mcp-app' && typeof window.renderMcpApp === 'function') {
+            window.renderMcpApp();
+        }
     } else {
         alert((appName || 'App') + ' is under development...');
     }
@@ -2601,6 +2610,13 @@ async function loadConfig() {
                 lastFetchedAt: 0,
                 cacheTtlMs: 60000
             }, state.deviceUsageSync || {});
+            state.mcp = Object.assign({
+                servers: [],
+                activeServerId: '',
+                logs: []
+            }, state.mcp || {});
+            if (!Array.isArray(state.mcp.servers)) state.mcp.servers = [];
+            if (!Array.isArray(state.mcp.logs)) state.mcp.logs = [];
             if (!state.aiSettings2) state.aiSettings2 = { url: '', key: '', model: '', temperature: 0.7 };
             if (!state.aiPresets2) state.aiPresets2 = [];
             if (!state.whisperSettings) state.whisperSettings = { url: '', key: '', model: 'whisper-1' };
