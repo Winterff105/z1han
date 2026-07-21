@@ -756,14 +756,82 @@
 
     function sanitizeSchema(rawSchema) {
         if (!rawSchema || typeof rawSchema !== 'object' || Array.isArray(rawSchema)) {
-            return { type: 'object', properties: {}, additionalProperties: true };
+            return { type: 'object', properties: {} };
         }
-        const next = { ...rawSchema };
-        if (!next.type) next.type = 'object';
-        if (next.type === 'object' && (!next.properties || typeof next.properties !== 'object' || Array.isArray(next.properties))) {
-            next.properties = {};
+
+        const ALLOWED_KEYS = new Set([
+            'type',
+            'description',
+            'properties',
+            'required',
+            'items',
+            'enum',
+            'nullable'
+        ]);
+
+        function normalizeType(typeValue) {
+            const normalized = String(typeValue || '').trim().toLowerCase();
+            if (!normalized) return 'object';
+            if (['string', 'number', 'integer', 'boolean', 'array', 'object'].includes(normalized)) {
+                return normalized;
+            }
+            return 'string';
         }
-        return next;
+
+        function sanitizeNode(node, fallbackType = 'object') {
+            if (!node || typeof node !== 'object' || Array.isArray(node)) {
+                return { type: fallbackType };
+            }
+
+            const sanitized = {};
+            const nodeType = normalizeType(node.type || fallbackType);
+            sanitized.type = nodeType;
+
+            if (typeof node.description === 'string' && node.description.trim()) {
+                sanitized.description = node.description.trim();
+            }
+
+            if (Array.isArray(node.enum) && node.enum.length > 0) {
+                sanitized.enum = node.enum.filter((item) => (
+                    ['string', 'number', 'boolean'].includes(typeof item) || item === null
+                ));
+            }
+
+            if (node.nullable === true) {
+                sanitized.nullable = true;
+            }
+
+            if (nodeType === 'object') {
+                const rawProperties = node.properties && typeof node.properties === 'object' && !Array.isArray(node.properties)
+                    ? node.properties
+                    : {};
+                const nextProperties = {};
+                Object.keys(rawProperties).forEach((key) => {
+                    nextProperties[key] = sanitizeNode(rawProperties[key], 'string');
+                });
+                sanitized.properties = nextProperties;
+
+                if (Array.isArray(node.required) && node.required.length > 0) {
+                    sanitized.required = node.required
+                        .map((item) => String(item || '').trim())
+                        .filter(Boolean)
+                        .filter((item, index, list) => list.indexOf(item) === index)
+                        .filter((item) => Object.prototype.hasOwnProperty.call(nextProperties, item));
+                }
+            } else if (nodeType === 'array') {
+                sanitized.items = sanitizeNode(node.items, 'string');
+            }
+
+            // Keep only the small schema subset most gateways can translate safely.
+            return Object.keys(sanitized).reduce((result, key) => {
+                if (ALLOWED_KEYS.has(key)) {
+                    result[key] = sanitized[key];
+                }
+                return result;
+            }, {});
+        }
+
+        return sanitizeNode(rawSchema, 'object');
     }
 
     function buildFetchHeaders(server, sessionId) {

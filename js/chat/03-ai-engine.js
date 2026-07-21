@@ -4751,6 +4751,28 @@ function buildMcpFollowupFocusInstruction(messages) {
     ].join('\n');
 }
 
+function buildMcpToolCatalogSystemMessage(serverSummaries) {
+    if (!Array.isArray(serverSummaries) || serverSummaries.length === 0) return '';
+    const lines = [];
+    serverSummaries.forEach((serverSummary) => {
+        const serverName = String(serverSummary && serverSummary.serverName || '').trim() || 'MCP';
+        const tools = Array.isArray(serverSummary && serverSummary.tools) ? serverSummary.tools : [];
+        tools.forEach((tool) => {
+            const toolName = String(tool && tool.name || '').trim();
+            if (!toolName) return;
+            const description = String(tool && tool.description || '').trim();
+            lines.push(`- ${serverName} / ${toolName}${description ? `：${description}` : ''}`);
+        });
+    });
+    if (lines.length === 0) return '';
+    return [
+        '当前这轮聊天可用的 MCP 工具清单如下，只有这些工具是真实可调用的：',
+        ...lines,
+        '如果用户问你“你有哪些 tool / 工具”，直接根据这份清单回答。',
+        '如果用户需求命中这些工具，优先直接调用，不要说自己看不到工具入口、没收到工具，或让用户改成手动下指令。'
+    ].join('\n');
+}
+
 function getPrimaryAiResponseMessage(data) {
     const choice = data && Array.isArray(data.choices) ? data.choices[0] : null;
     return choice && choice.message && typeof choice.message === 'object'
@@ -6770,12 +6792,7 @@ async function generateAiReply(instruction = null, targetContactId = null, optio
         const mcpToolSummaries = window.MCPBridge && typeof window.MCPBridge.getToolSummariesForContact === 'function'
             ? window.MCPBridge.getToolSummariesForContact(contactId, { userText: recentUserTextForMcp })
             : [];
-        if (Array.isArray(mcpTooling.tools) && mcpTooling.tools.length > 0) {
-            messages.push({
-                role: 'system',
-                content: '如需外部能力，优先直接调用可用工具，不要把工具名、参数或 JSON 指令当作聊天内容发给用户。工具执行后，再只围绕用户当前这一轮的问题自然回复。'
-            });
-        }
+        const mcpToolCatalogSystemMessage = buildMcpToolCatalogSystemMessage(mcpToolSummaries);
         const outgoingImageParts = messages.reduce((list, message, index) => {
             if (Array.isArray(message.content)) {
                 message.content.forEach(part => {
@@ -6834,14 +6851,29 @@ async function generateAiReply(instruction = null, targetContactId = null, optio
                 }, requestTimeoutMs)
                 : null;
             let response = null;
-            const requestBody = {
-                model: settings.model,
-                messages: requestMessages,
-                temperature: settings.temperature
-            };
             const canUseMcpTools = !completionOptions.disableTools
                 && Array.isArray(mcpTooling.tools)
                 && mcpTooling.tools.length > 0;
+            const requestMessagesWithToolContext = canUseMcpTools
+                ? [
+                    ...requestMessages,
+                    {
+                        role: 'system',
+                        content: '如需外部能力，优先直接调用可用工具，不要把工具名、参数或 JSON 指令当作聊天内容发给用户。工具执行后，再只围绕用户当前这一轮的问题自然回复。'
+                    },
+                    ...(mcpToolCatalogSystemMessage
+                        ? [{
+                            role: 'system',
+                            content: mcpToolCatalogSystemMessage
+                        }]
+                        : [])
+                ]
+                : requestMessages;
+            const requestBody = {
+                model: settings.model,
+                messages: requestMessagesWithToolContext,
+                temperature: settings.temperature
+            };
             if (canUseMcpTools) {
                 requestBody.tools = mcpTooling.tools;
                 requestBody.tool_choice = 'auto';
@@ -6867,11 +6899,31 @@ async function generateAiReply(instruction = null, targetContactId = null, optio
                 }
             }
 
-            if (!response.ok) {
-                throw new Error(`API Error: ${response.status}`);
+            const rawResponseText = await response.text().catch(() => '');
+            let parsedResponse = null;
+            if (rawResponseText && rawResponseText.trim()) {
+                try {
+                    parsedResponse = JSON.parse(rawResponseText);
+                } catch (parseError) {}
             }
 
-            return response.json();
+            if (!response.ok) {
+                const compactErrorText = rawResponseText
+                    ? String(rawResponseText).replace(/\s+/g, ' ').trim().slice(0, 500)
+                    : '';
+                console.warn('[AI Debug] completion HTTP error', {
+                    status: response.status,
+                    statusText: response.statusText || '',
+                    usedTools: canUseMcpTools,
+                    toolCount: Array.isArray(mcpTooling.tools) ? mcpTooling.tools.length : 0,
+                    responseText: compactErrorText || null
+                });
+                throw new Error(compactErrorText
+                    ? `API Error: ${response.status} | ${compactErrorText}`
+                    : `API Error: ${response.status}`);
+            }
+
+            return parsedResponse || {};
         };
 
         let data = null;
