@@ -4831,14 +4831,17 @@ function extractToolCallsFromAiResponse(data) {
     return candidateCalls;
 }
 
-function normalizeAssistantToolLoopMessage(message) {
+function normalizeAssistantToolLoopMessage(message, fallbackToolCalls = []) {
     const safeMessage = message && typeof message === 'object' ? message : {};
     const normalized = {
         role: 'assistant',
         content: safeMessage.content == null ? '' : safeMessage.content
     };
-    if (Array.isArray(safeMessage.tool_calls) && safeMessage.tool_calls.length > 0) {
-        normalized.tool_calls = safeMessage.tool_calls.map((toolCall, index) => {
+    const sourceToolCalls = Array.isArray(safeMessage.tool_calls) && safeMessage.tool_calls.length > 0
+        ? safeMessage.tool_calls
+        : (Array.isArray(fallbackToolCalls) ? fallbackToolCalls : []);
+    if (sourceToolCalls.length > 0) {
+        normalized.tool_calls = sourceToolCalls.map((toolCall, index) => {
             const functionPayload = toolCall && toolCall.function && typeof toolCall.function === 'object'
                 ? toolCall.function
                 : {};
@@ -4871,10 +4874,11 @@ async function resolveAiToolCallsWithMcp(initialData, requestMessages, requestCo
     }
 
     let data = initialData;
-    const conversationMessages = Array.isArray(requestMessages)
+    let conversationMessages = Array.isArray(requestMessages)
         ? requestMessages.map((message) => cloneAiPromptHistoryMessage(message))
         : [];
     const usedTools = [];
+    const executedToolResults = Object.create(null);
 
     for (let round = 0; round < 4; round++) {
         const toolCalls = extractToolCallsFromAiResponse(data);
@@ -4883,20 +4887,33 @@ async function resolveAiToolCallsWithMcp(initialData, requestMessages, requestCo
         }
 
         const aiMessage = getPrimaryAiResponseMessage(data);
-        conversationMessages.push(normalizeAssistantToolLoopMessage(aiMessage));
+        conversationMessages.push(normalizeAssistantToolLoopMessage(aiMessage, toolCalls));
 
         for (const toolCall of toolCalls) {
-            const result = await mcpBridge.executeChatToolCall(toolCall, toolIndex);
             const functionPayload = toolCall && toolCall.function && typeof toolCall.function === 'object'
                 ? toolCall.function
                 : {};
             const toolCallId = String(toolCall && toolCall.id || '').trim() || `tool_call_${usedTools.length + 1}`;
             const toolName = String(functionPayload.name || '').trim() || 'mcp_tool';
-            usedTools.push({
-                ok: !!(result && result.ok),
-                name: toolName,
-                meta: result && result.meta ? result.meta : null
-            });
+            const rawArguments = typeof functionPayload.arguments === 'string'
+                ? functionPayload.arguments.trim()
+                : JSON.stringify(functionPayload.arguments || {});
+            const executionKey = `${toolName}:${rawArguments}`;
+            let result = executedToolResults[executionKey];
+            if (!result) {
+                result = await mcpBridge.executeChatToolCall(toolCall, toolIndex);
+                executedToolResults[executionKey] = result;
+                usedTools.push({
+                    ok: !!(result && result.ok),
+                    name: toolName,
+                    meta: result && result.meta ? result.meta : null
+                });
+            } else {
+                console.warn('[AI Debug] reused MCP result for a duplicate tool request', {
+                    toolName,
+                    toolCallId
+                });
+            }
             conversationMessages.push({
                 role: 'tool',
                 tool_call_id: toolCallId,
@@ -4913,6 +4930,23 @@ async function resolveAiToolCallsWithMcp(initialData, requestMessages, requestCo
             }
         ];
         data = await requestCompletion(focusedFollowupMessages);
+    }
+
+    if (extractToolCallsFromAiResponse(data).length > 0) {
+        conversationMessages = [
+            ...conversationMessages,
+            {
+                role: 'system',
+                content:
+                    '已达到本轮 MCP 调用上限。不要再调用工具；请只基于已经返回的工具结果直接自然地回答用户。' +
+                    `\n\n${buildMcpFollowupFocusInstruction(requestMessages)}`
+            }
+        ];
+        try {
+            data = await requestCompletion(conversationMessages, { disableTools: true });
+        } catch (error) {
+            console.warn('MCP tool loop final reply request failed.', error);
+        }
     }
 
     return {

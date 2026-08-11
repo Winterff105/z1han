@@ -3,12 +3,15 @@
     const STORAGE_KEY = 'mcp_app_state_v2';
     const MAX_LOGS = 40;
     const MCP_PROTOCOL_VERSION = '2024-11-05';
+    const MCP_REQUEST_TIMEOUT_MS = 30000;
+    const MAX_TOOL_RESULT_CHARS = 16000;
 
     const runtime = {
         statusTone: 'idle',
         statusText: '未配置',
         statusHint: '先创建一个 MCP 节点，再绑定到联系人。',
-        sessions: Object.create(null)
+        sessions: Object.create(null),
+        sessionPromises: Object.create(null)
     };
 
     const $ = (id) => document.getElementById(id);
@@ -615,16 +618,23 @@
         const currentId = String(getAppState().activeServerId || '').trim();
         const existing = currentId ? getServerById(currentId) : null;
         const nextId = existing ? existing.id : createId();
+        const connectionChanged = !!existing && ['transport', 'endpoint', 'command', 'args', 'token'].some((key) => (
+            String(existing[key] || '') !== String(form[key] || '')
+        ));
+        if (connectionChanged) {
+            delete runtime.sessions[nextId];
+            delete runtime.sessionPromises[nextId];
+        }
         const payload = normalizeServer({
             ...existing,
             ...form,
             id: nextId,
             enabled: options.forceEnabled === true ? true : form.enabled,
             boundContactIds: existing ? existing.boundContactIds : [],
-            tools: existing ? existing.tools : [],
-            lastToolSyncAt: existing ? existing.lastToolSyncAt : 0,
-            lastToolSyncError: existing ? existing.lastToolSyncError : '',
-            lastHealth: existing ? existing.lastHealth : '',
+            tools: existing && !connectionChanged ? existing.tools : [],
+            lastToolSyncAt: existing && !connectionChanged ? existing.lastToolSyncAt : 0,
+            lastToolSyncError: existing && !connectionChanged ? existing.lastToolSyncError : '',
+            lastHealth: existing && !connectionChanged ? existing.lastHealth : '',
             lastConnectedAt: existing ? existing.lastConnectedAt : 0,
             lastUsedAt: existing ? existing.lastUsedAt : 0,
             updatedAt: Date.now()
@@ -683,6 +693,8 @@
             enabled: false,
             lastHealth: 'disabled'
         }));
+        delete runtime.sessions[activeServer.id];
+        delete runtime.sessionPromises[activeServer.id];
         persistState();
         renderServers();
         renderPreview();
@@ -897,49 +909,62 @@
             payload.id = createRpcId();
         }
 
-        const response = await fetch(server.endpoint, {
-            method: 'POST',
-            headers: buildFetchHeaders(server, session.sessionId),
-            body: JSON.stringify(payload)
-        });
+        const controller = typeof AbortController === 'function' ? new AbortController() : null;
+        const timeout = controller
+            ? setTimeout(() => controller.abort(), MCP_REQUEST_TIMEOUT_MS)
+            : null;
+        try {
+            const response = await fetch(server.endpoint, {
+                method: 'POST',
+                headers: buildFetchHeaders(server, session.sessionId),
+                body: JSON.stringify(payload),
+                signal: controller ? controller.signal : undefined
+            });
+            const returnedSessionId = response.headers.get('mcp-session-id') || response.headers.get('MCP-Session-Id') || session.sessionId || '';
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}`);
+            }
 
-        const returnedSessionId = response.headers.get('mcp-session-id') || response.headers.get('MCP-Session-Id') || session.sessionId || '';
-        if (!response.ok) {
-            throw new Error(`HTTP ${response.status}`);
-        }
+            if (options.notification) {
+                if (!runtime.sessions[server.id]) runtime.sessions[server.id] = {};
+                runtime.sessions[server.id].sessionId = returnedSessionId || runtime.sessions[server.id].sessionId || '';
+                return { result: null, raw: null, sessionId: returnedSessionId };
+            }
 
-        if (options.notification) {
+            const rawText = await response.text();
+            if (!rawText.trim()) {
+                return { result: null, raw: null, sessionId: returnedSessionId };
+            }
+
+            let rawData = null;
+            try {
+                rawData = JSON.parse(rawText);
+            } catch (error) {
+                rawData = parseSseJsonEnvelope(rawText);
+            }
+
+            if (!rawData) {
+                throw new Error('MCP 返回内容无法解析');
+            }
+            if (rawData.error) {
+                throw new Error(String(rawData.error.message || JSON.stringify(rawData.error)));
+            }
+
             if (!runtime.sessions[server.id]) runtime.sessions[server.id] = {};
             runtime.sessions[server.id].sessionId = returnedSessionId || runtime.sessions[server.id].sessionId || '';
-            return { result: null, raw: null, sessionId: returnedSessionId };
-        }
-
-        const rawText = await response.text();
-        if (!rawText.trim()) {
-            return { result: null, raw: null, sessionId: returnedSessionId };
-        }
-
-        let rawData = null;
-        try {
-            rawData = JSON.parse(rawText);
+            return {
+                result: rawData.result !== undefined ? rawData.result : rawData,
+                raw: rawData,
+                sessionId: returnedSessionId
+            };
         } catch (error) {
-            rawData = parseSseJsonEnvelope(rawText);
+            if (controller && controller.signal.aborted) {
+                throw new Error(`MCP 请求超时（${Math.round(MCP_REQUEST_TIMEOUT_MS / 1000)}秒）`);
+            }
+            throw error;
+        } finally {
+            if (timeout) clearTimeout(timeout);
         }
-
-        if (!rawData) {
-            throw new Error('MCP 返回内容无法解析');
-        }
-        if (rawData.error) {
-            throw new Error(String(rawData.error.message || JSON.stringify(rawData.error)));
-        }
-
-        if (!runtime.sessions[server.id]) runtime.sessions[server.id] = {};
-        runtime.sessions[server.id].sessionId = returnedSessionId || runtime.sessions[server.id].sessionId || '';
-        return {
-            result: rawData.result !== undefined ? rawData.result : rawData,
-            raw: rawData,
-            sessionId: returnedSessionId
-        };
     }
 
     async function ensureServerSession(server) {
@@ -955,31 +980,47 @@
             return existing;
         }
 
-        const initialized = await mcpJsonRpc(server, 'initialize', {
-            protocolVersion: MCP_PROTOCOL_VERSION,
-            capabilities: {
-                tools: { listChanged: true }
-            },
-            clientInfo: {
-                name: 'z1han-main-web',
-                version: '1.0.0'
-            }
-        });
-
-        runtime.sessions[server.id] = {
-            ready: true,
-            sessionId: initialized.sessionId || '',
-            serverInfo: initialized.result && initialized.result.serverInfo ? initialized.result.serverInfo : null,
-            capabilities: initialized.result && initialized.result.capabilities ? initialized.result.capabilities : {}
-        };
-
-        try {
-            await mcpJsonRpc(server, 'notifications/initialized', {}, { notification: true });
-        } catch (error) {
-            console.warn('Failed to send MCP initialized notification.', error);
+        if (runtime.sessionPromises[server.id]) {
+            return runtime.sessionPromises[server.id];
         }
 
-        return runtime.sessions[server.id];
+        const initialization = (async () => {
+            const initialized = await mcpJsonRpc(server, 'initialize', {
+                protocolVersion: MCP_PROTOCOL_VERSION,
+                capabilities: {
+                    tools: { listChanged: true }
+                },
+                clientInfo: {
+                    name: 'z1han-main-web',
+                    version: '1.0.0'
+                }
+            });
+
+            runtime.sessions[server.id] = {
+                ready: true,
+                sessionId: initialized.sessionId || '',
+                serverInfo: initialized.result && initialized.result.serverInfo ? initialized.result.serverInfo : null,
+                capabilities: initialized.result && initialized.result.capabilities ? initialized.result.capabilities : {}
+            };
+
+            try {
+                await mcpJsonRpc(server, 'notifications/initialized', {}, { notification: true });
+            } catch (error) {
+                console.warn('Failed to send MCP initialized notification.', error);
+            }
+
+            return runtime.sessions[server.id];
+        })();
+
+        runtime.sessionPromises[server.id] = initialization;
+        try {
+            return await initialization;
+        } catch (error) {
+            runtime.sessions[server.id] = null;
+            throw error;
+        } finally {
+            delete runtime.sessionPromises[server.id];
+        }
     }
 
     async function listServerTools(server) {
@@ -1098,7 +1139,9 @@
             segments.push(result.content.trim());
         }
 
-        return segments.join('\n\n').trim() || '工具调用完成。';
+        const text = segments.join('\n\n').trim() || '工具调用完成。';
+        if (text.length <= MAX_TOOL_RESULT_CHARS) return text;
+        return `${text.slice(0, MAX_TOOL_RESULT_CHARS)}\n\n[工具结果过长，已截断]`;
     }
 
     async function callTool(serverId, toolName, args) {
@@ -1123,7 +1166,8 @@
         renderPreview();
         return {
             rawResult: response.result,
-            text: serializeToolResultContent(response.result)
+            text: serializeToolResultContent(response.result),
+            isError: !!(response.result && typeof response.result === 'object' && response.result.isError === true)
         };
     }
 
@@ -1212,20 +1256,35 @@
             try {
                 parsedArgs = JSON.parse(functionPayload.arguments);
             } catch (error) {
-                parsedArgs = {
-                    _raw: functionPayload.arguments
+                return {
+                    ok: false,
+                    content: 'MCP tool arguments were not valid JSON. Ask the model to call the tool again with a JSON object.',
+                    meta
                 };
             }
         } else if (functionPayload.arguments && typeof functionPayload.arguments === 'object') {
             parsedArgs = functionPayload.arguments;
         }
+        if (!parsedArgs || typeof parsedArgs !== 'object' || Array.isArray(parsedArgs)) {
+            return {
+                ok: false,
+                content: 'MCP tool arguments must be a JSON object. Ask the model to call the tool again.',
+                meta
+            };
+        }
 
         try {
             const result = await callTool(meta.serverId, meta.toolName, parsedArgs);
-            pushLog(`AI 调用了「${meta.serverName} / ${meta.toolName}」`, 'good');
+            const ok = !result.isError;
+            pushLog(
+                ok
+                    ? `AI 调用了「${meta.serverName} / ${meta.toolName}」`
+                    : `AI 调用「${meta.serverName} / ${meta.toolName}」返回了工具错误`,
+                ok ? 'good' : 'warn'
+            );
             return {
-                ok: true,
-                content: result.text,
+                ok,
+                content: ok ? result.text : `MCP tool reported an error:\n${result.text}`,
                 rawResult: result.rawResult,
                 meta
             };
