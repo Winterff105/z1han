@@ -2025,6 +2025,48 @@ function findMcpProductImageFromChatHistory(productId, skuCode, productName = ''
     return '';
 }
 
+function parseMcpToolResultData(value, depth = 0) {
+    if (depth > 5 || value === null || value === undefined) return null;
+    if (typeof value === 'object') return value;
+    const text = String(value || '').trim();
+    if (!text) return null;
+    try {
+        return JSON.parse(text);
+    } catch (error) {}
+
+    const fenced = text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
+    try {
+        return JSON.parse(fenced);
+    } catch (error) {}
+
+    const objectMatch = fenced.match(/\{[\s\S]*\}/);
+    if (!objectMatch) return null;
+    try {
+        return JSON.parse(objectMatch[0]);
+    } catch (error) {
+        return null;
+    }
+}
+
+function getMcpToolResultItems(value, keys = []) {
+    const parsed = parseMcpToolResultData(value);
+    if (!parsed || typeof parsed !== 'object') return [];
+    const root = parsed.data !== undefined ? parsed.data : parsed;
+    if (Array.isArray(root)) return root;
+    for (const key of keys) {
+        if (Array.isArray(root && root[key])) return root[key];
+        if (Array.isArray(parsed[key])) return parsed[key];
+    }
+    return [];
+}
+
+function formatMcpDistance(value) {
+    const distance = Number(value);
+    if (!Number.isFinite(distance) || distance < 0) return '';
+    if (distance > 0 && distance < 1) return `${Math.max(1, Math.round(distance * 1000))}m`;
+    return `${distance.toFixed(distance >= 10 ? 0 : 1)}km`;
+}
+
 function formatMcpMoney(value) {
     const amount = Number(value);
     return Number.isFinite(amount) ? `¥${amount.toFixed(2)}` : '';
@@ -2122,18 +2164,86 @@ function buildMcpToolResultCardHtml(text, msgId) {
         </div>`;
     }
 
+    const toolTitleMap = {
+        queryshoplist: '附近门店',
+        searchproductformcp: '商品搜索',
+        switchproduct: '商品规格',
+        queryproductdetailinfo: '商品详情'
+    };
+    const normalizedToolName = toolName.toLowerCase();
+    const toolTitle = toolTitleMap[normalizedToolName] || toolName;
+    const header = `<div style="display:flex;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid #d9edf9;background:#f3faff;">
+        <div style="width:30px;height:30px;display:grid;place-items:center;border-radius:8px;background:#dff2ff;color:#236d9d;font:800 12px/1 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.06em;">LK</div>
+        <div style="min-width:0;flex:1;">
+            <div style="font-size:14px;font-weight:760;color:#15181d;">${escapeChatMessageHtml(toolTitle)}</div>
+            <div style="margin-top:2px;color:#6d899a;font-size:11px;">${escapeChatMessageHtml(serverName)}</div>
+        </div>
+        <span style="padding:4px 7px;border-radius:4px;background:${payload.ok ? '#e4f4ff' : '#f7e8e8'};color:${payload.ok ? '#3f7fa5' : '#a65353'};font-size:11px;font-weight:700;">${payload.ok ? '已返回' : '失败'}</span>
+    </div>`;
+
+    if (/^queryShopList$/i.test(toolName)) {
+        const stores = getMcpToolResultItems(payload.resultText, ['shopList', 'shops', 'list'])
+            .slice(0, 4);
+        const moreCount = Math.max(0, getMcpToolResultItems(payload.resultText, ['shopList', 'shops', 'list']).length - stores.length);
+        const storeRows = stores.map((store) => {
+            const name = String(store && (store.deptName || store.shopName || store.name) || '瑞幸门店').trim();
+            const address = String(store && (store.address || store.deptAddress) || '').trim();
+            const distance = formatMcpDistance(store && store.distance);
+            const status = String(store && (store.workStatus || store.status) || '').trim();
+            return `<div style="display:flex;align-items:flex-start;gap:8px;padding:11px 0;border-bottom:1px solid #e5e9ed;">
+                <span style="width:8px;height:8px;margin-top:5px;flex:0 0 auto;border-radius:50%;background:#57a6d8;box-shadow:0 0 0 4px #f3faff;"></span>
+                <div style="min-width:0;flex:1;">
+                    <div style="display:flex;gap:8px;align-items:baseline;"><span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px;font-weight:730;color:#15181d;">${escapeChatMessageHtml(name)}</span>${distance ? `<span style="margin-left:auto;flex:0 0 auto;color:#39799d;font-size:11px;">${escapeChatMessageHtml(distance)}</span>` : ''}</div>
+                    ${address ? `<div style="margin-top:3px;color:#7a828c;font-size:11px;line-height:1.35;">${escapeChatMessageHtml(address)}</div>` : ''}
+                    ${status ? `<div style="margin-top:4px;color:#6d91a9;font-size:10px;font-weight:650;">${escapeChatMessageHtml(status)}</div>` : ''}
+                </div>
+            </div>`;
+        }).join('');
+        return `<div class="mcp-tool-result-card" style="width:288px;overflow:hidden;border:1px solid #dfe5ea;border-radius:10px;background:#fff;box-shadow:0 8px 24px rgba(31,53,70,.08);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
+            ${header}
+            <div style="padding:0 14px 12px;">
+                ${storeRows || `<div style="padding:13px 0;color:#7a828c;font-size:12px;">这次没有拿到可展示的门店信息。</div>`}
+                ${moreCount ? `<div style="padding-top:10px;color:#8b949d;font-size:11px;">还有 ${moreCount} 家门店</div>` : ''}
+            </div>
+        </div>`;
+    }
+
+    if (/^(searchProductForMcp|switchProduct|queryProductDetailInfo)$/i.test(toolName)) {
+        const products = getMcpToolResultItems(payload.resultText, ['productList', 'products', 'list', 'productInfoList'])
+            .slice(0, 3);
+        const productRows = products.map((product) => {
+            const name = String(product && (product.productName || product.name) || '瑞幸商品').trim();
+            const imageUrl = normalizeMcpProductImageUrl(
+                product && (product.breviaryPicUrl || product.bigPicUrl || product.pictureUrl || product.imageUrl || product.image)
+            );
+            const price = formatMcpMoney(product && (product.estimatePrice || product.price || product.salePrice || product.productPrice));
+            const subtitle = String(product && (product.additionDesc || product.productDesc || product.subTitle || '') || '').trim();
+            const imageHtml = imageUrl
+                ? `<img src="${escapeChatMessageHtml(imageUrl)}" alt="" referrerpolicy="no-referrer" style="width:48px;height:48px;object-fit:cover;border-radius:8px;background:#edf0f2;">`
+                : `<div style="width:48px;height:48px;display:flex;align-items:center;justify-content:center;border-radius:8px;background:#edf0f2;color:#59616a;font-size:21px;">☕</div>`;
+            return `<div style="display:flex;align-items:center;gap:10px;padding:12px 0;border-bottom:1px solid #e5e9ed;">
+                ${imageHtml}
+                <div style="min-width:0;flex:1;">
+                    <div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px;font-weight:730;color:#15181d;">${escapeChatMessageHtml(name)}</div>
+                    ${subtitle ? `<div style="margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#7a828c;font-size:11px;">${escapeChatMessageHtml(subtitle)}</div>` : ''}
+                    ${price ? `<div style="margin-top:6px;color:#236d9d;font-size:13px;font-weight:750;">${price}</div>` : ''}
+                </div>
+            </div>`;
+        }).join('');
+        return `<div class="mcp-tool-result-card" style="width:288px;overflow:hidden;border:1px solid #dfe5ea;border-radius:10px;background:#fff;box-shadow:0 8px 24px rgba(31,53,70,.08);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
+            ${header}
+            <div style="padding:0 14px 12px;">
+                ${productRows || `<div style="padding:13px 0;color:#7a828c;font-size:12px;">这次没有拿到可展示的商品信息。</div>`}
+            </div>
+        </div>`;
+    }
+
     const previewText = String(payload.resultText || (payload.ok ? '工具调用完成' : '工具调用失败'))
         .replace(/\n{3,}/g, '\n\n')
-        .slice(0, 1000);
-    return `<div class="mcp-tool-result-card" style="width:288px;overflow:hidden;border:1px solid #e2d8c6;border-radius:12px;background:#faf7f0;box-shadow:0 2px 7px rgba(20,44,81,.10);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
-        <div style="padding:11px 14px;background:linear-gradient(135deg,#0d294e,#1e548d);color:#fff;">
-            <div style="font-size:14px;font-weight:800;">${escapeChatMessageHtml(serverName)}</div>
-            <div style="font-size:12px;color:rgba(255,255,255,.72);margin-top:2px;">${escapeChatMessageHtml(toolName)}</div>
-        </div>
-        <div style="padding:11px 13px;">
-            <div style="font-size:12px;color:${payload.ok ? '#28734b' : '#b34747'};font-weight:700;margin-bottom:7px;">${payload.ok ? '已返回' : '调用失败'}</div>
-            <pre style="margin:0;white-space:pre-wrap;word-break:break-word;font:12px/1.55 ui-monospace,SFMono-Regular,Menlo,monospace;color:#516078;max-height:190px;overflow:auto;">${escapeChatMessageHtml(previewText)}</pre>
-        </div>
+        .slice(0, 360);
+    return `<div class="mcp-tool-result-card" style="width:288px;overflow:hidden;border:1px solid #dfe5ea;border-radius:10px;background:#fff;box-shadow:0 8px 24px rgba(31,53,70,.08);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
+        ${header}
+        <div style="padding:12px 14px;color:#66717d;font-size:12px;line-height:1.55;white-space:pre-wrap;word-break:break-word;">${escapeChatMessageHtml(previewText)}</div>
     </div>`;
 }
 
