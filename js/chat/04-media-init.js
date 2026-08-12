@@ -12235,7 +12235,7 @@ async function triggerSingleActiveReply(contact, runtimeState, options = {}) {
 function isRealConversationMsg(msg) {
     if (!msg) return false;
     if (msg.role !== 'user' && msg.role !== 'assistant') return false;
-    if (msg.type === 'system_event' || msg.type === 'live_sync_hidden' || msg.type === 'voice_call_text') return false;
+    if (msg.type === 'system_event' || msg.type === 'live_sync_hidden' || msg.type === 'voice_call_text' || msg.type === 'mcp_tool_result') return false;
     if (typeof msg.content !== 'string') return false;
     if (msg.type === 'text') {
         if (isHiddenForumWechatSyncText(msg.content)) return false;

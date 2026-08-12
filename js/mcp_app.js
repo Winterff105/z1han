@@ -1144,6 +1144,21 @@
         return `${text.slice(0, MAX_TOOL_RESULT_CHARS)}\n\n[工具结果过长，已截断]`;
     }
 
+    function detectOrderLikeToolResult(toolName, result, text) {
+        const markerText = `${String(toolName || '')} ${String(text || '')}`;
+        if (/previewOrder|createOrder|queryOrder|order|checkout|结账|下单|确认订单/i.test(markerText)) {
+            return true;
+        }
+        if (result && typeof result === 'object') {
+            if (Array.isArray(result.productInfoList) && result.productInfoList.length > 0) return true;
+            if (result.orderId || result.orderIdStr || result.payOrderUrl || result.payOrderQrCodeUrl) return true;
+            if (result.data && typeof result.data === 'object') {
+                return detectOrderLikeToolResult(toolName, result.data, text);
+            }
+        }
+        return false;
+    }
+
     async function callTool(serverId, toolName, args) {
         const server = getServerById(serverId);
         if (!server) {
@@ -1164,10 +1179,12 @@
         persistState();
         renderServers();
         renderPreview();
+        const resultText = serializeToolResultContent(response.result);
         return {
             rawResult: response.result,
-            text: serializeToolResultContent(response.result),
-            isError: !!(response.result && typeof response.result === 'object' && response.result.isError === true)
+            text: resultText,
+            isError: !!(response.result && typeof response.result === 'object' && response.result.isError === true),
+            isOrderLike: detectOrderLikeToolResult(toolName, response.result, resultText)
         };
     }
 
@@ -1191,8 +1208,9 @@
     async function prepareChatTooling(contactId, options = {}) {
         const autoDiscover = options && options.autoDiscover !== false;
         const userText = options && options.userText;
+        const includeAllBoundServers = options && options.includeAllBoundServers === true;
         const servers = getBoundEnabledServers(contactId)
-            .filter((server) => serverMatchesKeywords(server, userText));
+            .filter((server) => includeAllBoundServers || serverMatchesKeywords(server, userText));
         const tools = [];
         const toolIndex = Object.create(null);
         const usedNames = new Set();
@@ -1284,9 +1302,15 @@
             );
             return {
                 ok,
-                content: ok ? result.text : `MCP tool reported an error:\n${result.text}`,
+                content: ok
+                    ? (result.isOrderLike
+                        ? `${result.text}\n\n[系统提示：这个工具结果已经进入订单预览/结账阶段。请用自然语气告诉用户订单已配好、可以确认，不要重复查询；支付或正式下单必须等用户确认。]`
+                        : result.text)
+                    : `MCP tool reported an error:\n${result.text}`,
                 rawResult: result.rawResult,
-                meta
+                meta,
+                isOrderLike: !!result.isOrderLike,
+                arguments: parsedArgs
             };
         } catch (error) {
             const errorText = String(error && error.message || error || '未知错误');
@@ -1294,15 +1318,18 @@
             return {
                 ok: false,
                 content: `MCP tool call failed: ${errorText}`,
-                meta
+                meta,
+                isOrderLike: false,
+                arguments: parsedArgs
             };
         }
     }
 
     function getToolSummariesForContact(contactId, options = {}) {
         const userText = options && options.userText;
+        const includeAllBoundServers = options && options.includeAllBoundServers === true;
         return getBoundEnabledServers(contactId)
-            .filter((server) => serverMatchesKeywords(server, userText))
+            .filter((server) => includeAllBoundServers || serverMatchesKeywords(server, userText))
             .map((server) => ({
             serverId: server.id,
             serverName: server.name,

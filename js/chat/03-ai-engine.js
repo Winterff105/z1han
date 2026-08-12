@@ -1894,6 +1894,344 @@ function formatChatTimestampText(timestamp, format = '24h') {
     return `${hours}:${minutes}`;
 }
 
+function getMcpToolResultMessage(msgId, contactId = null) {
+    const resolvedContactId = contactId || (window.iphoneSimState && window.iphoneSimState.currentChatContactId);
+    const history = resolvedContactId && window.iphoneSimState && window.iphoneSimState.chatHistory
+        ? window.iphoneSimState.chatHistory[resolvedContactId]
+        : null;
+    if (!Array.isArray(history)) return null;
+    return history.find((message) => String(message && message.id || '') === String(msgId || '') && message.type === 'mcp_tool_result') || null;
+}
+
+function extractMcpStructuredResult(value, depth = 0) {
+    if (depth > 6 || value === null || value === undefined) return null;
+    if (typeof value === 'string') {
+        const trimmed = value.trim();
+        if (!trimmed) return null;
+        try {
+            return extractMcpStructuredResult(JSON.parse(trimmed), depth + 1);
+        } catch (error) {
+            const match = trimmed.match(/\{[\s\S]*\}/);
+            if (!match) return null;
+            try {
+                return extractMcpStructuredResult(JSON.parse(match[0]), depth + 1);
+            } catch (innerError) {
+                return null;
+            }
+        }
+    }
+    if (Array.isArray(value)) {
+        for (const item of value) {
+            const extracted = extractMcpStructuredResult(item, depth + 1);
+            if (extracted) return extracted;
+        }
+        return null;
+    }
+    if (typeof value !== 'object') return null;
+    if (
+        Array.isArray(value.productInfoList)
+        || value.shopInfo
+        || value.discountPrice !== undefined
+        || value.totalInitialPrice !== undefined
+        || value.payOrderUrl
+        || value.payOrderQrCodeUrl
+    ) {
+        return value;
+    }
+    const nestedKeys = ['data', 'result', 'structuredContent', 'content', 'payload'];
+    for (const key of nestedKeys) {
+        if (value[key] === undefined) continue;
+        const extracted = extractMcpStructuredResult(value[key], depth + 1);
+        if (extracted) return extracted;
+    }
+    return null;
+}
+
+function normalizeMcpProductImageUrl(value) {
+    const url = String(value || '').trim();
+    return /^(https?:)?\/\//i.test(url) || url.startsWith('data:image/')
+        ? url
+        : '';
+}
+
+function extractMcpProductImage(value, targetProductId, targetSkuCode, targetName = '', depth = 0) {
+    if (depth > 8 || value === null || value === undefined) return '';
+    if (typeof value === 'string') {
+        const trimmed = value.trim();
+        if (!trimmed) return '';
+        try {
+            return extractMcpProductImage(JSON.parse(trimmed), targetProductId, targetSkuCode, targetName, depth + 1);
+        } catch (error) {
+            const jsonMatch = trimmed.match(/\{[\s\S]*\}/);
+            if (!jsonMatch) return '';
+            try {
+                return extractMcpProductImage(JSON.parse(jsonMatch[0]), targetProductId, targetSkuCode, targetName, depth + 1);
+            } catch (innerError) {
+                return '';
+            }
+        }
+    }
+    if (Array.isArray(value)) {
+        for (const item of value) {
+            const found = extractMcpProductImage(item, targetProductId, targetSkuCode, targetName, depth + 1);
+            if (found) return found;
+        }
+        return '';
+    }
+    if (typeof value !== 'object') return '';
+
+    const productId = String(value.productId || value.product_id || '').trim();
+    const skuCode = String(value.skuCode || value.sku_code || '').trim();
+    const productName = String(value.productName || value.name || '').trim();
+    const matchesProduct = targetProductId && productId && String(targetProductId) === productId;
+    const matchesSku = targetSkuCode && skuCode && String(targetSkuCode) === skuCode;
+    const matchesName = targetName && productName && String(targetName).trim() === productName;
+    if (matchesProduct || matchesSku || matchesName) {
+        const image = normalizeMcpProductImageUrl(
+            value.breviaryPicUrl || value.bigPicUrl || value.pictureUrl || value.imageUrl || value.image
+        );
+        if (image) return image;
+    }
+
+    for (const child of Object.values(value)) {
+        if (!child || (typeof child !== 'object' && typeof child !== 'string')) continue;
+        const found = extractMcpProductImage(child, targetProductId, targetSkuCode, targetName, depth + 1);
+        if (found) return found;
+    }
+    return '';
+}
+
+function findMcpProductImageFromChatHistory(productId, skuCode, productName = '') {
+    const contactId = window.iphoneSimState && window.iphoneSimState.currentChatContactId;
+    const history = contactId && window.iphoneSimState && window.iphoneSimState.chatHistory
+        ? window.iphoneSimState.chatHistory[contactId]
+        : [];
+    if (!Array.isArray(history)) return '';
+
+    for (let index = history.length - 1; index >= 0; index--) {
+        const message = history[index];
+        if (!message || message.type !== 'mcp_tool_result') continue;
+        const payload = parseMcpToolResultPayload(message.content);
+        const toolName = String(payload && payload.toolName || '').trim();
+        if (!/^(searchProductForMcp|switchProduct|queryProductDetailInfo|previewOrder)$/i.test(toolName)) continue;
+        const image = extractMcpProductImage(
+            payload && payload.resultText,
+            productId,
+            skuCode,
+            productName
+        );
+        if (image) return image;
+    }
+    return '';
+}
+
+function formatMcpMoney(value) {
+    const amount = Number(value);
+    return Number.isFinite(amount) ? `¥${amount.toFixed(2)}` : '';
+}
+
+function buildMcpToolResultCardHtml(text, msgId) {
+    const payload = parseMcpToolResultPayload(text) || {};
+    const toolName = String(payload.toolName || 'MCP tool').trim() || 'MCP tool';
+    const serverName = String(payload.serverName || 'MCP').trim() || 'MCP';
+    const args = payload.arguments && typeof payload.arguments === 'object' ? payload.arguments : {};
+    const isCheckout = /^previewOrder$/i.test(toolName);
+    const preview = extractMcpStructuredResult(payload.payment && payload.payment.resultText)
+        || extractMcpStructuredResult(payload.resultText);
+    const isPaid = !!(payload.payment && payload.payment.ok);
+
+    if (isCheckout) {
+        const productInfoList = Array.isArray(preview && preview.productInfoList) ? preview.productInfoList : [];
+        const productList = Array.isArray(args.productList) ? args.productList : [];
+        const lines = productInfoList.length
+            ? productInfoList.map((item, index) => ({
+                index,
+                productId: item && item.productId || productList[index] && productList[index].productId,
+                skuCode: item && item.skuCode || productList[index] && productList[index].skuCode,
+                name: String(item && (item.name || item.productName) || '瑞幸商品'),
+                spec: String(item && (item.additionDesc || item.specification) || ''),
+                image: normalizeMcpProductImageUrl(item && (item.breviaryPicUrl || item.bigPicUrl || item.pictureUrl)),
+                amount: Math.max(1, Number(item && item.amount) || Number(productList[index] && productList[index].amount) || 1),
+                price: formatMcpMoney(item && (item.estimatePrice || item.price))
+            }))
+            : productList.map((item, index) => ({
+                index,
+                productId: item && item.productId,
+                skuCode: item && item.skuCode,
+                name: String(item && (item.name || item.productName || item.skuCode) || '瑞幸商品'),
+                spec: '',
+                image: '',
+                amount: Math.max(1, Number(item && item.amount) || 1),
+                price: ''
+            }));
+        const shop = preview && preview.shopInfo && typeof preview.shopInfo === 'object' ? preview.shopInfo : {};
+        const shopName = String(shop.deptName || shop.shopName || shop.name || '').trim();
+        const shopAddress = String(shop.address || shop.deptAddress || '').trim();
+        const finalPrice = formatMcpMoney(preview && (preview.discountPrice || preview.payPrice || preview.totalPrice));
+        const originalPrice = formatMcpMoney(preview && preview.totalInitialPrice);
+        const privilege = formatMcpMoney(preview && preview.privilegeMoney);
+        const paymentInfo = extractMcpStructuredResult(payload.payment && payload.payment.resultText);
+        const payUrl = String(paymentInfo && (paymentInfo.payOrderUrl || paymentInfo.payUrl) || '').trim();
+        const lineHtml = lines.map((line) => {
+            const imageUrl = line.image || findMcpProductImageFromChatHistory(line.productId, line.skuCode, line.name);
+            const imageHtml = imageUrl
+                ? `<img src="${escapeChatMessageHtml(imageUrl)}" alt="" referrerpolicy="no-referrer" style="width:48px;height:48px;object-fit:cover;border-radius:8px;background:#edf0f2;">`
+                : `<div style="width:48px;height:48px;display:flex;align-items:center;justify-content:center;border-radius:8px;background:#edf0f2;color:#59616a;font-size:21px;">☕</div>`;
+            const controls = isPaid
+                ? `<span style="font-size:12px;color:#7a828c;">x${line.amount}</span>`
+                : `<div style="display:flex;align-items:center;height:28px;border:1px solid #d7dde2;border-radius:6px;overflow:hidden;background:#fff;">
+                    <button type="button" onclick="window.adjustMcpLuckinQuantity('${escapeChatMessageHtml(msgId)}', ${line.index}, -1)" style="width:27px;height:100%;border:0;background:transparent;color:#39414a;font-size:17px;">−</button>
+                    <span style="min-width:23px;text-align:center;font-weight:750;color:#252a31;font-size:12px;">${line.amount}</span>
+                    <button type="button" onclick="window.adjustMcpLuckinQuantity('${escapeChatMessageHtml(msgId)}', ${line.index}, 1)" style="width:27px;height:100%;border:0;background:transparent;color:#39414a;font-size:17px;">+</button>
+                </div>`;
+            return `<div style="display:flex;align-items:center;gap:10px;padding:13px 0;border-bottom:1px solid #e5e9ed;">
+                ${imageHtml}
+                <div style="min-width:0;flex:1;">
+                    <div style="font-size:14px;font-weight:750;color:#15181d;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeChatMessageHtml(line.name)}</div>
+                    ${line.spec ? `<div style="font-size:11px;color:#7a828c;margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeChatMessageHtml(line.spec)}</div>` : ''}
+                    ${line.price ? `<div style="font-size:13px;font-weight:750;color:#236d9d;margin-top:6px;">${line.price}</div>` : ''}
+                </div>
+                ${controls}
+            </div>`;
+        }).join('');
+        const payControl = isPaid
+            ? (payUrl
+                ? `<button type="button" onclick="window.openMcpLuckinPayment('${escapeChatMessageHtml(msgId)}')" style="width:100%;margin-top:13px;border:1px solid #15181d;border-radius:7px;padding:11px;background:#15181d;color:#fff;font-size:14px;font-weight:750;">去支付</button>`
+                : `<div style="margin-top:13px;padding:10px;border-radius:7px;background:#f3faff;color:#39799d;font-size:12px;font-weight:700;text-align:center;">订单已创建，请在支付页面完成支付</div>`)
+            : `<button type="button" onclick="window.payMcpLuckinOrder('${escapeChatMessageHtml(msgId)}')" style="width:100%;margin-top:13px;border:1px solid #15181d;border-radius:7px;padding:11px;background:#15181d;color:#fff;font-size:14px;font-weight:750;">下单并支付</button>`;
+
+        return `<div class="mcp-tool-result-card mcp-luckin-checkout-card" style="width:288px;overflow:hidden;border:1px solid #dfe5ea;border-radius:10px;background:#fff;box-shadow:0 8px 24px rgba(31,53,70,.08);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
+            <div style="display:flex;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid #d9edf9;background:#f3faff;">
+                <div style="width:30px;height:30px;display:grid;place-items:center;border-radius:8px;background:#dff2ff;color:#236d9d;font:800 12px/1 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.06em;">LK</div>
+                <div style="min-width:0;flex:1;">
+                    <div style="font-size:14px;font-weight:760;color:#15181d;">瑞幸结账</div>
+                    <div style="margin-top:2px;font-size:11px;color:#6d899a;">${isPaid ? '订单已创建，等待支付' : '已为你配置好这一杯'}</div>
+                </div>
+                <span style="padding:4px 7px;border-radius:4px;background:#e4f4ff;color:#3f7fa5;font-size:11px;font-weight:700;">${isPaid ? '已创建' : '待支付'}</span>
+            </div>
+            <div style="padding:0 14px 14px;">
+                ${shopName ? `<div style="display:flex;align-items:flex-start;gap:8px;padding:12px 0;border-bottom:1px solid #e5e9ed;"><span style="width:8px;height:8px;margin-top:5px;flex:0 0 auto;border-radius:50%;background:#57a6d8;box-shadow:0 0 0 4px #f3faff;"></span><div><div style="font-size:13px;font-weight:730;color:#15181d;">${escapeChatMessageHtml(shopName)} <span style="margin-left:5px;color:#6d91a9;font-size:10px;font-weight:600;">到店自提</span></div>${shopAddress ? `<div style="margin-top:3px;color:#7a828c;font-size:11px;line-height:1.35;">${escapeChatMessageHtml(shopAddress)}</div>` : ''}</div></div>` : ''}
+                ${lineHtml || `<div style="padding:13px 0;color:#7a828c;font-size:13px;">订单商品信息已返回，请确认后支付。</div>`}
+                <div style="padding-top:10px;color:#7a828c;font-size:12px;">
+                    ${originalPrice ? `<div style="display:flex;justify-content:space-between;margin:7px 0;"><span>商品总价</span><span>${originalPrice}</span></div>` : ''}
+                    ${privilege ? `<div style="display:flex;justify-content:space-between;margin:7px 0;color:#39799d;"><span>已优惠</span><span>-${privilege.replace('¥', '¥')}</span></div>` : ''}
+                    ${finalPrice ? `<div style="display:flex;justify-content:space-between;align-items:baseline;padding-top:11px;margin-top:11px;border-top:1px solid #e5e9ed;color:#15181d;font-size:13px;font-weight:750;"><span>实付</span><span style="font-size:21px;">${finalPrice}</span></div>` : ''}
+                </div>
+                ${payControl}
+            </div>
+        </div>`;
+    }
+
+    const previewText = String(payload.resultText || (payload.ok ? '工具调用完成' : '工具调用失败'))
+        .replace(/\n{3,}/g, '\n\n')
+        .slice(0, 1000);
+    return `<div class="mcp-tool-result-card" style="width:288px;overflow:hidden;border:1px solid #e2d8c6;border-radius:12px;background:#faf7f0;box-shadow:0 2px 7px rgba(20,44,81,.10);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
+        <div style="padding:11px 14px;background:linear-gradient(135deg,#0d294e,#1e548d);color:#fff;">
+            <div style="font-size:14px;font-weight:800;">${escapeChatMessageHtml(serverName)}</div>
+            <div style="font-size:12px;color:rgba(255,255,255,.72);margin-top:2px;">${escapeChatMessageHtml(toolName)}</div>
+        </div>
+        <div style="padding:11px 13px;">
+            <div style="font-size:12px;color:${payload.ok ? '#28734b' : '#b34747'};font-weight:700;margin-bottom:7px;">${payload.ok ? '已返回' : '调用失败'}</div>
+            <pre style="margin:0;white-space:pre-wrap;word-break:break-word;font:12px/1.55 ui-monospace,SFMono-Regular,Menlo,monospace;color:#516078;max-height:190px;overflow:auto;">${escapeChatMessageHtml(previewText)}</pre>
+        </div>
+    </div>`;
+}
+
+function findLatestMcpLocation(contactId) {
+    const history = window.iphoneSimState && window.iphoneSimState.chatHistory
+        ? window.iphoneSimState.chatHistory[contactId]
+        : [];
+    if (!Array.isArray(history)) return {};
+    for (let index = history.length - 1; index >= 0; index--) {
+        const payload = parseMcpToolResultPayload(history[index] && history[index].content);
+        const args = payload && payload.arguments && typeof payload.arguments === 'object' ? payload.arguments : null;
+        if (!args) continue;
+        const longitude = Number(args.longitude);
+        const latitude = Number(args.latitude);
+        if (Number.isFinite(longitude) && Number.isFinite(latitude)) {
+            return { longitude, latitude };
+        }
+    }
+    return {};
+}
+
+window.adjustMcpLuckinQuantity = async function(msgId, lineIndex, delta) {
+    const message = getMcpToolResultMessage(msgId);
+    const payload = message && parseMcpToolResultPayload(message.content);
+    if (!message || !payload || !/^previewOrder$/i.test(String(payload.toolName || ''))) return;
+    const productList = Array.isArray(payload.arguments && payload.arguments.productList)
+        ? payload.arguments.productList.map((item) => ({ ...item }))
+        : [];
+    const target = productList[Number(lineIndex)];
+    if (!target) return;
+    target.amount = Math.max(1, Math.min(20, Number(target.amount || 1) + Number(delta || 0)));
+    if (!window.MCPBridge || typeof window.MCPBridge.callTool !== 'function') return;
+
+    try {
+        const result = await window.MCPBridge.callTool(payload.serverId, 'previewOrder', {
+            ...(payload.arguments || {}),
+            productList
+        });
+        if (result && result.isError) throw new Error(result.text || '重新计算订单失败');
+        payload.arguments.productList = productList;
+        payload.resultText = String(result && result.text || '');
+        payload.time = Date.now();
+        message.content = JSON.stringify(payload);
+        saveConfig();
+        if (typeof window.renderChatHistory === 'function') {
+            window.renderChatHistory(window.iphoneSimState.currentChatContactId, true);
+        }
+    } catch (error) {
+        if (typeof window.showChatToast === 'function') {
+            window.showChatToast(String(error && error.message || '重新计算订单失败'), 2200);
+        }
+    }
+};
+
+window.payMcpLuckinOrder = async function(msgId) {
+    const contactId = window.iphoneSimState && window.iphoneSimState.currentChatContactId;
+    const message = getMcpToolResultMessage(msgId, contactId);
+    const payload = message && parseMcpToolResultPayload(message.content);
+    if (!message || !payload || !/^previewOrder$/i.test(String(payload.toolName || ''))) return;
+    if (!window.MCPBridge || typeof window.MCPBridge.callTool !== 'function') return;
+
+    const location = findLatestMcpLocation(contactId);
+    const orderArgs = {
+        ...(payload.arguments || {}),
+        ...location
+    };
+    try {
+        const result = await window.MCPBridge.callTool(payload.serverId, 'createOrder', orderArgs);
+        if (result && result.isError) throw new Error(result.text || '创建订单失败');
+        payload.payment = {
+            ok: true,
+            resultText: String(result && result.text || ''),
+            time: Date.now()
+        };
+        message.content = JSON.stringify(payload);
+        saveConfig();
+        if (typeof window.renderChatHistory === 'function') {
+            window.renderChatHistory(contactId, true);
+        }
+    } catch (error) {
+        if (typeof window.showChatToast === 'function') {
+            window.showChatToast(String(error && error.message || '创建订单失败'), 2500);
+        }
+    }
+};
+
+window.openMcpLuckinPayment = function(msgId) {
+    const message = getMcpToolResultMessage(msgId);
+    const payload = message && parseMcpToolResultPayload(message.content);
+    const payment = extractMcpStructuredResult(payload && payload.payment && payload.payment.resultText);
+    const payUrl = String(payment && (payment.payOrderUrl || payment.payUrl) || '').trim();
+    if (payUrl) {
+        window.open(payUrl, '_blank', 'noopener,noreferrer');
+    } else if (typeof window.showChatToast === 'function') {
+        window.showChatToast('订单已创建，但服务未返回支付链接', 2200);
+    }
+};
+
 function appendMessageToUI(text, isUser, type = 'text', description = null, replyTo = null, msgId = null, timestamp = null, isHistory = false) {
     if (type === 'text' && text && typeof text === 'string') {
         // Strip hidden image data from display
@@ -1933,7 +2271,7 @@ function appendMessageToUI(text, isUser, type = 'text', description = null, repl
         }
     }
 
-    const noBubbleTypes = new Set(['image', 'sticker', 'virtual_image', 'description', 'transfer', 'red_packet', 'group_poll', 'group_relay', 'family_card', 'food_invite', 'route_invite', 'gift_card', 'shopping_gift', 'delivery_share', 'order_progress', 'order_share', 'pay_request', 'product_share', 'icity_card', 'minesweeper_invite', 'pdd_cash_share', 'pdd_bargain_share', 'savings_invite', 'savings_withdraw_request', 'savings_withdraw_result', 'savings_progress', 'music_listen_invite', 'music_song_share', 'forum_post_share']);
+    const noBubbleTypes = new Set(['image', 'sticker', 'virtual_image', 'description', 'transfer', 'red_packet', 'group_poll', 'group_relay', 'family_card', 'food_invite', 'route_invite', 'gift_card', 'shopping_gift', 'delivery_share', 'order_progress', 'order_share', 'pay_request', 'product_share', 'icity_card', 'minesweeper_invite', 'pdd_cash_share', 'pdd_bargain_share', 'savings_invite', 'savings_withdraw_request', 'savings_withdraw_result', 'savings_progress', 'music_listen_invite', 'music_song_share', 'forum_post_share', 'mcp_tool_result']);
     const currentMessageUsesBubbleTail = !noBubbleTypes.has(type);
 
     if (!shouldShowTimeDivider && currentMessageUsesBubbleTail && lastMsg && lastMsg.classList.contains('chat-message')) {
@@ -2380,6 +2718,8 @@ function appendMessageToUI(text, isUser, type = 'text', description = null, repl
                 };
             }
         }, 0);
+    } else if (type === 'mcp_tool_result') {
+        contentHtml = buildMcpToolResultCardHtml(text, msgId);
     } else if (type === 'description') {
         contentHtml = text;
     } else {
@@ -2390,7 +2730,7 @@ function appendMessageToUI(text, isUser, type = 'text', description = null, repl
 
     let extraClass = '';
     const isHtmlTextMessage = type === 'text' && isHtmlPayloadForParser(text);
-    const cardTypes = ['transfer', 'red_packet', 'group_poll', 'group_relay', 'private_chat_invite', 'family_card', 'food_invite', 'route_invite', 'gift_card', 'shopping_gift', 'delivery_share', 'order_progress', 'order_share', 'pay_request', 'product_share', 'icity_card', 'minesweeper_invite', 'pdd_cash_share', 'pdd_bargain_share', 'savings_invite', 'savings_withdraw_request', 'savings_withdraw_result', 'savings_progress', 'music_listen_invite', 'music_song_share', 'forum_post_share'];
+    const cardTypes = ['transfer', 'red_packet', 'group_poll', 'group_relay', 'private_chat_invite', 'family_card', 'food_invite', 'route_invite', 'gift_card', 'shopping_gift', 'delivery_share', 'order_progress', 'order_share', 'pay_request', 'product_share', 'icity_card', 'minesweeper_invite', 'pdd_cash_share', 'pdd_bargain_share', 'savings_invite', 'savings_withdraw_request', 'savings_withdraw_result', 'savings_progress', 'music_listen_invite', 'music_song_share', 'forum_post_share', 'mcp_tool_result'];
     if (cardTypes.includes(type)) {
         extraClass += ' no-bubble';
     }
@@ -2408,6 +2748,8 @@ function appendMessageToUI(text, isUser, type = 'text', description = null, repl
         extraClass += ' food-invite-msg';
     } else if (type === 'family_card') {
         extraClass += ' family-card-msg';
+    } else if (type === 'mcp_tool_result') {
+        extraClass += ' mcp-tool-result-msg';
     } else if (type === 'food_invite' || type === 'route_invite' || type === 'private_chat_invite') {
         extraClass += ' food-invite-msg';
     } else if (type === 'sticker') {
@@ -4747,7 +5089,9 @@ function buildMcpFollowupFocusInstruction(messages) {
         '你现在必须优先回答用户当前这一轮最后一条消息，不要回复更早一轮的请求，也不要重复上一轮已经说过的话。',
         `用户最后一条消息是：${JSON.stringify(latestUserText)}`,
         '请把刚刚的工具结果当作回答这条消息的依据，直接自然作答。',
-        '如果用户是在追问、确认、核对结果，就直接围绕这次追问回答，不要再复述之前“已经帮你做了什么”。'
+        '如果用户是在追问、确认、核对结果，就直接围绕这次追问回答，不要再复述之前“已经帮你做了什么”。',
+        '如果这轮工具结果已经拿到了门店/商品清单，下一步应继续推进到可下单的预览或确认态，不要停在“我查到了”这一层。',
+        '如果工具结果本身已经是预览/结账/确认订单态，就把它当成终点来回复用户，不要再回头重复查询。'
     ].join('\n');
 }
 
@@ -4771,6 +5115,94 @@ function buildMcpToolCatalogSystemMessage(serverSummaries) {
         '如果用户问你“你有哪些 tool / 工具”，直接根据这份清单回答。',
         '如果用户需求命中这些工具，优先直接调用，不要说自己看不到工具入口、没收到工具，或让用户改成手动下指令。'
     ].join('\n');
+}
+
+function isLuckinMcpToolName(value) {
+    return /^(queryShopList|searchProductForMcp|switchProduct|queryProductDetailInfo|previewOrder|createOrder)$/i.test(String(value || '').trim());
+}
+
+function buildLuckinMcpWorkflowPrompt(serverSummaries) {
+    const toolNames = Array.isArray(serverSummaries)
+        ? serverSummaries.flatMap((server) => Array.isArray(server && server.tools)
+            ? server.tools.map((tool) => String(tool && tool.name || '').trim())
+            : [])
+        : [];
+    if (!toolNames.some(isLuckinMcpToolName)) return '';
+
+    return [
+        '【瑞幸点单工具规则】',
+        '- 严格按真实结果推进：queryShopList 取得 deptId -> searchProductForMcp 取得 productId 和 skuCode -> 必要时 switchProduct / queryProductDetailInfo -> previewOrder。',
+        '- productId 和 skuCode 必须成对使用搜索或切换返回的真实值，不得猜测或编造。',
+        '- 用户对推荐回复“可以、行、就这个、默认、来一杯”等确认语时，沿用最近工具结果的 deptId/productId/skuCode，直接继续到 previewOrder；不要重新查门店或只回复“点好了”。',
+        '- previewOrder 是聊天侧终点：它会显示结账卡。绝对不要让 AI 调用 createOrder；正式下单和支付只能由用户点击卡片。',
+        '- 调完 previewOrder 后，用角色语气简短说明订单已配好并提示用户查看结账卡，不要重复列出整张价格明细。'
+    ].join('\n');
+}
+
+function buildMcpOrderContinuationInstruction(toolResolution) {
+    const names = Array.isArray(toolResolution && toolResolution.usedTools)
+        ? toolResolution.usedTools
+            .map((item) => String(item && item.meta && item.meta.toolName || item && item.name || '').trim())
+            .filter(Boolean)
+        : [];
+    if (!names.length) return '';
+    const joined = names.slice(0, 4).join('、');
+    return [
+        '这轮刚刚已经调用过 MCP 工具。',
+        `已调用工具：${joined}`,
+        '如果工具里已经查到门店、商品、预览或结账内容，就继续把结果组织成用户能直接接着操作的自然回复，不要只复读工具名。',
+        '如果还只是查店或查商品，请继续推进到下一步所需的工具，而不是提前收尾。'
+    ].join('\n');
+}
+
+function parseMcpToolResultPayload(value) {
+    if (!value) return null;
+    if (typeof value === 'object' && !Array.isArray(value)) return value;
+    try {
+        const parsed = JSON.parse(String(value));
+        return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : null;
+    } catch (error) {
+        return null;
+    }
+}
+
+function buildMcpToolResultContext(history) {
+    const records = (Array.isArray(history) ? history : [])
+        .filter((message) => message && message.type === 'mcp_tool_result')
+        .slice(-8)
+        .map((message) => parseMcpToolResultPayload(message.content))
+        .filter(Boolean);
+    if (!records.length) return '';
+
+    const lines = [
+        '【最近 MCP 工具结果，可继续复用】',
+        '以下是系统保存的真实工具参数和结果。用户后续确认、修改或追问时，优先复用其中字段继续调用工具；不要臆造参数。'
+    ];
+    records.forEach((record, index) => {
+        const serverName = String(record.serverName || 'MCP').trim();
+        const toolName = String(record.toolName || 'tool').trim();
+        const args = record.arguments && typeof record.arguments === 'object' ? record.arguments : {};
+        const resultText = String(record.resultText || '').trim();
+        lines.push(`${index + 1}. ${serverName} / ${toolName}`);
+        lines.push(`参数：${JSON.stringify(args)}`);
+        if (resultText) {
+            lines.push(`结果：${resultText.slice(0, 5000)}`);
+        }
+    });
+    return lines.join('\n').slice(0, 14000);
+}
+
+function hasPendingMcpToolContinuation(history, now = Date.now()) {
+    const latest = [...(Array.isArray(history) ? history : [])]
+        .reverse()
+        .map((message) => ({ message, payload: parseMcpToolResultPayload(message && message.content) }))
+        .find((entry) => entry.message && entry.message.type === 'mcp_tool_result' && entry.payload);
+    if (!latest) return false;
+
+    const ageMs = Math.max(0, now - Number(latest.payload.time || latest.message.time || 0));
+    if (ageMs > 30 * 60 * 1000) return false;
+    const toolName = String(latest.payload.toolName || '').trim();
+    return /^(queryShopList|searchProductForMcp|switchProduct|queryProductDetailInfo)$/i.test(toolName);
 }
 
 function getPrimaryAiResponseMessage(data) {
@@ -4903,10 +5335,22 @@ async function resolveAiToolCallsWithMcp(initialData, requestMessages, requestCo
             if (!result) {
                 result = await mcpBridge.executeChatToolCall(toolCall, toolIndex);
                 executedToolResults[executionKey] = result;
+                let parsedArguments = {};
+                try {
+                    parsedArguments = rawArguments ? JSON.parse(rawArguments) : {};
+                } catch (error) {
+                    parsedArguments = result && result.arguments && typeof result.arguments === 'object'
+                        ? result.arguments
+                        : {};
+                }
                 usedTools.push({
                     ok: !!(result && result.ok),
                     name: toolName,
-                    meta: result && result.meta ? result.meta : null
+                    meta: result && result.meta ? result.meta : null,
+                    arguments: parsedArguments,
+                    resultText: String(result && result.content || ''),
+                    rawResult: result && result.rawResult ? result.rawResult : null,
+                    isOrderLike: !!(result && result.isOrderLike)
                 });
             } else {
                 console.warn('[AI Debug] reused MCP result for a duplicate tool request', {
@@ -5165,6 +5609,33 @@ function appendMcpToolSystemNotice(contactId, usedTools) {
     });
 }
 
+function appendMcpToolResultMessages(contactId, usedTools) {
+    if (!Array.isArray(usedTools) || !usedTools.length || typeof window.sendMessage !== 'function') {
+        return [];
+    }
+
+    return usedTools.map((item) => {
+        const meta = item && item.meta && typeof item.meta === 'object' ? item.meta : {};
+        const payload = {
+            version: 1,
+            serverId: String(meta.serverId || '').trim(),
+            serverName: String(meta.serverName || 'MCP').trim() || 'MCP',
+            toolName: String(meta.toolName || item && item.name || 'tool').trim() || 'tool',
+            arguments: item && item.arguments && typeof item.arguments === 'object' ? item.arguments : {},
+            resultText: String(item && item.resultText || ''),
+            ok: !!(item && item.ok),
+            isOrderLike: !!(item && item.isOrderLike),
+            time: Date.now()
+        };
+        return window.sendMessage(JSON.stringify(payload), false, 'mcp_tool_result', null, contactId, {
+            ignoreReplyingState: true,
+            bypassWechatBlock: true,
+            showNotification: false,
+            includeInAiContext: false
+        });
+    }).filter(Boolean);
+}
+
 async function executeManualMcpToolDirective(toolDirective, requestMessages, requestCompletion) {
     const mcpBridge = window.MCPBridge;
     if (!toolDirective || !toolDirective.meta || !mcpBridge || typeof mcpBridge.callTool !== 'function') {
@@ -5224,7 +5695,11 @@ async function executeManualMcpToolDirective(toolDirective, requestMessages, req
             ok: true,
             name: toolDirective.openAiName,
             meta: toolDirective.meta,
-            manual: true
+            manual: true,
+            arguments: toolDirective.arguments && typeof toolDirective.arguments === 'object' ? toolDirective.arguments : {},
+            resultText: String(toolResult && toolResult.text || ''),
+            rawResult: toolResult && toolResult.rawResult ? toolResult.rawResult : null,
+            isOrderLike: !!(toolResult && toolResult.isOrderLike)
         }]
     };
 }
@@ -5288,7 +5763,11 @@ async function resolveManualMcpToolDirective(initialData, requestMessages, reque
                 ok: false,
                 name: toolDirective.openAiName,
                 meta: toolDirective.meta,
-                manual: true
+                manual: true,
+                arguments: toolDirective.arguments && typeof toolDirective.arguments === 'object' ? toolDirective.arguments : {},
+                resultText: errorText,
+                rawResult: null,
+                isOrderLike: false
             }]
         };
     }
@@ -6610,7 +7089,7 @@ function buildWechatConditionalCapabilityPrompt(runtimeCtx) {
 
 function isVisibleAssistantReplyMessage(message) {
     if (!message || message.role !== 'assistant' || message.hiddenFromUi) return false;
-    if (message.type === 'system_event' || message.type === 'live_sync_hidden' || message.type === 'voice_call_text') return false;
+    if (message.type === 'system_event' || message.type === 'live_sync_hidden' || message.type === 'voice_call_text' || message.type === 'mcp_tool_result') return false;
     if (message.type === 'text') {
         const raw = String(message.content || '').trim();
         if (!raw) return false;
@@ -6762,6 +7241,7 @@ async function generateAiReply(instruction = null, targetContactId = null, optio
     }
 
     const history = window.iphoneSimState.chatHistory[contactId] || [];
+    const hasPendingMcpContinuation = hasPendingMcpToolContinuation(history);
     const groupRoundAnchorMsgId = isGroupChat
         ? (([...history].reverse().find(msg => msg && !msg.hiddenFromUi && !msg._hiddenBySanitizer && msg.role === 'user') || {}).id || null)
         : null;
@@ -6817,16 +7297,26 @@ async function generateAiReply(instruction = null, targetContactId = null, optio
         let mcpTooling = { tools: [], toolIndex: {} };
         if (window.MCPBridge && typeof window.MCPBridge.prepareChatTooling === 'function') {
             try {
-                mcpTooling = await window.MCPBridge.prepareChatTooling(contactId, { autoDiscover: true, userText: recentUserTextForMcp });
+                mcpTooling = await window.MCPBridge.prepareChatTooling(contactId, {
+                    autoDiscover: true,
+                    userText: recentUserTextForMcp,
+                    includeAllBoundServers: hasPendingMcpContinuation
+                });
             } catch (mcpToolingError) {
                 console.warn('Failed to prepare MCP tooling for chat.', mcpToolingError);
                 mcpTooling = { tools: [], toolIndex: {} };
             }
         }
         const mcpToolSummaries = window.MCPBridge && typeof window.MCPBridge.getToolSummariesForContact === 'function'
-            ? window.MCPBridge.getToolSummariesForContact(contactId, { userText: recentUserTextForMcp })
+            ? window.MCPBridge.getToolSummariesForContact(contactId, {
+                userText: recentUserTextForMcp,
+                includeAllBoundServers: hasPendingMcpContinuation
+            })
             : [];
-        const mcpToolCatalogSystemMessage = buildMcpToolCatalogSystemMessage(mcpToolSummaries);
+        const mcpToolCatalogSystemMessage = [
+            buildMcpToolCatalogSystemMessage(mcpToolSummaries),
+            buildLuckinMcpWorkflowPrompt(mcpToolSummaries)
+        ].filter(Boolean).join('\n\n');
         const outgoingImageParts = messages.reduce((list, message, index) => {
             if (Array.isArray(message.content)) {
                 message.content.forEach(part => {
@@ -7015,7 +7505,7 @@ async function generateAiReply(instruction = null, targetContactId = null, optio
             data = toolResolution.data;
             messages = toolResolution.requestMessages;
             if (Array.isArray(toolResolution.usedTools) && toolResolution.usedTools.length > 0) {
-                appendMcpToolSystemNotice(contactId, toolResolution.usedTools);
+                appendMcpToolResultMessages(contactId, toolResolution.usedTools);
             }
             if (Array.isArray(toolResolution.usedTools) && toolResolution.usedTools.length > 0 && typeof window.showChatToast === 'function') {
                 const toolNames = toolResolution.usedTools
@@ -7026,6 +7516,16 @@ async function generateAiReply(instruction = null, targetContactId = null, optio
             }
             if (!data || !data.choices || !data.choices.length) {
                 throw new Error('工具调用后未收到有效 AI 回复');
+            }
+            const toolFocusNotice = buildMcpOrderContinuationInstruction(toolResolution);
+            if (toolFocusNotice) {
+                messages = [
+                    ...messages,
+                    {
+                        role: 'system',
+                        content: toolFocusNotice
+                    }
+                ];
             }
         }
 
@@ -7039,7 +7539,7 @@ async function generateAiReply(instruction = null, targetContactId = null, optio
             data = manualToolResolution.data;
             messages = manualToolResolution.requestMessages;
             if (Array.isArray(manualToolResolution.usedTools) && manualToolResolution.usedTools.length > 0) {
-                appendMcpToolSystemNotice(contactId, manualToolResolution.usedTools);
+                appendMcpToolResultMessages(contactId, manualToolResolution.usedTools);
             }
             if (Array.isArray(manualToolResolution.usedTools) && manualToolResolution.usedTools.length > 0 && typeof window.showChatToast === 'function') {
                 const toolNames = manualToolResolution.usedTools
@@ -7047,6 +7547,16 @@ async function generateAiReply(instruction = null, targetContactId = null, optio
                     .slice(0, 3)
                     .join('、');
                 window.showChatToast(`AI 已通过后备通道调用 MCP 工具：${toolNames}`, 2400);
+            }
+            const toolFocusNotice = buildMcpOrderContinuationInstruction(manualToolResolution);
+            if (toolFocusNotice) {
+                messages = [
+                    ...messages,
+                    {
+                        role: 'system',
+                        content: toolFocusNotice
+                    }
+                ];
             }
         }
 
@@ -7089,7 +7599,7 @@ async function generateAiReply(instruction = null, targetContactId = null, optio
                     data = rescuedResolution.data || data;
                     messages = rescuedResolution.requestMessages || messages;
                     if (Array.isArray(rescuedResolution.usedTools) && rescuedResolution.usedTools.length > 0) {
-                        appendMcpToolSystemNotice(contactId, rescuedResolution.usedTools);
+                        appendMcpToolResultMessages(contactId, rescuedResolution.usedTools);
                     }
                     const rescuedReply = extractReplyContentFromAiResponse(data);
                     if (rescuedReply && rescuedReply.content) {
@@ -11128,6 +11638,7 @@ window.buildAiPromptMessages = async function(contactId, instruction = null, opt
         window.ensureContactBilingualTranslationFields(contact);
     }
     const history = window.iphoneSimState.chatHistory[contactId] || [];
+    const mcpToolResultContext = buildMcpToolResultContext(history);
     const extraSystemPrompt = options && typeof options.extraSystemPrompt === 'string'
         ? String(options.extraSystemPrompt).trim()
         : '';
@@ -11510,6 +12021,7 @@ window.buildAiPromptMessages = async function(contactId, instruction = null, opt
     appendAiPromptPart(systemPromptParts, 'systemBase', 'itinerary_context', '行程', itineraryContext);
     appendAiPromptPart(systemPromptParts, 'systemBase', 'music_share', '音乐分享', sharedMusicContext);
     appendAiPromptPart(systemPromptParts, 'systemBase', 'extra_scene', extraSystemPromptLabel || '附加场景', extraSystemPrompt);
+    appendAiPromptPart(systemPromptParts, 'systemBase', 'mcp_result_context', 'MCP工具结果', mcpToolResultContext);
     appendAiPromptPart(systemPromptParts, 'systemBase', 'real_photo_candidates', '真实照片候选', realPhotoDescriptionContext);
     appendAiPromptPart(systemPromptParts, 'systemBase', 'conditional_capability', '条件能力', conditionalCapabilityPrompt);
     appendAiPromptPart(systemPromptParts, 'systemBase', 'reply_instruction', '回复指令', '请回复对方的消息。');

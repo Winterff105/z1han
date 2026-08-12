@@ -2356,6 +2356,7 @@ function shouldHideChatSyncMsg(msg) {
 function shouldExcludeFromAiContext(msg) {
     if (!msg) return false;
     if (msg.type === 'system_event') return msg.includeInAiContext !== true;
+    if (msg.type === 'mcp_tool_result') return true;
     if (msg.type === 'text' && typeof msg.content === 'string' && isHiddenForumWechatSyncText(msg.content)) return true;
     return false;
 }

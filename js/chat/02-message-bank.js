@@ -739,6 +739,12 @@ function sendMessage(text, isUser, type = 'text', description = null, targetCont
         channel: deliveryChannel,
         replyTo
     };
+    if (normalizedMeta.hiddenFromUi === true) {
+        msg.hiddenFromUi = true;
+    }
+    if (Object.prototype.hasOwnProperty.call(normalizedMeta, 'includeInAiContext')) {
+        msg.includeInAiContext = normalizedMeta.includeInAiContext === true;
+    }
     const isVoiceCallTranscript = type === 'voice_call_text';
 
     if (contact && typeof window.isGroupChatContact === 'function' && window.isGroupChatContact(contact)) {
