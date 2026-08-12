@@ -1903,6 +1903,88 @@ function getMcpToolResultMessage(msgId, contactId = null) {
     return history.find((message) => String(message && message.id || '') === String(msgId || '') && message.type === 'mcp_tool_result') || null;
 }
 
+function isMcpLuckinCheckoutPayload(payload) {
+    return !!(
+        payload
+        && /^previewOrder$/i.test(String(payload.toolName || '').trim())
+    );
+}
+
+function hasMcpLuckinOrderBeenCreated(payload) {
+    return !!(payload && payload.payment && payload.payment.ok);
+}
+
+function getLatestActiveMcpCheckoutMessage(contactId, serverId = '') {
+    const history = contactId && window.iphoneSimState && window.iphoneSimState.chatHistory
+        ? window.iphoneSimState.chatHistory[contactId]
+        : [];
+    if (!Array.isArray(history)) return null;
+
+    const expectedServerId = String(serverId || '').trim();
+    for (let index = history.length - 1; index >= 0; index--) {
+        const message = history[index];
+        if (!message || message.type !== 'mcp_tool_result') continue;
+        const payload = parseMcpToolResultPayload(message.content);
+        if (!isMcpLuckinCheckoutPayload(payload)) continue;
+        if (expectedServerId && String(payload.serverId || '').trim() !== expectedServerId) continue;
+        if (payload.ok === false || payload.superseded || hasMcpLuckinOrderBeenCreated(payload)) continue;
+        return { message, payload };
+    }
+    return null;
+}
+
+function supersedePriorMcpLuckinCheckoutCards(contactId, serverId = '') {
+    const history = contactId && window.iphoneSimState && window.iphoneSimState.chatHistory
+        ? window.iphoneSimState.chatHistory[contactId]
+        : [];
+    if (!Array.isArray(history)) return [];
+
+    const expectedServerId = String(serverId || '').trim();
+    const changedIds = [];
+    history.forEach((message) => {
+        if (!message || message.type !== 'mcp_tool_result') return;
+        const payload = parseMcpToolResultPayload(message.content);
+        if (!isMcpLuckinCheckoutPayload(payload)) return;
+        if (expectedServerId && String(payload.serverId || '').trim() !== expectedServerId) return;
+        if (payload.ok === false || payload.superseded || hasMcpLuckinOrderBeenCreated(payload)) return;
+
+        payload.superseded = true;
+        payload.supersededAt = Date.now();
+        message.content = JSON.stringify(payload);
+        changedIds.push(String(message.id || ''));
+    });
+
+    if (changedIds.length) saveConfig();
+    return changedIds.filter(Boolean);
+}
+
+function findRenderedMcpCheckoutMessageElement(msgId) {
+    const container = document.getElementById('chat-messages');
+    if (!container) return null;
+    return Array.from(container.querySelectorAll('.chat-message'))
+        .find((element) => String(element.dataset.msgId || '') === String(msgId || '')) || null;
+}
+
+function refreshMcpCheckoutCardInPlace(contactId, msgId) {
+    if (!window.iphoneSimState || String(window.iphoneSimState.currentChatContactId || '') !== String(contactId || '')) {
+        return;
+    }
+    const message = getMcpToolResultMessage(msgId, contactId);
+    const messageElement = message && findRenderedMcpCheckoutMessageElement(msgId);
+    const contentElement = messageElement && messageElement.querySelector('.message-content');
+    if (!message || !contentElement) return;
+    contentElement.innerHTML = buildMcpToolResultCardHtml(message.content, message.id);
+}
+
+function focusMcpCheckoutCard(contactId, msgId) {
+    if (!window.iphoneSimState || String(window.iphoneSimState.currentChatContactId || '') !== String(contactId || '')) {
+        return;
+    }
+    const messageElement = findRenderedMcpCheckoutMessageElement(msgId);
+    if (!messageElement || typeof messageElement.scrollIntoView !== 'function') return;
+    messageElement.scrollIntoView({ block: 'center', behavior: 'smooth' });
+}
+
 function extractMcpStructuredResult(value, depth = 0) {
     if (depth > 6 || value === null || value === undefined) return null;
     if (typeof value === 'string') {
@@ -2081,6 +2163,9 @@ function buildMcpToolResultCardHtml(text, msgId) {
     const preview = extractMcpStructuredResult(payload.payment && payload.payment.resultText)
         || extractMcpStructuredResult(payload.resultText);
     const isPaid = !!(payload.payment && payload.payment.ok);
+    const isSuperseded = !!payload.superseded;
+    const isPaymentPending = !!payload.paymentPending;
+    const isPreviewUnavailable = payload.ok === false;
 
     if (isCheckout) {
         const productInfoList = Array.isArray(preview && preview.productInfoList) ? preview.productInfoList : [];
@@ -2114,12 +2199,16 @@ function buildMcpToolResultCardHtml(text, msgId) {
         const privilege = formatMcpMoney(preview && preview.privilegeMoney);
         const paymentInfo = extractMcpStructuredResult(payload.payment && payload.payment.resultText);
         const payUrl = String(paymentInfo && (paymentInfo.payOrderUrl || paymentInfo.payUrl) || '').trim();
+        const paymentQrUrl = normalizeMcpProductImageUrl(
+            paymentInfo && (paymentInfo.payOrderQrCodeUrl || paymentInfo.qrCodeUrl || paymentInfo.qrcodeUrl)
+        );
+        const orderId = String(paymentInfo && (paymentInfo.orderIdStr || paymentInfo.orderId) || '').trim();
         const lineHtml = lines.map((line) => {
             const imageUrl = line.image || findMcpProductImageFromChatHistory(line.productId, line.skuCode, line.name);
             const imageHtml = imageUrl
                 ? `<img src="${escapeChatMessageHtml(imageUrl)}" alt="" referrerpolicy="no-referrer" style="width:48px;height:48px;object-fit:cover;border-radius:8px;background:#edf0f2;">`
                 : `<div style="width:48px;height:48px;display:flex;align-items:center;justify-content:center;border-radius:8px;background:#edf0f2;color:#59616a;font-size:21px;">☕</div>`;
-            const controls = isPaid
+            const controls = (isPaid || isSuperseded || isPaymentPending || isPreviewUnavailable)
                 ? `<span style="font-size:12px;color:#7a828c;">x${line.amount}</span>`
                 : `<div style="display:flex;align-items:center;height:28px;border:1px solid #d7dde2;border-radius:6px;overflow:hidden;background:#fff;">
                     <button type="button" onclick="window.adjustMcpLuckinQuantity('${escapeChatMessageHtml(msgId)}', ${line.index}, -1)" style="width:27px;height:100%;border:0;background:transparent;color:#39414a;font-size:17px;">−</button>
@@ -2137,19 +2226,45 @@ function buildMcpToolResultCardHtml(text, msgId) {
             </div>`;
         }).join('');
         const payControl = isPaid
-            ? (payUrl
-                ? `<button type="button" onclick="window.openMcpLuckinPayment('${escapeChatMessageHtml(msgId)}')" style="width:100%;margin-top:13px;border:1px solid #15181d;border-radius:7px;padding:11px;background:#15181d;color:#fff;font-size:14px;font-weight:750;">去支付</button>`
-                : `<div style="margin-top:13px;padding:10px;border-radius:7px;background:#f3faff;color:#39799d;font-size:12px;font-weight:700;text-align:center;">订单已创建，请在支付页面完成支付</div>`)
-            : `<button type="button" onclick="window.payMcpLuckinOrder('${escapeChatMessageHtml(msgId)}')" style="width:100%;margin-top:13px;border:1px solid #15181d;border-radius:7px;padding:11px;background:#15181d;color:#fff;font-size:14px;font-weight:750;">下单并支付</button>`;
+            ? (paymentQrUrl
+                ? `<div style="display:flex;flex-direction:column;align-items:center;margin-top:14px;padding:13px 10px 10px;border:1px solid #dfe5ea;border-radius:8px;background:#fbfdff;">
+                    <img src="${escapeChatMessageHtml(paymentQrUrl)}" alt="微信支付二维码" referrerpolicy="no-referrer" style="width:154px;height:154px;object-fit:contain;background:#fff;">
+                    <div style="margin-top:8px;color:#236d9d;font-size:12px;font-weight:750;">请使用微信扫一扫完成支付</div>
+                    ${orderId ? `<div style="margin-top:4px;color:#9ca4ad;font:10px/1 ui-monospace,SFMono-Regular,Menlo,monospace;">#${escapeChatMessageHtml(orderId)}</div>` : ''}
+                </div>`
+                : (payUrl
+                    ? `<div style="margin-top:13px;padding:11px;border-radius:7px;background:#f3faff;color:#39799d;font-size:12px;line-height:1.55;text-align:center;">
+                        订单已创建，但接口没有返回二维码。浏览器无法直接唤起微信支付。
+                        <button type="button" onclick="window.copyMcpLuckinPaymentCode('${escapeChatMessageHtml(msgId)}')" style="display:block;width:100%;margin-top:8px;border:1px solid #236d9d;border-radius:6px;padding:8px;background:#fff;color:#236d9d;font-size:12px;font-weight:750;">复制支付码</button>
+                    </div>`
+                    : `<div style="margin-top:13px;padding:10px;border-radius:7px;background:#f3faff;color:#39799d;font-size:12px;font-weight:700;text-align:center;">订单已创建，但服务未返回支付二维码。</div>`))
+            : (isSuperseded
+                ? `<div style="margin-top:13px;padding:10px;border-radius:7px;background:#f4f6f8;color:#6d747d;font-size:12px;font-weight:700;text-align:center;">这份配置已被新的结账卡替代</div>`
+                : (isPreviewUnavailable
+                    ? `<div style="margin-top:13px;padding:10px;border-radius:7px;background:#f7f0f0;color:#a65353;font-size:12px;font-weight:700;text-align:center;">这份订单预览不可用，请重新配置</div>`
+                    : (isPaymentPending
+                        ? `<button type="button" disabled style="width:100%;margin-top:13px;border:1px solid #b9c0c6;border-radius:7px;padding:11px;background:#e9edf0;color:#68717a;font-size:14px;font-weight:750;">创建订单中...</button>`
+                        : `<button type="button" onclick="window.payMcpLuckinOrder('${escapeChatMessageHtml(msgId)}')" style="width:100%;margin-top:13px;border:1px solid #15181d;border-radius:7px;padding:11px;background:#15181d;color:#fff;font-size:14px;font-weight:750;">下单并支付</button>`)));
+        const checkoutStatusText = isPaid ? '已创建' : (isSuperseded ? '已更新' : (isPaymentPending ? '处理中' : (isPreviewUnavailable ? '不可用' : '待支付')));
+        const checkoutSubtitle = isPaid
+            ? '订单已创建，等待支付'
+            : (isSuperseded
+                ? '已保留记录，请使用最新配置'
+                : (isPaymentPending
+                    ? '正在为你创建订单'
+                    : (isPreviewUnavailable ? '请重新选择商品或门店' : '已为你配置好这一杯')));
+        const checkoutStatusStyle = isSuperseded || isPaymentPending || isPreviewUnavailable
+            ? 'background:#f0f2f4;color:#68717a;'
+            : 'background:#e4f4ff;color:#3f7fa5;';
 
         return `<div class="mcp-tool-result-card mcp-luckin-checkout-card" style="width:288px;overflow:hidden;border:1px solid #dfe5ea;border-radius:10px;background:#fff;box-shadow:0 8px 24px rgba(31,53,70,.08);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
             <div style="display:flex;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid #d9edf9;background:#f3faff;">
                 <div style="width:30px;height:30px;display:grid;place-items:center;border-radius:8px;background:#dff2ff;color:#236d9d;font:800 12px/1 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.06em;">LK</div>
                 <div style="min-width:0;flex:1;">
                     <div style="font-size:14px;font-weight:760;color:#15181d;">瑞幸结账</div>
-                    <div style="margin-top:2px;font-size:11px;color:#6d899a;">${isPaid ? '订单已创建，等待支付' : '已为你配置好这一杯'}</div>
+                    <div style="margin-top:2px;font-size:11px;color:#6d899a;">${checkoutSubtitle}</div>
                 </div>
-                <span style="padding:4px 7px;border-radius:4px;background:#e4f4ff;color:#3f7fa5;font-size:11px;font-weight:700;">${isPaid ? '已创建' : '待支付'}</span>
+                <span style="padding:4px 7px;border-radius:4px;${checkoutStatusStyle}font-size:11px;font-weight:700;">${checkoutStatusText}</span>
             </div>
             <div style="padding:0 14px 14px;">
                 ${shopName ? `<div style="display:flex;align-items:flex-start;gap:8px;padding:12px 0;border-bottom:1px solid #e5e9ed;"><span style="width:8px;height:8px;margin-top:5px;flex:0 0 auto;border-radius:50%;background:#57a6d8;box-shadow:0 0 0 4px #f3faff;"></span><div><div style="font-size:13px;font-weight:730;color:#15181d;">${escapeChatMessageHtml(shopName)} <span style="margin-left:5px;color:#6d91a9;font-size:10px;font-weight:600;">到店自提</span></div>${shopAddress ? `<div style="margin-top:3px;color:#7a828c;font-size:11px;line-height:1.35;">${escapeChatMessageHtml(shopAddress)}</div>` : ''}</div></div>` : ''}
@@ -2266,9 +2381,18 @@ function findLatestMcpLocation(contactId) {
 }
 
 window.adjustMcpLuckinQuantity = async function(msgId, lineIndex, delta) {
-    const message = getMcpToolResultMessage(msgId);
+    const contactId = window.iphoneSimState && window.iphoneSimState.currentChatContactId;
+    const message = getMcpToolResultMessage(msgId, contactId);
     const payload = message && parseMcpToolResultPayload(message.content);
     if (!message || !payload || !/^previewOrder$/i.test(String(payload.toolName || ''))) return;
+    const activeCheckout = getLatestActiveMcpCheckoutMessage(contactId, payload.serverId);
+    if (!activeCheckout || String(activeCheckout.message.id || '') !== String(msgId || '') || payload.paymentPending) {
+        if (typeof window.showChatToast === 'function') {
+            window.showChatToast('订单配置已更新，请在最新结账卡操作', 2200);
+        }
+        if (activeCheckout) focusMcpCheckoutCard(contactId, activeCheckout.message.id);
+        return;
+    }
     const productList = Array.isArray(payload.arguments && payload.arguments.productList)
         ? payload.arguments.productList.map((item) => ({ ...item }))
         : [];
@@ -2288,9 +2412,7 @@ window.adjustMcpLuckinQuantity = async function(msgId, lineIndex, delta) {
         payload.time = Date.now();
         message.content = JSON.stringify(payload);
         saveConfig();
-        if (typeof window.renderChatHistory === 'function') {
-            window.renderChatHistory(window.iphoneSimState.currentChatContactId, true);
-        }
+        refreshMcpCheckoutCardInPlace(contactId, msgId);
     } catch (error) {
         if (typeof window.showChatToast === 'function') {
             window.showChatToast(String(error && error.message || '重新计算订单失败'), 2200);
@@ -2305,6 +2427,30 @@ window.payMcpLuckinOrder = async function(msgId) {
     if (!message || !payload || !/^previewOrder$/i.test(String(payload.toolName || ''))) return;
     if (!window.MCPBridge || typeof window.MCPBridge.callTool !== 'function') return;
 
+    const activeCheckout = getLatestActiveMcpCheckoutMessage(contactId, payload.serverId);
+    if (!activeCheckout || String(activeCheckout.message.id || '') !== String(msgId || '')) {
+        if (typeof window.showChatToast === 'function') {
+            window.showChatToast('订单配置已更新，请在最新结账卡支付', 2400);
+        }
+        if (activeCheckout) focusMcpCheckoutCard(contactId, activeCheckout.message.id);
+        return;
+    }
+
+    if (!window.__mcpLuckinPaymentLocks || typeof window.__mcpLuckinPaymentLocks !== 'object') {
+        window.__mcpLuckinPaymentLocks = {};
+    }
+    const lockKey = `${String(contactId || '')}:${String(msgId || '')}`;
+    if (window.__mcpLuckinPaymentLocks[lockKey] || payload.paymentPending || hasMcpLuckinOrderBeenCreated(payload)) {
+        return;
+    }
+
+    window.__mcpLuckinPaymentLocks[lockKey] = true;
+    payload.paymentPending = true;
+    delete payload.paymentError;
+    message.content = JSON.stringify(payload);
+    saveConfig();
+    refreshMcpCheckoutCardInPlace(contactId, msgId);
+
     const location = findLatestMcpLocation(contactId);
     const orderArgs = {
         ...(payload.arguments || {}),
@@ -2318,15 +2464,22 @@ window.payMcpLuckinOrder = async function(msgId) {
             resultText: String(result && result.text || ''),
             time: Date.now()
         };
+        payload.paymentPending = false;
+        delete payload.paymentError;
         message.content = JSON.stringify(payload);
         saveConfig();
-        if (typeof window.renderChatHistory === 'function') {
-            window.renderChatHistory(contactId, true);
-        }
+        refreshMcpCheckoutCardInPlace(contactId, msgId);
     } catch (error) {
+        payload.paymentPending = false;
+        payload.paymentError = String(error && error.message || '创建订单失败');
+        message.content = JSON.stringify(payload);
+        saveConfig();
+        refreshMcpCheckoutCardInPlace(contactId, msgId);
         if (typeof window.showChatToast === 'function') {
             window.showChatToast(String(error && error.message || '创建订单失败'), 2500);
         }
+    } finally {
+        delete window.__mcpLuckinPaymentLocks[lockKey];
     }
 };
 
@@ -2335,10 +2488,45 @@ window.openMcpLuckinPayment = function(msgId) {
     const payload = message && parseMcpToolResultPayload(message.content);
     const payment = extractMcpStructuredResult(payload && payload.payment && payload.payment.resultText);
     const payUrl = String(payment && (payment.payOrderUrl || payment.payUrl) || '').trim();
-    if (payUrl) {
-        window.open(payUrl, '_blank', 'noopener,noreferrer');
+    if (payUrl && typeof window.copyMcpLuckinPaymentCode === 'function') {
+        window.copyMcpLuckinPaymentCode(msgId);
     } else if (typeof window.showChatToast === 'function') {
         window.showChatToast('订单已创建，但服务未返回支付链接', 2200);
+    }
+};
+
+window.copyMcpLuckinPaymentCode = async function(msgId) {
+    const message = getMcpToolResultMessage(msgId);
+    const payload = message && parseMcpToolResultPayload(message.content);
+    const payment = extractMcpStructuredResult(payload && payload.payment && payload.payment.resultText);
+    const payUrl = String(payment && (payment.payOrderUrl || payment.payUrl) || '').trim();
+    if (!payUrl) {
+        if (typeof window.showChatToast === 'function') {
+            window.showChatToast('服务未返回可复制的支付码', 2200);
+        }
+        return;
+    }
+
+    try {
+        if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+            await navigator.clipboard.writeText(payUrl);
+        } else {
+            const input = document.createElement('textarea');
+            input.value = payUrl;
+            input.style.position = 'fixed';
+            input.style.opacity = '0';
+            document.body.appendChild(input);
+            input.select();
+            document.execCommand('copy');
+            input.remove();
+        }
+        if (typeof window.showChatToast === 'function') {
+            window.showChatToast('支付码已复制，请在微信中扫码或按支付提示继续', 2500);
+        }
+    } catch (error) {
+        if (typeof window.showChatToast === 'function') {
+            window.showChatToast('复制支付码失败，请重试', 2200);
+        }
     }
 };
 
@@ -5724,13 +5912,18 @@ function appendMcpToolResultMessages(contactId, usedTools) {
         return [];
     }
 
-    return usedTools.map((item) => {
+    const supersededMessageIds = [];
+    const appendedMessages = usedTools.map((item) => {
         const meta = item && item.meta && typeof item.meta === 'object' ? item.meta : {};
+        const toolName = String(meta.toolName || item && item.name || 'tool').trim() || 'tool';
+        if (item && item.ok && /^previewOrder$/i.test(toolName)) {
+            supersededMessageIds.push(...supersedePriorMcpLuckinCheckoutCards(contactId, meta.serverId));
+        }
         const payload = {
             version: 1,
             serverId: String(meta.serverId || '').trim(),
             serverName: String(meta.serverName || 'MCP').trim() || 'MCP',
-            toolName: String(meta.toolName || item && item.name || 'tool').trim() || 'tool',
+            toolName,
             arguments: item && item.arguments && typeof item.arguments === 'object' ? item.arguments : {},
             resultText: String(item && item.resultText || ''),
             ok: !!(item && item.ok),
@@ -5744,6 +5937,9 @@ function appendMcpToolResultMessages(contactId, usedTools) {
             includeInAiContext: false
         });
     }).filter(Boolean);
+
+    supersededMessageIds.forEach((msgId) => refreshMcpCheckoutCardInPlace(contactId, msgId));
+    return appendedMessages;
 }
 
 async function executeManualMcpToolDirective(toolDirective, requestMessages, requestCompletion) {
