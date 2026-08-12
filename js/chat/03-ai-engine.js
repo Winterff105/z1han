@@ -2197,6 +2197,7 @@ function buildMcpToolResultCardHtml(text, msgId) {
         const finalPrice = formatMcpMoney(preview && (preview.discountPrice || preview.payPrice || preview.totalPrice));
         const originalPrice = formatMcpMoney(preview && preview.totalInitialPrice);
         const privilege = formatMcpMoney(preview && preview.privilegeMoney);
+        const couponCount = Array.isArray(preview && preview.couponCodeList) ? preview.couponCodeList.length : 0;
         const paymentInfo = extractMcpStructuredResult(payload.payment && payload.payment.resultText);
         const payUrl = String(paymentInfo && (paymentInfo.payOrderUrl || paymentInfo.payUrl) || '').trim();
         const paymentQrUrl = normalizeMcpProductImageUrl(
@@ -2272,6 +2273,7 @@ function buildMcpToolResultCardHtml(text, msgId) {
                 <div style="padding-top:10px;color:#7a828c;font-size:12px;">
                     ${originalPrice ? `<div style="display:flex;justify-content:space-between;margin:7px 0;"><span>商品总价</span><span>${originalPrice}</span></div>` : ''}
                     ${privilege ? `<div style="display:flex;justify-content:space-between;margin:7px 0;color:#39799d;"><span>已优惠</span><span>-${privilege.replace('¥', '¥')}</span></div>` : ''}
+                    ${couponCount ? `<div style="display:flex;justify-content:space-between;margin:7px 0;color:#39799d;"><span>已自动用券</span><span>${couponCount} 张</span></div>` : ''}
                     ${finalPrice ? `<div style="display:flex;justify-content:space-between;align-items:baseline;padding-top:11px;margin-top:11px;border-top:1px solid #e5e9ed;color:#15181d;font-size:13px;font-weight:750;"><span>实付</span><span style="font-size:21px;">${finalPrice}</span></div>` : ''}
                 </div>
                 ${payControl}
@@ -2456,6 +2458,12 @@ window.payMcpLuckinOrder = async function(msgId) {
         ...(payload.arguments || {}),
         ...location
     };
+    const previewResult = extractMcpStructuredResult(payload.resultText);
+    const couponCodeList = previewResult && previewResult.couponCodeList;
+    if (Array.isArray(couponCodeList) && couponCodeList.length) {
+        // The preview response chooses the applicable coupons; createOrder must receive them too.
+        orderArgs.couponCodeList = couponCodeList;
+    }
     try {
         const result = await window.MCPBridge.callTool(payload.serverId, 'createOrder', orderArgs);
         if (result && result.isError) throw new Error(result.text || '创建订单失败');
