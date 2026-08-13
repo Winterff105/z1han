@@ -9769,7 +9769,17 @@ async function generateAiReply(instruction = null, targetContactId = null, optio
                 } else if (msg.type === '表情包' || msg.type === 'sticker') {
                     const stickerAsset = resolveStickerAssetForContact(contact, msg.content);
                     if (stickerAsset) {
-                        sendMessage(stickerAsset.url, false, 'sticker', stickerAsset.desc || msg.content, contactId, { channel: deliveryChannel });
+                        if (typeof window.sendChatSticker === 'function') {
+                            await window.sendChatSticker(stickerAsset, {
+                                isUser: false,
+                                description: stickerAsset.desc || msg.content,
+                                targetContactId: contactId,
+                                meta: { channel: deliveryChannel },
+                                awaitMedia: true
+                            });
+                        } else {
+                            sendMessage(stickerAsset.url, false, 'sticker', stickerAsset.desc || msg.content, contactId, { channel: deliveryChannel });
+                        }
                     } else {
                         // 找不到表情包，直接忽略，不发送文本 fallback，以免破坏沉浸感
                         console.warn(`Sticker not found: ${msg.content}`);
@@ -10258,7 +10268,17 @@ async function generateAiReply(instruction = null, targetContactId = null, optio
                     sendAssistantVirtualImageMessage(imageToSend.content, contactId, { channel: deliveryChannel });
                 }
             } else if (imageToSend.type === 'sticker') {
-                sendMessage(imageToSend.content, false, 'sticker', imageToSend.desc, contactId, { channel: deliveryChannel });
+                if (typeof window.sendChatSticker === 'function') {
+                    await window.sendChatSticker(imageToSend.content, {
+                        isUser: false,
+                        description: imageToSend.desc,
+                        targetContactId: contactId,
+                        meta: { channel: deliveryChannel },
+                        awaitMedia: true
+                    });
+                } else {
+                    sendMessage(imageToSend.content, false, 'sticker', imageToSend.desc, contactId, { channel: deliveryChannel });
+                }
             }
         }
 
@@ -12360,12 +12380,14 @@ window.buildAiPromptMessages = async function(contactId, instruction = null, opt
         .slice(-limit)
         .map(cloneAiPromptHistoryMessage);
 
-    let imageCount = 0;
+    let visualMediaCount = 0;
     for (let i = contextMessages.length - 1; i >= 0; i--) {
-        if (contextMessages[i].type === 'image') {
-            imageCount++;
-            if (imageCount > 3) {
-                contextMessages[i]._skipImage = true;
+        const message = contextMessages[i];
+        const isStickerVisionMessage = contact.stickerVisionEnabled === true && message.type === 'sticker';
+        if (message.type === 'image' || isStickerVisionMessage) {
+            visualMediaCount++;
+            if (visualMediaCount > 3) {
+                message._skipImage = true;
             }
         }
     }
@@ -12509,6 +12531,19 @@ window.buildAiPromptMessages = async function(contactId, instruction = null, opt
                 };
             } else if (h.type === 'sticker') {
                 const desc = h.description ? `: ${h.description}` : '';
+                if (contact.stickerVisionEnabled === true && !h._skipImage && h.content) {
+                    const stickerContentArray = [];
+                    if (structuredPrefix) {
+                        stickerContentArray.push({ type: "text", text: joinContextTextParts(structuredPrefix, `[表情包${desc}]`) });
+                    } else if (desc) {
+                        stickerContentArray.push({ type: "text", text: `[表情包${desc}]` });
+                    }
+                    stickerContentArray.push({ type: "image_url", image_url: { url: h.content } });
+                    return {
+                        role: h.role,
+                        content: stickerContentArray
+                    };
+                }
                 return {
                     role: h.role,
                     content: joinContextTextParts(structuredPrefix, `[表情包${desc}]`)

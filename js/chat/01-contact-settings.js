@@ -525,6 +525,9 @@ function ensureContactStickerSuggestionFields(contact) {
     if (typeof contact.stickerSuggestionEnabled !== 'boolean') {
         contact.stickerSuggestionEnabled = true;
     }
+    if (typeof contact.stickerVisionEnabled !== 'boolean') {
+        contact.stickerVisionEnabled = false;
+    }
     return contact;
 }
 
@@ -1718,6 +1721,7 @@ function createBaseContactPayload({ name, remark = '', persona = '', avatar = ''
         meetingLinkedWbCategories: [],
         linkedStickerCategories: [],
         stickerSuggestionEnabled: true,
+        stickerVisionEnabled: false,
         showTimestamp: true,
         timestampPosition: 'outside',
         timestampFormat: '24h'
@@ -4769,6 +4773,10 @@ function openChatSettings() {
     if (stickerSuggestionToggle) {
         stickerSuggestionToggle.checked = contact.stickerSuggestionEnabled !== false;
     }
+    const stickerVisionToggle = document.getElementById('chat-setting-sticker-vision-enabled');
+    if (stickerVisionToggle) {
+        stickerVisionToggle.checked = !!contact.stickerVisionEnabled;
+    }
 
     const topbarAvatarVisibleToggle = document.getElementById('chat-setting-topbar-avatar-visible');
     if (topbarAvatarVisibleToggle) {
@@ -5400,6 +5408,9 @@ function handleSaveChatSettings() {
     const stickerSuggestionEnabled = document.getElementById('chat-setting-sticker-suggestion-enabled')
         ? document.getElementById('chat-setting-sticker-suggestion-enabled').checked
         : true;
+    const stickerVisionEnabled = document.getElementById('chat-setting-sticker-vision-enabled')
+        ? document.getElementById('chat-setting-sticker-vision-enabled').checked
+        : false;
     const topbarAvatarVisible = document.getElementById('chat-setting-topbar-avatar-visible') ? document.getElementById('chat-setting-topbar-avatar-visible').checked : false;
     const topbarAvatarPosition = document.getElementById('chat-setting-topbar-avatar-position')
         ? normalizeChatTopbarAvatarPosition(document.getElementById('chat-setting-topbar-avatar-position').value)
@@ -5525,6 +5536,7 @@ function handleSaveChatSettings() {
     contact.timestampPosition = timestampPosition;
     contact.timestampFormat = timestampFormat;
     contact.stickerSuggestionEnabled = !!stickerSuggestionEnabled;
+    contact.stickerVisionEnabled = !!stickerVisionEnabled;
     contact.topbarAvatarVisible = !!topbarAvatarVisible;
     contact.topbarAvatarPosition = topbarAvatarPosition;
     contact.topbarStatusVisible = !!topbarStatusVisible;
@@ -5778,6 +5790,7 @@ function buildChatSettingsDraftContact(contact) {
     const realTimeVisibleInput = document.getElementById('chat-setting-real-time-visible');
     const calendarAwareInput = document.getElementById('chat-setting-calendar-aware');
     const plannerContextInput = document.getElementById('chat-setting-planner-context-enabled');
+    const stickerVisionInput = document.getElementById('chat-setting-sticker-vision-enabled');
     const userPersonaId = userPersonaInput ? parseInt(userPersonaInput.value, 10) : NaN;
     const promptPartDisabledMap = contact.promptPartDisabledMap && typeof contact.promptPartDisabledMap === 'object' && !Array.isArray(contact.promptPartDisabledMap)
         ? { ...contact.promptPartDisabledMap }
@@ -5807,6 +5820,7 @@ function buildChatSettingsDraftContact(contact) {
         thoughtVisible: thoughtVisibleInput ? !!thoughtVisibleInput.checked : !!contact.thoughtVisible,
         realTimeVisible: realTimeVisibleInput ? !!realTimeVisibleInput.checked : !!contact.realTimeVisible,
         calendarAwareEnabled: calendarAwareInput ? !!calendarAwareInput.checked : contact.calendarAwareEnabled !== false,
+        stickerVisionEnabled: stickerVisionInput ? !!stickerVisionInput.checked : !!contact.stickerVisionEnabled,
         userPersonaId: Number.isFinite(userPersonaId) ? userPersonaId : null,
         userPersonaPromptOverride: userPromptInput ? userPromptInput.value : (contact.userPersonaPromptOverride || ''),
         promptPartDisabledMap: Object.keys(promptPartDisabledMap).length > 0 ? promptPartDisabledMap : undefined,
@@ -6333,6 +6347,7 @@ function ensureChatSettingsTokenPreviewBindings() {
     bindRefresh('chat-setting-persona', ['input']);
     bindRefresh('chat-setting-context-limit', ['input', 'change']);
     bindRefresh('chat-setting-bilingual-translation-enabled', ['change']);
+    bindRefresh('chat-setting-sticker-vision-enabled', ['change']);
     bindRefresh('chat-setting-bilingual-source-lang', ['change']);
     bindRefresh('chat-setting-bilingual-target-lang', ['change']);
     bindRefresh('chat-setting-show-thought', ['change']);

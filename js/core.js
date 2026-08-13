@@ -1941,6 +1941,76 @@ async function persistInlineChatImagePayload(value, metadata = {}) {
     }
 }
 
+async function sendChatSticker(stickerOrUrl, options = {}) {
+    const sticker = stickerOrUrl && typeof stickerOrUrl === 'object' ? stickerOrUrl : null;
+    const source = String(sticker ? sticker.url : stickerOrUrl || '').trim();
+    const description = String(options.description !== undefined ? options.description : (sticker && sticker.desc) || '').trim();
+    const isUser = options.isUser !== false;
+    const targetContactId = options.targetContactId || null;
+    const meta = {
+        ...(options.meta && typeof options.meta === 'object' ? options.meta : {}),
+        deferConfigSave: true
+    };
+    if (!source || typeof window.sendMessage !== 'function') return null;
+
+    if (!source.startsWith('data:image') || typeof window.saveChatMediaBlob !== 'function') {
+        return window.sendMessage(source, isUser, 'sticker', description, targetContactId, meta);
+    }
+
+    const placeholder = window.CHAT_MEDIA_PIXEL_PLACEHOLDER || '';
+    const message = window.sendMessage(placeholder, isUser, 'sticker', description, targetContactId, {
+        ...meta,
+        skipInlineMediaOffload: true
+    });
+    if (!message) return null;
+
+    const persistTask = (async () => {
+        try {
+            const blob = await dataUrlToBlob(source);
+            const mediaRef = await window.saveChatMediaBlob(blob, {
+                type: blob.type || 'image/webp',
+                name: 'sticker'
+            });
+            if (typeof window.replaceChatMediaMessageContent === 'function') {
+                window.replaceChatMediaMessageContent(targetContactId || window.iphoneSimState.currentChatContactId, message.id, mediaRef);
+            }
+            return message;
+        } catch (error) {
+            console.warn('表情包转存失败，继续使用原始图片', error);
+            if (typeof window.replaceChatMediaMessageContent === 'function') {
+                window.replaceChatMediaMessageContent(targetContactId || window.iphoneSimState.currentChatContactId, message.id, source);
+            }
+            return message;
+        }
+    })();
+
+    if (options.awaitMedia === true) {
+        return await persistTask;
+    }
+    persistTask.catch(() => {});
+    return message;
+}
+
+function replaceChatMediaMessageContent(contactId, msgId, content) {
+    const safeContactId = String(contactId || '').trim();
+    const safeMsgId = String(msgId || '').trim();
+    if (!safeContactId || !safeMsgId || !state.chatHistory || !state.chatHistory[safeContactId]) return false;
+
+    const history = state.chatHistory[safeContactId];
+    const targetMessage = Array.isArray(history)
+        ? history.find((item) => item && String(item.id || '') === safeMsgId)
+        : null;
+    if (!targetMessage) return false;
+
+    targetMessage.content = String(content || '').trim();
+    if (isChatMediaReference(targetMessage.content)) {
+        refreshRenderedChatMessageMedia(safeContactId, safeMsgId, targetMessage.content);
+    } else if (String(state.currentChatContactId || '') === safeContactId && typeof window.renderChatHistory === 'function') {
+        window.renderChatHistory(safeContactId, true);
+    }
+    return true;
+}
+
 const chatMediaOffloadInFlight = new Set();
 
 function refreshRenderedChatMessageMedia(contactId, msgId, mediaRef) {
@@ -2192,6 +2262,8 @@ window.isChatMediaReference = isChatMediaReference;
 window.compressImageToBlob = compressImageToBlob;
 window.saveChatMediaBlob = saveChatMediaBlob;
 window.persistInlineChatImagePayload = persistInlineChatImagePayload;
+window.sendChatSticker = sendChatSticker;
+window.replaceChatMediaMessageContent = replaceChatMediaMessageContent;
 window.offloadInlineChatMediaMessage = offloadInlineChatMediaMessage;
 window.resolveChatMediaSrc = resolveChatMediaSrc;
 window.resolveChatMediaDataUrl = resolveChatMediaDataUrl;
@@ -2551,6 +2623,23 @@ window.analyzeStorageUsage = function() {
     alert(msg);
     console.table(breakdown);
 };
+
+let deferredConfigSaveTimer = null;
+
+function scheduleDeferredConfigSave() {
+    if (deferredConfigSaveTimer) return;
+    const flush = () => {
+        deferredConfigSaveTimer = null;
+        saveConfig();
+    };
+    if (typeof window.requestIdleCallback === 'function') {
+        deferredConfigSaveTimer = window.requestIdleCallback(flush, { timeout: 1200 });
+    } else {
+        deferredConfigSaveTimer = window.setTimeout(flush, 500);
+    }
+}
+
+window.scheduleDeferredConfigSave = scheduleDeferredConfigSave;
 
 function saveConfig() {
     try {

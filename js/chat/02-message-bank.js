@@ -820,7 +820,8 @@ function sendMessage(text, isUser, type = 'text', description = null, targetCont
 
     const shouldOffloadInlineMedia = (type === 'image' || type === 'sticker')
         && typeof text === 'string'
-        && text.trim().startsWith('data:image');
+        && text.trim().startsWith('data:image')
+        && normalizedMeta.skipInlineMediaOffload !== true;
     if (shouldOffloadInlineMedia && typeof window.offloadInlineChatMediaMessage === 'function') {
         window.offloadInlineChatMediaMessage(contactId, msg.id, {
             type: type === 'sticker' ? 'image/webp' : 'image/jpeg',
@@ -901,7 +902,11 @@ function sendMessage(text, isUser, type = 'text', description = null, targetCont
         }
     }
 
-    saveConfig();
+    if (normalizedMeta.deferConfigSave === true && typeof window.scheduleDeferredConfigSave === 'function') {
+        window.scheduleDeferredConfigSave();
+    } else {
+        saveConfig();
+    }
 
     if (!isVoiceCallTranscript && window.syncToFloatingChat && window.isScreenSharing) {
         window.syncToFloatingChat({ content: text, type: type, role: isUser ? 'user' : 'assistant' }, contactId);

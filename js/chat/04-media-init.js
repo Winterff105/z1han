@@ -9433,8 +9433,14 @@ function hideChatStickerSuggestionBar() {
 }
 
 function sendStickerFromSuggestion(sticker) {
-    if (!sticker || !sticker.url || typeof window.sendMessage !== 'function') return;
-    window.sendMessage(sticker.url, true, 'sticker', sticker.desc || '');
+    if (!sticker || !sticker.url) return;
+    if (typeof window.sendChatSticker === 'function') {
+        window.sendChatSticker(sticker, { isUser: true }).catch((error) => {
+            console.warn('表情包发送失败', error);
+        });
+    } else if (typeof window.sendMessage === 'function') {
+        window.sendMessage(sticker.url, true, 'sticker', sticker.desc || '');
+    }
     const chatInput = document.getElementById('chat-input');
     if (chatInput) {
         chatInput.value = '';

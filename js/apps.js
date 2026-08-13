@@ -10633,7 +10633,13 @@ function renderStickerList(filterText = '') {
 }
 
 function sendSticker(sticker) {
-    if (window.sendMessage) window.sendMessage(sticker.url, true, 'sticker', sticker.desc);
+    if (typeof window.sendChatSticker === 'function') {
+        window.sendChatSticker(sticker, { isUser: true }).catch((error) => {
+            console.warn('表情包发送失败', error);
+        });
+    } else if (window.sendMessage) {
+        window.sendMessage(sticker.url, true, 'sticker', sticker.desc);
+    }
     
     const panel = document.getElementById('sticker-panel');
     const chatInputArea = document.querySelector('.chat-input-area');
