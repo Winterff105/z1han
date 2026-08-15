@@ -16,6 +16,55 @@
     const CONTACT_FIGURE_MIN_TOP = 74;
     const CONTACT_FIGURE_MAX_TOP = 90;
 
+    const PARTITIONED_ASSET_ROOTS = Object.freeze({
+        part01: 'assets_part_01/assets/',
+        part02: 'assets_part_02/assets/',
+        part03: 'assets_part_03/assets/',
+        part04: 'assets_part_04/assets/'
+    });
+
+    const CROP_ASSET_PARTS = Object.freeze({
+        part01: new Set(['amaranth', 'ancient_fruit', 'artichoke', 'beet', 'blue_jazz', 'blueberry', 'bok_choy', 'broccoli', 'carrot']),
+        part02: new Set(['corn', 'cranberry', 'eggplant', 'fairy_rose', 'garlic', 'grape', 'green_bean', 'hops', 'hot_pepper', 'kale', 'melon', 'parsnip']),
+        part03: new Set(['poppy', 'potato', 'powdermelon', 'pumpkin', 'radish', 'red_cabbage', 'rice_shoot', 'starfruit', 'strawberry', 'summer_spangle', 'summer_squash', 'sunflower', 'sweet_gem_berry']),
+        part04: new Set(['tomato', 'tulip', 'wheat', 'yam'])
+    });
+
+    function getPartitionedCropAssetRoot(cropId, assetName) {
+        const crop = String(cropId || '');
+        const asset = String(assetName || '');
+        if (crop === 'cauliflower') return asset === 'seed.png' ? PARTITIONED_ASSET_ROOTS.part01 : PARTITIONED_ASSET_ROOTS.part02;
+        if (crop === 'pineapple') return asset === 'seed.png' || asset === 'stage-1.png' || asset === 'stage-2.png' ? PARTITIONED_ASSET_ROOTS.part02 : PARTITIONED_ASSET_ROOTS.part03;
+        if (crop === 'taro_root') return asset === 'seed.png' || asset === 'stage-1.png' ? PARTITIONED_ASSET_ROOTS.part03 : PARTITIONED_ASSET_ROOTS.part04;
+        if (CROP_ASSET_PARTS.part01.has(crop)) return PARTITIONED_ASSET_ROOTS.part01;
+        if (CROP_ASSET_PARTS.part02.has(crop)) return PARTITIONED_ASSET_ROOTS.part02;
+        if (CROP_ASSET_PARTS.part03.has(crop)) return PARTITIONED_ASSET_ROOTS.part03;
+        if (CROP_ASSET_PARTS.part04.has(crop)) return PARTITIONED_ASSET_ROOTS.part04;
+        return 'assets/';
+    }
+
+    function resolvePartitionedAssetPath(assetPath) {
+        const normalized = String(assetPath || '').replace(/\\/g, '/').replace(/^\.?\//, '');
+        const relative = normalized.startsWith('assets/') ? normalized.slice('assets/'.length) : normalized;
+        if (relative.startsWith('fonts/') || relative.startsWith('stardew-valley/animals/')) {
+            return `${PARTITIONED_ASSET_ROOTS.part01}${relative}`;
+        }
+        if (
+            relative.startsWith('stardew-valley/fences/') ||
+            relative.startsWith('stardew-valley/items/') ||
+            relative.startsWith('stardew-valley/recipes/') ||
+            relative.startsWith('stardew-valley/terrain/') ||
+            relative === 'textured-paper.png'
+        ) {
+            return `${PARTITIONED_ASSET_ROOTS.part04}${relative}`;
+        }
+        const cropMatch = relative.match(/^stardew-valley\/crops\/([^/]+)\/([^/]+)$/);
+        if (cropMatch) {
+            return `${getPartitionedCropAssetRoot(cropMatch[1], cropMatch[2])}${relative}`;
+        }
+        return normalized;
+    }
+
     const HOME_ENTRY_META = {
         home: { label: '小家' },
         farm: { label: '农场' },
@@ -5673,17 +5722,17 @@ ${taskCard.action}`;
 
     function getFarmCropAssetPath(seed, assetName) {
         if (!seed || !seed.id || !assetName) return '';
-        return `assets/stardew-valley/crops/${seed.id}/${assetName}`;
+        return resolvePartitionedAssetPath(`assets/stardew-valley/crops/${seed.id}/${assetName}`);
     }
 
     function getKitchenRecipeAssetPath(recipeId) {
         const fileName = KITCHEN_RECIPE_ASSET_FILES[recipeId];
-        return fileName ? `assets/stardew-valley/recipes/${fileName}` : '';
+        return fileName ? resolvePartitionedAssetPath(`assets/stardew-valley/recipes/${fileName}`) : '';
     }
 
     function getKitchenItemAssetPath(itemId) {
         const fileName = KITCHEN_ITEM_ASSET_FILES[itemId];
-        return fileName ? `assets/stardew-valley/items/${fileName}` : '';
+        return fileName ? resolvePartitionedAssetPath(`assets/stardew-valley/items/${fileName}`) : '';
     }
 
     function getFarmItemAssetPath(itemId) {
@@ -6709,7 +6758,7 @@ ${taskCard.action}`;
         element.style.setProperty('--pasture-sprite-bg-height', `${backgroundHeight}px`);
         element.style.setProperty('--pasture-sprite-offset-x', `${offsetX}px`);
         element.style.setProperty('--pasture-sprite-offset-y', `${offsetY}px`);
-        element.style.backgroundImage = `url("assets/stardew-valley/${meta.sheet}")`;
+        element.style.backgroundImage = `url("${resolvePartitionedAssetPath(`assets/stardew-valley/${meta.sheet}`)}")`;
     }
 
     function getPastureAnimalSpriteMarkup(type, age, animal, options = {}) {
@@ -6732,7 +6781,7 @@ ${taskCard.action}`;
             `--pasture-sprite-bg-height:${backgroundHeight}px`,
             `--pasture-sprite-offset-x:${offsetX}px`,
             `--pasture-sprite-offset-y:${offsetY}px`,
-            `background-image:url(assets/stardew-valley/${meta.sheet})`
+            `background-image:url(${resolvePartitionedAssetPath(`assets/stardew-valley/${meta.sheet}`)})`
         ].join(';');
         return `<span class="${className} is-sheet" style="${style}" aria-hidden="true"></span>`;
     }

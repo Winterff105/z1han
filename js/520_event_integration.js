@@ -6,9 +6,7 @@
     const ENTRY_SKIP_KEY = '520_event_skip_entry_overlay';
     const GOOGLE_FONT_HREF = 'https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;1,400&family=Montserrat:wght@200;400;600&display=swap';
     const LETTER_FONT_SOURCES = [
-        { url: 'assets/fonts/520-letter.woff2', format: 'woff2' },
-        { url: 'assets/fonts/520-letter.otf', format: 'opentype' },
-        { url: 'assets/fonts/520-letter.ttf', format: 'truetype' }
+        { url: 'assets_part_01/assets/fonts/520-letter.ttf', format: 'truetype' }
     ];
     const LETTER_FONT_SRC = LETTER_FONT_SOURCES
         .map((item) => `url('${item.url}') format('${item.format}')`)

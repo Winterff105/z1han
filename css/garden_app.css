@@ -2521,7 +2521,7 @@
 #garden-app .garden-pasture-container::after {
     z-index: 9;
     inset: -12px -6px -6px -6px;
-    background-image: url('../assets/stardew-valley/fences/pasture_fence_frame_user_v5.png');
+    background-image: url('../assets_part_04/assets/stardew-valley/fences/pasture_fence_frame_user_v5.png');
     background-position: calc(50% + 6px) calc(50% - 5px);
     background-repeat: no-repeat;
     background-size: 98% 98%;

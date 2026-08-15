@@ -4,6 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>牛皮纸拼贴手账</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@700;900&family=Noto+Serif+SC:wght@500;700;900&display=swap" rel="stylesheet">
     <style>
         :root {
             --kraft: #e6d9c3;
@@ -92,7 +95,7 @@
             width: min(1180px, 100%);
             min-height: calc(100vh - 68px);
             margin: 0 auto;
-            padding: 34px;
+            padding: 54px 34px 34px;
             border: 1px solid rgba(112, 94, 70, 0.14);
             border-radius: 14px;
             background:
@@ -563,13 +566,13 @@
             font-size: 19px;
         }
 
-        .clip.f-song { font-family: "SimSun", "Songti SC", Georgia, serif; font-weight: 700; }
-        .clip.f-kai { font-family: "STKaiti", "KaiTi", "Kaiti SC", cursive; font-weight: 700; }
-        .clip.f-hei { font-family: "Microsoft YaHei", "PingFang SC", Arial, sans-serif; font-weight: 900; }
-        .clip.f-mono { font-family: "Courier New", "IBM Plex Mono", monospace; font-weight: 900; }
-        .clip.f-serif { font-family: Georgia, "Times New Roman", serif; font-weight: 700; }
-        .clip.f-impact { font-family: Impact, "Arial Black", "Microsoft YaHei", sans-serif; font-weight: 900; }
-        .clip.f-fang { font-family: "FangSong", "STFangsong", serif; font-weight: 700; }
+        .clip.f-song { font-family: "Noto Serif SC", "Songti SC", "STSong", "SimSun", serif; font-weight: 900; }
+        .clip.f-kai { font-family: "Kaiti SC", "STKaiti", "KaiTi", "Noto Serif SC", serif; font-weight: 700; }
+        .clip.f-hei { font-family: "Noto Sans SC", "Heiti SC", "PingFang SC", "Microsoft YaHei", sans-serif; font-weight: 900; }
+        .clip.f-mono { font-family: "Songti SC", "STSong", "Noto Serif SC", serif; font-weight: 700; }
+        .clip.f-serif { font-family: "Noto Serif SC", "Songti SC", "STSong", Georgia, serif; font-weight: 500; }
+        .clip.f-impact { font-family: "Noto Sans SC", "Heiti SC", "Arial Black", "Microsoft YaHei", sans-serif; font-weight: 900; }
+        .clip.f-fang { font-family: "STFangsong", "FangSong", "Noto Serif SC", serif; font-weight: 700; }
 
         .clip.ink {
             color: #111111;
@@ -1174,7 +1177,7 @@
 
             .book {
                 min-height: calc(100vh - 44px);
-                padding: 26px;
+                padding: 46px 26px 26px;
             }
 
             .hero-board,
@@ -1198,7 +1201,7 @@
 
             .book {
                 min-height: calc(100vh - 24px);
-                padding: 22px 18px 44px;
+                padding: 42px 18px 44px;
                 border-radius: 10px;
             }
 
