@@ -1,0 +1,6 @@
+Stardew Valley sprite assets copyright ConcernedApe.
+
+This project uses crop, item, animal, and cooked-food sprites downloaded from
+Stardew Valley Wiki pages for a free fan-made web interface prototype.
+
+Please do not reuse these assets for commercial merchandise or resale.
