@@ -2557,6 +2557,31 @@ function appendMessageToUI(text, isUser, type = 'text', description = null, repl
         return;
     }
 
+    if (!isUser && typeof window.applyBlockWordsToChatRenderMessage === 'function') {
+        const contactId = window.iphoneSimState && window.iphoneSimState.currentChatContactId;
+        const blockWordResult = window.applyBlockWordsToChatRenderMessage({
+            id: msgId,
+            time: timestamp,
+            role: 'assistant',
+            content: text,
+            type,
+            description,
+            replyTo
+        }, contactId);
+        if (blockWordResult && blockWordResult.hidden) {
+            removeWechatTypingBubble();
+            return;
+        }
+        if (blockWordResult && blockWordResult.message) {
+            text = blockWordResult.message.content;
+            type = blockWordResult.message.type || type;
+            description = blockWordResult.message.description;
+            replyTo = blockWordResult.message.replyTo;
+            msgId = blockWordResult.message.id || msgId;
+            timestamp = blockWordResult.message.time || timestamp;
+        }
+    }
+
     if (!isUser) {
         removeWechatTypingBubble();
     }
