@@ -576,7 +576,12 @@ function renderChatHistory(contactId, preserveScroll = false) {
         if (msg._hiddenBySanitizer || shouldHideChatSyncMsg(msg) || (typeof msg.content === 'string' && msg.content.startsWith('(用户发布了 iCity 日记:'))) {
             return;
         }
-        appendMessageToUI(msg.content, msg.role === 'user', msg.type || 'text', msg.description, msg.replyTo, msg.id, msg.time, true);
+        const blockWordResult = typeof window.applyBlockWordsToChatRenderMessage === 'function'
+            ? window.applyBlockWordsToChatRenderMessage(msg, contactId)
+            : { hidden: false, message: msg };
+        if (blockWordResult && blockWordResult.hidden) return;
+        const renderMsg = blockWordResult && blockWordResult.message ? blockWordResult.message : msg;
+        appendMessageToUI(renderMsg.content, renderMsg.role === 'user', renderMsg.type || 'text', renderMsg.description, renderMsg.replyTo, renderMsg.id, renderMsg.time, true);
     });
     
     const contact = window.iphoneSimState.contacts.find(c => c.id === contactId);
@@ -916,7 +921,13 @@ function sendMessage(text, isUser, type = 'text', description = null, targetCont
     }
 
     if (!isVoiceCallTranscript && deliveryChannel === 'wechat' && window.iphoneSimState.currentChatContactId === contactId) {
-        appendMessageToUI(text, isUser, type, description, msg.replyTo, msg.id, msg.time);
+        const blockWordResult = !isUser && typeof window.applyBlockWordsToChatRenderMessage === 'function'
+            ? window.applyBlockWordsToChatRenderMessage(msg, contactId)
+            : { hidden: false, message: msg };
+        if (!blockWordResult || !blockWordResult.hidden) {
+            const renderMsg = blockWordResult && blockWordResult.message ? blockWordResult.message : msg;
+            appendMessageToUI(renderMsg.content, isUser, renderMsg.type || type, renderMsg.description, renderMsg.replyTo, renderMsg.id, renderMsg.time);
+        }
         scrollToBottom();
     }
 

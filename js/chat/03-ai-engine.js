@@ -12376,6 +12376,10 @@ window.buildAiPromptMessages = async function(contactId, instruction = null, opt
 
     let limit = contact.contextLimit && contact.contextLimit > 0 ? contact.contextLimit : 50;
     let contextMessages = history
+        .map(h => typeof window.applyBlockWordsToChatContextMessage === 'function'
+            ? window.applyBlockWordsToChatContextMessage(h, contactId)
+            : h)
+        .filter(Boolean)
         .filter(h => !shouldExcludeFromAiContext(h))
         .slice(-limit)
         .map(cloneAiPromptHistoryMessage);

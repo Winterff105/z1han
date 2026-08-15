@@ -1,0 +1,2107 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>牛皮纸拼贴手账</title>
+    <style>
+        :root {
+            --kraft: #e6d9c3;
+            --kraft-light: #f4ebdd;
+            --paper: #fffdfa;
+            --paper-warm: #fff8ea;
+            --paper-rose: #f8ecea;
+            --paper-blue: #eef7f9;
+            --paper-sage: #f0f6e9;
+            --ink: #453d35;
+            --muted: #9a8d7f;
+            --line: rgba(97, 82, 64, 0.12);
+            --shadow: rgba(95, 76, 55, 0.11);
+            --tape: rgba(255, 250, 235, 0.68);
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        html,
+        body {
+            min-height: 100%;
+        }
+
+        body {
+            margin: 0;
+            color: var(--ink);
+            font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+            background:
+                radial-gradient(circle at 18% 12%, rgba(255, 255, 250, 0.58), transparent 30%),
+                radial-gradient(circle at 88% 84%, rgba(207, 188, 160, 0.08), transparent 32%),
+                linear-gradient(135deg, #f0e5d2 0%, var(--kraft) 54%, #ded2bd 100%);
+            overflow-x: hidden;
+        }
+
+        body::before {
+            content: "";
+            position: fixed;
+            inset: 0;
+            pointer-events: none;
+            opacity: 0.16;
+            background-image:
+                linear-gradient(90deg, rgba(112, 91, 68, 0.05) 1px, transparent 1px),
+                linear-gradient(0deg, rgba(255, 255, 255, 0.16) 1px, transparent 1px),
+                radial-gradient(circle, rgba(88, 66, 44, 0.12) 0 0.65px, transparent 0.9px);
+            background-size: 64px 64px, 42px 42px, 7px 7px;
+            mix-blend-mode: multiply;
+        }
+
+        .paper-fiber {
+            position: fixed;
+            inset: 0;
+            pointer-events: none;
+            z-index: 0;
+            opacity: 0.32;
+            background:
+                repeating-linear-gradient(105deg, rgba(255, 255, 255, 0.18) 0 1px, transparent 1px 7px),
+                repeating-linear-gradient(78deg, rgba(95, 88, 76, 0.075) 0 1px, transparent 1px 9px),
+                radial-gradient(ellipse at 24% 18%, rgba(255, 255, 255, 0.25), transparent 34%),
+                radial-gradient(ellipse at 70% 72%, rgba(103, 92, 76, 0.08), transparent 38%);
+            background-size: 140px 120px, 160px 130px, auto, auto;
+            filter: contrast(1.22) blur(0.15px);
+            mix-blend-mode: multiply;
+        }
+
+        body::after {
+            content: "";
+            position: fixed;
+            inset: 0;
+            pointer-events: none;
+            background:
+                linear-gradient(90deg, rgba(113, 91, 64, 0.08), transparent 12%, transparent 90%, rgba(113, 91, 64, 0.06)),
+                linear-gradient(180deg, rgba(255, 254, 247, 0.38), transparent 18%, transparent 86%, rgba(116, 91, 63, 0.05));
+        }
+
+        .journal-page {
+            position: relative;
+            z-index: 1;
+            min-height: 100vh;
+            padding: 34px;
+        }
+
+        .book {
+            position: relative;
+            width: min(1180px, 100%);
+            min-height: calc(100vh - 68px);
+            margin: 0 auto;
+            padding: 34px;
+            border: 1px solid rgba(112, 94, 70, 0.14);
+            border-radius: 14px;
+            background:
+                linear-gradient(90deg, transparent 0 49.4%, rgba(147, 123, 91, 0.09) 49.6% 50.4%, transparent 50.6%),
+                linear-gradient(120deg, rgba(255, 255, 255, 0.38), rgba(255, 255, 255, 0.12) 38%, rgba(146, 117, 82, 0.04)),
+                rgba(244, 233, 214, 0.88);
+            box-shadow:
+                0 22px 62px rgba(104, 82, 56, 0.10),
+                inset 0 0 48px rgba(156, 129, 94, 0.07);
+            overflow: hidden;
+        }
+
+        .book::before,
+        .book::after {
+            content: "";
+            position: absolute;
+            pointer-events: none;
+        }
+
+        .book::before {
+            inset: 18px;
+            border: 1px dashed rgba(112, 92, 68, 0.11);
+            border-radius: 10px;
+        }
+
+        .book::after {
+            left: 50%;
+            top: 24px;
+            bottom: 24px;
+            width: 18px;
+            transform: translateX(-50%);
+            background:
+                linear-gradient(90deg, transparent, rgba(112, 88, 62, 0.08), transparent),
+                repeating-linear-gradient(180deg, transparent 0 20px, rgba(112, 88, 62, 0.07) 20px 21px);
+            opacity: 0.58;
+        }
+
+        .topbar {
+            position: relative;
+            z-index: 2;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 24px;
+            margin-bottom: 26px;
+        }
+
+        .eyebrow {
+            margin: 0 0 9px;
+            padding: 0;
+            border: 0;
+            background: transparent;
+            color: var(--muted);
+            font-family: "Courier New", monospace;
+            font-size: 13px;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            cursor: pointer;
+            transition: color 0.18s ease, transform 0.18s ease;
+        }
+
+        .eyebrow:hover {
+            color: #6d6256;
+            transform: translateX(-2px);
+        }
+
+        h1 {
+            margin: 0;
+            font-family: Georgia, "Times New Roman", "SimSun", serif;
+            font-size: 26px;
+            font-weight: 500;
+            line-height: 1.18;
+        }
+
+        .date-stamp {
+            flex: 0 0 auto;
+            margin-top: 3px;
+            padding: 8px 12px;
+            border: 1px solid rgba(139, 102, 82, 0.25);
+            border-radius: 4px;
+            color: rgba(128, 95, 77, 0.66);
+            font-family: "Courier New", monospace;
+            font-size: 12px;
+            letter-spacing: 1px;
+            transform: rotate(3deg);
+        }
+
+        .layout {
+            position: relative;
+            z-index: 2;
+            display: block;
+        }
+
+        .hero-board,
+        .notes-board {
+            position: relative;
+            min-height: 590px;
+        }
+
+        .hero-board {
+            padding: 72px 30px 110px;
+            border-radius: 8px;
+            background:
+                linear-gradient(rgba(143, 116, 82, 0.055) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(143, 116, 82, 0.045) 1px, transparent 1px),
+                rgba(250, 242, 226, 0.42);
+            background-size: 32px 32px;
+            box-shadow: inset 0 0 0 1px rgba(128, 100, 70, 0.10);
+            overflow: hidden;
+        }
+
+        .hero-board::before {
+            content: "";
+            position: absolute;
+            left: 24px;
+            right: 24px;
+            top: 54px;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, rgba(125, 100, 72, 0.18), transparent);
+        }
+
+        .pin {
+            position: absolute;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #cbb59b;
+            box-shadow: inset -2px -2px 3px rgba(103, 75, 51, 0.14), 0 2px 4px rgba(78, 52, 29, 0.10);
+        }
+
+        .pin.one { left: 30px; top: 26px; }
+        .pin.two { right: 30px; top: 26px; background: #c2ccb8; }
+
+        .collage-line {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            align-items: center;
+            gap: 9px;
+            margin: 26px auto;
+            max-width: 650px;
+        }
+
+        .piece {
+            position: relative;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 42px;
+            min-height: 42px;
+            padding: 7px 12px 8px;
+            color: #3f3831;
+            background: #fffdf8;
+            border: 1px solid rgba(91, 72, 52, 0.08);
+            box-shadow: 1px 4px 10px rgba(92, 71, 48, 0.09);
+            font-family: Georgia, "Times New Roman", "STKaiti", "KaiTi", serif;
+            font-size: 31px;
+            line-height: 1;
+        }
+
+        .piece.small { min-width: 33px; min-height: 34px; padding: 6px 9px; font-size: 21px; }
+        .piece.big { min-width: 55px; min-height: 58px; font-size: 45px; }
+        .piece.long { font-size: 25px; }
+        .piece.ink { color: #111111; background: #efede8; }
+        .piece.sage { background: var(--paper-sage); }
+        .piece.blue { background: var(--paper-blue); }
+        .piece.rose { background: var(--paper-rose); }
+        .piece.warm { background: var(--paper-warm); }
+        .piece.torn {
+            clip-path: polygon(0 9%, 7% 3%, 14% 8%, 23% 2%, 32% 7%, 45% 3%, 58% 8%, 69% 2%, 82% 7%, 100% 4%, 97% 100%, 87% 95%, 78% 100%, 65% 96%, 54% 100%, 41% 95%, 31% 100%, 18% 96%, 9% 100%, 2% 94%);
+        }
+
+        .piece:nth-child(3n) { transform: rotate(-5deg); }
+        .piece:nth-child(3n + 1) { transform: rotate(3deg); }
+        .piece:nth-child(3n + 2) { transform: rotate(-1deg) translateY(3px); }
+
+        .main-caption {
+            position: absolute;
+            left: 34px;
+            right: 34px;
+            bottom: 28px;
+            padding: 18px 22px;
+            border-left: 3px solid rgba(127, 105, 76, 0.24);
+            background: rgba(255, 250, 237, 0.48);
+            color: #6a5c4f;
+            font-family: Georgia, "Times New Roman", "STKaiti", "KaiTi", serif;
+            font-size: 18px;
+            line-height: 1.8;
+        }
+
+        .notes-board {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(245px, 1fr));
+            gap: 22px;
+            align-content: start;
+        }
+
+        html:not(.notes-ready) .notes-board .note,
+        html:not(.notes-ready) .notes-board .note-wrap {
+            display: none;
+        }
+
+        .note {
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            min-height: 188px;
+            padding: 30px 18px 24px;
+            color: #5b5046;
+            border: 1px solid rgba(104, 83, 57, 0.10);
+            box-shadow:
+                0 3px 4px rgba(68, 49, 30, 0.10),
+                0 18px 34px rgba(77, 56, 34, 0.22),
+                3px 4px 0 rgba(255, 255, 255, 0.26) inset,
+                -2px -2px 0 rgba(112, 87, 56, 0.035) inset;
+            overflow: visible;
+            cursor: pointer;
+            transition: transform 0.22s ease, box-shadow 0.22s ease, filter 0.22s ease;
+        }
+
+        .note::before {
+            content: "";
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            opacity: 0.22;
+            background:
+                repeating-linear-gradient(102deg, rgba(255, 255, 255, 0.26) 0 1px, transparent 1px 8px),
+                repeating-linear-gradient(72deg, rgba(88, 78, 63, 0.07) 0 1px, transparent 1px 10px),
+                radial-gradient(circle at 28% 20%, rgba(255, 255, 255, 0.25), transparent 30%),
+                radial-gradient(circle at 72% 78%, rgba(91, 79, 62, 0.08), transparent 34%);
+            background-size: 120px 110px, 150px 120px, auto, auto;
+            mix-blend-mode: multiply;
+            z-index: 0;
+        }
+
+        .note > * {
+            position: relative;
+            z-index: 1;
+        }
+
+        .note-wrap {
+            position: relative;
+            transform: rotate(var(--note-rotate, 0deg)) translateY(var(--note-y, 0px));
+        }
+
+        .note-wrap.wide-wrap {
+            grid-column: span 2;
+        }
+
+        .note-wrap .note {
+            height: 100%;
+            transform: none;
+        }
+
+        .note.shape-soft {
+            clip-path: polygon(1% 2%, 99% 0, 100% 96%, 2% 100%);
+        }
+
+        .note.shape-slant {
+            clip-path: polygon(3% 0, 100% 4%, 97% 100%, 0 96%);
+        }
+
+        .note.shape-torn {
+            clip-path: polygon(0 0, 100% 0, 99% 97%, 91% 100%, 81% 97%, 70% 100%, 58% 97%, 47% 100%, 36% 97%, 24% 100%, 13% 97%, 0 100%);
+        }
+
+        .note.shape-ticket {
+            clip-path: polygon(0 0, 92% 0, 100% 10%, 100% 100%, 8% 100%, 0 90%);
+        }
+
+        .note.shape-bottom-rip {
+            clip-path: polygon(0 0, 100% 2%, 100% 92%, 91% 100%, 82% 94%, 72% 100%, 62% 94%, 52% 100%, 42% 94%, 32% 100%, 22% 94%, 12% 100%, 0 93%);
+        }
+
+        .note.shape-corner {
+            clip-path: polygon(0 0, 86% 0, 100% 14%, 100% 100%, 0 97%);
+        }
+
+        .note.shape-corner::after {
+            content: "";
+            position: absolute;
+            top: 0;
+            right: 0;
+            width: 44px;
+            height: 44px;
+            background:
+                linear-gradient(135deg, rgba(255, 255, 255, 0.82) 0 48%, rgba(155, 124, 82, 0.20) 49% 52%, rgba(96, 70, 42, 0.14) 53% 100%);
+            clip-path: polygon(0 0, 100% 0, 100% 100%);
+            box-shadow: -5px 5px 12px rgba(87, 63, 39, 0.16);
+            pointer-events: none;
+            z-index: 2;
+        }
+
+        .note.shape-tab {
+            clip-path: polygon(0 9%, 18% 9%, 22% 0, 45% 0, 49% 9%, 100% 9%, 100% 100%, 0 100%);
+        }
+
+        .note:hover {
+            filter: brightness(1.018);
+            box-shadow:
+                0 4px 6px rgba(68, 49, 30, 0.13),
+                0 24px 42px rgba(77, 56, 34, 0.26),
+                3px 4px 0 rgba(255, 255, 255, 0.28) inset,
+                -2px -2px 0 rgba(112, 87, 56, 0.04) inset;
+        }
+
+        .note:focus-visible {
+            outline: 2px solid rgba(87, 113, 126, 0.42);
+            outline-offset: 5px;
+        }
+
+        .note-tape {
+            position: absolute;
+            left: 50%;
+            top: -18px;
+            width: 82px;
+            height: 26px;
+            transform: translateX(-50%) rotate(-4deg);
+            border: 1px solid rgba(130, 112, 84, 0.08);
+            background:
+                linear-gradient(90deg, transparent 0 10%, rgba(255, 255, 255, 0.38) 10% 18%, transparent 18% 82%, rgba(255, 255, 255, 0.32) 82% 90%, transparent 90%),
+                var(--tape);
+            box-shadow: 0 2px 4px rgba(72, 52, 33, 0.045);
+            cursor: pointer;
+            padding: 0;
+            z-index: 3;
+            transition: opacity 0.2s ease, filter 0.2s ease, transform 0.2s ease;
+        }
+
+        .note-tape:hover {
+            transform: translateX(-50%) rotate(-1deg) translateY(-1px);
+        }
+
+        .note-wrap.is-disabled .note,
+        .note.is-disabled {
+            opacity: 0.54;
+            filter: saturate(0.42);
+        }
+
+        .note-wrap.is-disabled .note:hover,
+        .note.is-disabled:hover {
+            opacity: 0.64;
+            filter: saturate(0.52);
+        }
+
+        .note-wrap.is-disabled .note-tape,
+        .note.is-disabled .note-tape {
+            opacity: 0.44;
+            filter: saturate(0.35);
+        }
+
+        .note h2 {
+            margin: 0 0 13px;
+            color: rgba(108, 88, 65, 0.68);
+            font-family: "Courier New", monospace;
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: 1.5px;
+            text-transform: uppercase;
+        }
+
+        .note .cutline {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            margin: 4px 0 0;
+            line-height: 1;
+        }
+
+        .note .cutline + .cutline {
+            margin-top: 10px;
+        }
+
+        .clip {
+            position: relative;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 24px;
+            min-height: 30px;
+            padding: 5px 8px 6px;
+            color: #111111;
+            background: rgba(253, 249, 240, 0.92);
+            border: 1px solid rgba(94, 74, 52, 0.075);
+            box-shadow: 1px 3px 7px rgba(93, 72, 50, 0.09);
+            font-size: 21px;
+            font-weight: 700;
+            letter-spacing: 0;
+            line-height: 1;
+            transform: rotate(var(--r, -2deg)) translateY(var(--y, 0));
+            clip-path: polygon(0 8%, 9% 3%, 20% 7%, 33% 2%, 45% 6%, 58% 3%, 72% 8%, 84% 2%, 100% 7%, 97% 96%, 86% 100%, 76% 95%, 63% 100%, 52% 96%, 39% 100%, 28% 95%, 15% 100%, 2% 94%);
+        }
+
+        .clip.plain {
+            clip-path: polygon(1% 3%, 98% 0, 100% 96%, 2% 100%);
+        }
+
+        .clip.slant {
+            clip-path: polygon(6% 0, 100% 4%, 94% 100%, 0 94%);
+        }
+
+        .clip.slash {
+            clip-path: polygon(0 10%, 88% 0, 100% 92%, 12% 100%);
+        }
+
+        .clip.ticket {
+            clip-path: polygon(0 0, 92% 0, 100% 12%, 100% 100%, 8% 100%, 0 88%);
+        }
+
+        .clip.corner {
+            clip-path: polygon(0 0, 86% 0, 100% 18%, 100% 100%, 0 94%);
+        }
+
+        .clip.trapezoid {
+            clip-path: polygon(10% 0, 94% 7%, 100% 100%, 0 92%);
+        }
+
+        .clip.top-rip {
+            clip-path: polygon(0 12%, 8% 4%, 17% 12%, 28% 3%, 39% 11%, 50% 2%, 61% 10%, 72% 3%, 84% 12%, 100% 5%, 98% 100%, 2% 96%);
+        }
+
+        .clip.bottom-rip {
+            clip-path: polygon(2% 2%, 98% 0, 100% 90%, 90% 98%, 78% 91%, 66% 100%, 54% 92%, 43% 100%, 31% 91%, 20% 100%, 8% 92%, 0 100%);
+        }
+
+        .clip.zigzag {
+            clip-path: polygon(0 8%, 10% 0, 20% 8%, 30% 0, 40% 8%, 50% 0, 60% 8%, 70% 0, 80% 8%, 90% 0, 100% 8%, 100% 92%, 90% 100%, 80% 92%, 70% 100%, 60% 92%, 50% 100%, 40% 92%, 30% 100%, 20% 92%, 10% 100%, 0 92%);
+        }
+
+        .clip.narrow {
+            min-width: 19px;
+            padding-inline: 6px;
+            clip-path: polygon(7% 0, 100% 5%, 92% 100%, 0 95%);
+        }
+
+        .clip.poster {
+            min-height: 48px;
+            padding-block: 8px;
+            clip-path: polygon(0 4%, 95% 0, 100% 96%, 4% 100%);
+        }
+
+        .clip.tall {
+            min-height: 42px;
+            padding: 7px 9px;
+            font-size: 31px;
+        }
+
+        .clip.big {
+            min-width: 38px;
+            min-height: 46px;
+            padding: 7px 10px;
+            font-size: 36px;
+        }
+
+        .clip.small {
+            min-width: 20px;
+            min-height: 25px;
+            padding: 4px 7px;
+            font-size: 16px;
+        }
+
+        .clip.long {
+            padding-inline: 11px;
+            font-size: 19px;
+        }
+
+        .clip.f-song { font-family: "SimSun", "Songti SC", Georgia, serif; font-weight: 700; }
+        .clip.f-kai { font-family: "STKaiti", "KaiTi", "Kaiti SC", cursive; font-weight: 700; }
+        .clip.f-hei { font-family: "Microsoft YaHei", "PingFang SC", Arial, sans-serif; font-weight: 900; }
+        .clip.f-mono { font-family: "Courier New", "IBM Plex Mono", monospace; font-weight: 900; }
+        .clip.f-serif { font-family: Georgia, "Times New Roman", serif; font-weight: 700; }
+        .clip.f-impact { font-family: Impact, "Arial Black", "Microsoft YaHei", sans-serif; font-weight: 900; }
+        .clip.f-fang { font-family: "FangSong", "STFangsong", serif; font-weight: 700; }
+
+        .clip.ink {
+            color: #111111;
+            background: #efede8;
+        }
+
+        .clip.warm {
+            background: #fff3d6;
+        }
+
+        .clip.sage {
+            background: #f0f7e8;
+        }
+
+        .clip.blue {
+            background: #eef9fb;
+        }
+
+        .clip.rose {
+            background: #faeeec;
+        }
+
+        .clip.ochre {
+            background: #fff5d6;
+        }
+
+        .clip.rust {
+            color: #111111;
+            background: #f7dfd9;
+        }
+
+        .clip.transparent {
+            background: rgba(255, 255, 255, 0.42);
+            box-shadow: 0 2px 5px rgba(73, 51, 31, 0.08);
+            backdrop-filter: blur(1px);
+        }
+
+        .note .clip {
+            background: var(--clip-bg, #fffefb);
+            border-color: rgba(86, 67, 47, 0.14);
+            box-shadow: 1px 4px 8px rgba(76, 58, 38, 0.14);
+        }
+
+        .note .clip.ink,
+        .note .clip.rust,
+        .note .clip.ochre,
+        .note .clip.warm,
+        .note .clip.sage,
+        .note .clip.blue,
+        .note .clip.rose,
+        .note .clip.transparent {
+            background: #fffefb;
+            color: #111;
+        }
+
+        .note:nth-of-type(2n) .clip:nth-child(3n) {
+            --r: 4deg;
+            --y: 2px;
+        }
+
+        .note:nth-of-type(2n + 1) .clip:nth-child(3n + 1) {
+            --r: -5deg;
+            --y: -1px;
+        }
+
+        .note:nth-of-type(3n) .clip:nth-child(4n) {
+            --r: 6deg;
+        }
+
+        .note:nth-of-type(3n + 1) .clip:nth-child(4n + 2) {
+            --r: -3deg;
+        }
+
+        .note .tiny {
+            position: absolute;
+            right: 14px;
+            bottom: 11px;
+            color: rgba(104, 86, 63, 0.36);
+            font-family: "Courier New", monospace;
+            font-size: 11px;
+        }
+
+        .note.square {
+            background:
+                linear-gradient(transparent 0 31px, rgba(126, 104, 78, 0.055) 32px),
+                var(--paper);
+            background-size: 100% 32px;
+        }
+
+        .note.receipt {
+            background: #fffdf8;
+            clip-path: polygon(0 0, 100% 0, 100% 94%, 92% 100%, 84% 94%, 76% 100%, 68% 94%, 60% 100%, 52% 94%, 44% 100%, 36% 94%, 28% 100%, 20% 94%, 12% 100%, 0 94%);
+        }
+
+        .note.tracing {
+            background: rgba(255, 255, 252, 0.88);
+            border: 1px solid rgba(102, 122, 113, 0.15);
+            backdrop-filter: blur(2px);
+        }
+
+        .note.rose {
+            background: #fff8f7;
+            border-radius: 3px 16px 4px 3px;
+        }
+
+        .note.sage {
+            background:
+                repeating-linear-gradient(0deg, transparent 0 27px, rgba(93, 103, 76, 0.09) 28px),
+                #fbfff7;
+        }
+
+        .note.blue {
+            background: #f8fdff;
+            border-radius: 14px 3px 3px 3px;
+        }
+
+        .note.wide {
+            grid-column: span 2;
+            min-height: 190px;
+            background:
+                linear-gradient(90deg, rgba(153, 125, 85, 0.075) 0 1px, transparent 1px),
+                #fffdf7;
+            background-size: 18px 100%;
+        }
+
+        .label-strip {
+            position: absolute;
+            left: 28px;
+            top: 24px;
+            padding: 5px 10px;
+            background: rgba(234, 219, 191, 0.58);
+            border: 1px solid rgba(124, 101, 70, 0.11);
+            color: rgba(95, 76, 52, 0.54);
+            font-family: "Courier New", monospace;
+            font-size: 11px;
+            letter-spacing: 1px;
+            transform: rotate(-2deg);
+        }
+
+        .dotted-path {
+            position: absolute;
+            right: 29px;
+            top: 58px;
+            bottom: 138px;
+            width: 1px;
+            border-left: 2px dotted rgba(112, 88, 59, 0.13);
+        }
+
+        .sticker {
+            position: absolute;
+            right: 35px;
+            bottom: 158px;
+            padding: 8px 12px;
+            border-radius: 999px;
+            background: rgba(226, 233, 213, 0.72);
+            color: rgba(83, 94, 66, 0.66);
+            font-family: "Courier New", monospace;
+            font-size: 11px;
+            letter-spacing: 1px;
+            transform: rotate(5deg);
+        }
+
+        .page-no {
+            position: absolute;
+            right: 30px;
+            bottom: 25px;
+            color: rgba(98, 78, 53, 0.34);
+            font-family: "Courier New", monospace;
+            font-size: 12px;
+            letter-spacing: 2px;
+        }
+
+        .note-settings {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            margin-top: 16px;
+            padding-right: 38px;
+        }
+
+        .note-chip {
+            display: inline-flex;
+            align-items: center;
+            min-height: 20px;
+            padding: 3px 7px;
+            border: 1px solid rgba(112, 93, 68, 0.12);
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.42);
+            color: rgba(72, 63, 55, 0.66);
+            font-family: "Courier New", monospace;
+            font-size: 10px;
+            letter-spacing: 0.3px;
+        }
+
+        .note-chip.off {
+            color: rgba(124, 72, 67, 0.62);
+            background: rgba(255, 238, 234, 0.48);
+        }
+
+        .fab-add {
+            position: fixed;
+            z-index: 20;
+            right: 32px;
+            bottom: 30px;
+            width: 62px;
+            height: 62px;
+            border: 0;
+            border-radius: 50%;
+            background: rgba(255, 253, 247, 0.92);
+            color: #111;
+            box-shadow: 0 14px 34px rgba(83, 62, 39, 0.18);
+            font-size: 34px;
+            line-height: 1;
+            cursor: pointer;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .fab-add:hover {
+            transform: translateY(-2px) rotate(4deg);
+            box-shadow: 0 18px 42px rgba(83, 62, 39, 0.22);
+        }
+
+        .editor-modal {
+            position: fixed;
+            inset: 0;
+            z-index: 30;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 18px;
+            background:
+                radial-gradient(circle at 30% 18%, rgba(255, 255, 255, 0.34), transparent 28%),
+                rgba(112, 95, 72, 0.18);
+            backdrop-filter: blur(8px);
+        }
+
+        .editor-modal[hidden] {
+            display: none;
+        }
+
+        .editor-sheet {
+            position: relative;
+            width: min(520px, 100%);
+            max-height: min(760px, calc(100vh - 36px));
+            overflow: auto;
+            border: 1px solid rgba(104, 83, 57, 0.16);
+            border-radius: 3px 18px 5px 14px;
+            background:
+                linear-gradient(transparent 0 35px, rgba(126, 104, 78, 0.075) 36px),
+                linear-gradient(115deg, rgba(255, 255, 255, 0.74), rgba(255, 255, 255, 0.12)),
+                #fffef9;
+            background-size: 100% 36px, auto, auto;
+            box-shadow:
+                0 24px 70px rgba(83, 63, 42, 0.20),
+                0 4px 0 rgba(255, 255, 255, 0.32) inset;
+            transform: rotate(-1.2deg);
+            clip-path: polygon(0 2%, 7% 0, 16% 2%, 27% 0.5%, 38% 2%, 50% 0, 62% 1.5%, 75% 0.4%, 88% 2%, 100% 0.8%, 99% 96%, 91% 100%, 81% 97%, 70% 100%, 58% 97%, 47% 100%, 36% 97%, 24% 100%, 13% 97%, 0 99%);
+        }
+
+        .editor-sheet::before {
+            content: none;
+            position: absolute;
+            left: 50%;
+            top: -15px;
+            width: 150px;
+            height: 34px;
+            transform: translateX(-50%) rotate(1.5deg);
+            border: 1px solid rgba(120, 99, 72, 0.08);
+            background:
+                linear-gradient(90deg, transparent 0 10%, rgba(255, 255, 255, 0.35) 10% 18%, transparent 18% 82%, rgba(255, 255, 255, 0.32) 82% 90%, transparent 90%),
+                rgba(255, 246, 215, 0.78);
+            box-shadow: 0 2px 6px rgba(83, 63, 42, 0.08);
+        }
+
+        .editor-sheet::after {
+            content: "";
+            position: absolute;
+            inset: 14px;
+            pointer-events: none;
+            border: 1px dashed rgba(122, 99, 70, 0.13);
+            border-radius: 3px 15px 5px 12px;
+        }
+
+        .editor-head,
+        .editor-actions {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            padding: 18px 22px;
+        }
+
+        .editor-head {
+            position: relative;
+            z-index: 2;
+            justify-content: flex-end;
+            border-bottom: 0;
+            background: transparent;
+            backdrop-filter: none;
+            padding-bottom: 6px;
+        }
+
+        .editor-head h2 {
+            display: none;
+            margin: 0;
+            font-family: Georgia, "Times New Roman", "STKaiti", serif;
+            font-size: 24px;
+            font-weight: 700;
+            letter-spacing: 0;
+        }
+
+        .editor-close {
+            width: 38px;
+            height: 38px;
+            border: 1px solid rgba(112, 92, 68, 0.10);
+            border-radius: 3px 11px 4px 9px;
+            background: rgba(255, 255, 255, 0.72);
+            color: #111;
+            font-size: 22px;
+            cursor: pointer;
+            box-shadow: 0 4px 12px rgba(83, 63, 42, 0.08);
+        }
+
+        .editor-body {
+            position: relative;
+            z-index: 1;
+            padding: 4px 24px 22px;
+        }
+
+        .field {
+            position: relative;
+            margin-bottom: 18px;
+            padding: 0;
+            border: 0;
+            border-radius: 0;
+            background: transparent;
+            box-shadow: none;
+            transform: none;
+            clip-path: none;
+        }
+
+        .field:nth-child(2n) {
+            transform: none;
+            background: transparent;
+        }
+
+        .field:nth-child(3n) {
+            transform: none;
+            background: transparent;
+        }
+
+        .field:nth-child(4n) {
+            background: transparent;
+        }
+
+        .field::before {
+            content: none;
+        }
+
+        .field:nth-child(2n)::before {
+            content: none;
+        }
+
+        .field:nth-child(3n)::before {
+            content: none;
+        }
+
+        .field-title {
+            display: block;
+            width: auto;
+            margin: 0 0 8px;
+            padding: 0;
+            border: 0;
+            border-radius: 0;
+            background: transparent;
+            color: rgba(67, 58, 48, 0.76);
+            font-family: "Courier New", monospace;
+            font-size: 13px;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+            box-shadow: none;
+            transform: none;
+        }
+
+        .editor-textarea {
+            width: 100%;
+            min-height: 92px;
+            resize: vertical;
+            border: 0;
+            border-bottom: 2px solid rgba(112, 92, 68, 0.16);
+            border-radius: 3px 12px 4px 10px;
+            padding: 12px 13px;
+            color: #111;
+            background:
+                linear-gradient(transparent 0 30px, rgba(112, 92, 68, 0.045) 31px),
+                rgba(255, 255, 255, 0.70);
+            background-size: 100% 31px;
+            font: 16px/1.65 "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+            outline: none;
+            box-shadow: inset 0 0 0 1px rgba(112, 92, 68, 0.06);
+        }
+
+        .editor-textarea:focus {
+            border-color: rgba(93, 122, 135, 0.34);
+            box-shadow: none;
+        }
+
+        .choice-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+        }
+
+        .choice {
+            display: flex;
+            align-items: center;
+            gap: 9px;
+            min-height: 44px;
+            padding: 10px 12px;
+            border: 1px solid rgba(112, 92, 68, 0.14);
+            border-radius: 12px;
+            background: rgba(255, 255, 255, 0.62);
+            color: #2f2a25;
+            font-size: 14px;
+            cursor: pointer;
+            box-shadow: none;
+            transform: none;
+            clip-path: none;
+        }
+
+        .choice:nth-child(2n) {
+            transform: none;
+            background: rgba(255, 255, 255, 0.62);
+        }
+
+        .choice:has(input:checked) {
+            background: #fff8e8;
+            border-color: rgba(188, 153, 86, 0.20);
+            box-shadow: none;
+        }
+
+        .choice input {
+            accent-color: #d8b96f;
+        }
+
+        .contact-list {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 8px;
+            margin-top: 10px;
+        }
+
+        .hint {
+            margin-top: 8px;
+            color: rgba(73, 64, 54, 0.58);
+            font-size: 12px;
+            line-height: 1.55;
+        }
+
+        .editor-actions {
+            position: relative;
+            z-index: 2;
+            border-top: 1px dashed rgba(112, 92, 68, 0.14);
+            background: transparent;
+            backdrop-filter: none;
+            padding-top: 14px;
+        }
+
+        .paper-btn {
+            min-height: 40px;
+            padding: 0 16px;
+            border: 1px solid rgba(112, 92, 68, 0.18);
+            border-radius: 999px;
+            background: #fffef9;
+            color: #111;
+            font-weight: 700;
+            cursor: pointer;
+            box-shadow: none;
+            transform: none;
+            clip-path: none;
+        }
+
+        .paper-btn.primary {
+            border-color: rgba(188, 153, 86, 0.20);
+            background: #fff8e8;
+            transform: none;
+        }
+
+        .paper-btn.danger {
+            color: rgba(140, 66, 58, 0.86);
+        }
+
+        .chat-only[hidden],
+        .selected-contacts[hidden],
+        .delete-wrap[hidden] {
+            display: none;
+        }
+
+        .note-wrap.is-blank .cutline,
+        .note-wrap.is-blank .note-settings {
+            opacity: 0;
+        }
+
+        .note-wrap.is-new {
+            animation: notePasteTop 0.58s cubic-bezier(0.2, 0.9, 0.22, 1.15) both;
+        }
+
+        .notes-board.is-making-room .note-wrap:not(.is-blank):not(.is-new) {
+            animation: makeRoom 0.48s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+        }
+
+        .note-wrap.is-removing {
+            pointer-events: none;
+            z-index: 12;
+            transform-origin: 50% 0;
+            animation: peelNoteOff 0.62s cubic-bezier(0.28, 0.74, 0.22, 1) forwards;
+        }
+
+        .note-wrap.is-removing .note-tape {
+            animation: tapeLift 0.46s ease forwards;
+        }
+
+        .note-wrap.is-closing-gap {
+            animation: closeNoteGap 0.46s cubic-bezier(0.22, 0.8, 0.22, 1) both;
+        }
+
+        .note-wrap.is-new .clip {
+            opacity: 0;
+            transform: translateY(-18px) rotate(var(--r, -2deg)) scale(1.08);
+            animation: pasteClip 0.42s cubic-bezier(0.2, 0.85, 0.18, 1.2) forwards;
+            animation-delay: calc(var(--i, 0) * 58ms + 180ms);
+        }
+
+        @keyframes notePasteTop {
+            from {
+                opacity: 0;
+                transform: translateY(-32px) rotate(-6deg) scale(1.04);
+            }
+            68% {
+                opacity: 1;
+                transform: translateY(5px) rotate(1.5deg) scale(0.99);
+            }
+        }
+
+        @keyframes pasteClip {
+            to {
+                opacity: 1;
+                transform: rotate(var(--r, -2deg)) translateY(var(--y, 0)) scale(1);
+            }
+        }
+
+        @keyframes makeRoom {
+            0% {
+                transform: translateY(0) scale(1);
+            }
+            45% {
+                transform: translateY(18px) scale(0.985);
+            }
+            100% {
+                transform: translateY(0) scale(1);
+            }
+        }
+
+        @keyframes peelNoteOff {
+            0% {
+                opacity: 1;
+                filter: saturate(1);
+                transform: rotate(var(--note-rotate, 0deg)) translateY(var(--note-y, 0px)) scale(1);
+            }
+            36% {
+                opacity: 1;
+                filter: saturate(0.88);
+                transform: translateY(-20px) rotate(calc(var(--note-rotate, 0deg) - 3deg)) scale(1.025);
+            }
+            100% {
+                opacity: 0;
+                filter: saturate(0.35);
+                transform: translate(-28px, -118px) rotate(calc(var(--note-rotate, 0deg) - 16deg)) scale(0.9);
+            }
+        }
+
+        @keyframes tapeLift {
+            to {
+                opacity: 0;
+                transform: translateX(-50%) translateY(-16px) rotate(-13deg) scale(0.96);
+            }
+        }
+
+        @keyframes closeNoteGap {
+            from {
+                transform: translate(var(--gap-x, 0px), var(--gap-y, 22px)) rotate(var(--note-rotate, 0deg)) translateY(var(--note-y, 0px));
+            }
+            to {
+                transform: rotate(var(--note-rotate, 0deg)) translateY(var(--note-y, 0px));
+            }
+        }
+
+        @media (max-width: 980px) {
+            .journal-page {
+                padding: 22px;
+            }
+
+            .book {
+                min-height: calc(100vh - 44px);
+                padding: 26px;
+            }
+
+            .hero-board,
+            .notes-board {
+                min-height: auto;
+            }
+
+            .hero-board {
+                padding-bottom: 150px;
+            }
+
+            .book::after {
+                display: none;
+            }
+        }
+
+        @media (max-width: 620px) {
+            .journal-page {
+                padding: 12px;
+            }
+
+            .book {
+                min-height: calc(100vh - 24px);
+                padding: 22px 18px 44px;
+                border-radius: 10px;
+            }
+
+            .book::before {
+                inset: 10px;
+            }
+
+            .topbar {
+                flex-direction: column;
+                gap: 12px;
+            }
+
+            h1 {
+                font-size: 22px;
+            }
+
+            .date-stamp {
+                align-self: flex-end;
+            }
+
+            .hero-board {
+                padding: 58px 16px 156px;
+            }
+
+            .collage-line {
+                justify-content: flex-start;
+                gap: 7px;
+                margin: 18px auto;
+            }
+
+            .piece {
+                min-width: 32px;
+                min-height: 34px;
+                padding: 6px 9px;
+                font-size: 23px;
+            }
+
+            .piece.big {
+                min-width: 44px;
+                min-height: 46px;
+                font-size: 34px;
+            }
+
+            .piece.small,
+            .piece.long {
+                font-size: 18px;
+            }
+
+            .main-caption {
+                left: 18px;
+                right: 18px;
+                bottom: 18px;
+                padding: 13px 15px;
+                font-size: 16px;
+            }
+
+            .notes-board {
+                grid-template-columns: 1fr;
+                gap: 17px;
+            }
+
+            .note {
+                min-height: 164px;
+                padding: 28px 16px 24px;
+            }
+
+            .note.wide {
+                grid-column: auto;
+            }
+
+            .note-wrap.wide-wrap {
+                grid-column: auto;
+            }
+
+            .note .cutline {
+                gap: 5px;
+            }
+
+            .clip {
+                min-width: 22px;
+                min-height: 27px;
+                padding: 4px 7px 5px;
+                font-size: 18px;
+            }
+
+            .clip.small,
+            .clip.long {
+                font-size: 15px;
+            }
+
+            .clip.tall {
+                min-height: 36px;
+                font-size: 25px;
+            }
+
+            .clip.big {
+                min-width: 32px;
+                min-height: 38px;
+                font-size: 29px;
+            }
+
+            .label-strip,
+            .dotted-path,
+            .sticker {
+                display: none;
+            }
+
+            .fab-add {
+                right: 18px;
+                bottom: 18px;
+                width: 56px;
+                height: 56px;
+                font-size: 30px;
+            }
+
+            .choice-grid,
+            .contact-list {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="paper-fiber" aria-hidden="true"></div>
+    <main class="journal-page">
+        <section class="book" aria-label="牛皮纸拼贴手账页面">
+            <div class="label-strip">blocked word slips</div>
+            <div class="dotted-path" aria-hidden="true"></div>
+            <div class="sticker" aria-hidden="true">mute list</div>
+
+            <header class="topbar">
+                <div>
+                    <button class="eyebrow" id="kraft-back-btn" type="button">block fragments / 返回微信</button>
+                    <h1>把不想出现的词，轻轻贴进纸页背面</h1>
+                </div>
+                <div class="date-stamp">BLOCK<br>WORDS</div>
+            </header>
+
+            <div class="layout">
+                <section class="notes-board" aria-label="便签诗句列表">
+                    <article class="note square">
+                        <h2>note 01</h2>
+                        <div class="cutline" aria-label="一些温柔">
+                            <span class="clip f-song big">一</span>
+                            <span class="clip f-kai sage">些</span>
+                            <span class="clip f-hei tall ink">温</span>
+                            <span class="clip f-fang rose">柔</span>
+                        </div>
+                        <div class="cutline" aria-label="藏在纸背的褶皱里">
+                            <span class="clip f-mono small">藏</span>
+                            <span class="clip f-kai">在</span>
+                            <span class="clip f-impact warm">纸</span>
+                            <span class="clip f-song blue">背</span>
+                            <span class="clip f-hei small">的</span>
+                            <span class="clip f-fang long">褶皱</span>
+                            <span class="clip f-serif small transparent">里</span>
+                        </div>
+                        <span class="tiny">fold</span>
+                    </article>
+
+                    <article class="note receipt">
+                        <h2>note 02</h2>
+                        <div class="cutline" aria-label="你看见的空白">
+                            <span class="clip f-hei tall">你</span>
+                            <span class="clip f-song blue big">看</span>
+                            <span class="clip f-kai">见</span>
+                            <span class="clip f-mono small ink">的</span>
+                            <span class="clip f-impact warm big">空</span>
+                            <span class="clip f-fang">白</span>
+                        </div>
+                        <div class="cutline" aria-label="其实正在发芽">
+                            <span class="clip f-song long sage">其实</span>
+                            <span class="clip f-hei small">正</span>
+                            <span class="clip f-kai rose">在</span>
+                            <span class="clip f-impact tall ochre">发</span>
+                            <span class="clip f-fang">芽</span>
+                        </div>
+                        <span class="tiny">sprout</span>
+                    </article>
+
+                    <article class="note tracing">
+                        <h2>note 03</h2>
+                        <div class="cutline" aria-label="时间很轻">
+                            <span class="clip f-song big transparent">时</span>
+                            <span class="clip f-kai blue">间</span>
+                            <span class="clip f-mono small">很</span>
+                            <span class="clip f-hei tall sage">轻</span>
+                        </div>
+                        <div class="cutline" aria-label="落在便签的背面">
+                            <span class="clip f-fang rose">落</span>
+                            <span class="clip f-kai">在</span>
+                            <span class="clip f-impact long ink">便签</span>
+                            <span class="clip f-song small">的</span>
+                            <span class="clip f-serif warm">背</span>
+                            <span class="clip f-hei small">面</span>
+                        </div>
+                        <span class="tiny">time</span>
+                    </article>
+
+                    <article class="note rose">
+                        <h2>note 04</h2>
+                        <div class="cutline" aria-label="我把迟到的晴天">
+                            <span class="clip f-kai small">我</span>
+                            <span class="clip f-hei">把</span>
+                            <span class="clip f-song long warm">迟到</span>
+                            <span class="clip f-mono small ink">的</span>
+                            <span class="clip f-impact tall blue">晴</span>
+                            <span class="clip f-fang">天</span>
+                        </div>
+                        <div class="cutline" aria-label="夹进一本旧手账">
+                            <span class="clip f-song sage">夹</span>
+                            <span class="clip f-kai rose">进</span>
+                            <span class="clip f-hei small">一</span>
+                            <span class="clip f-serif big">本</span>
+                            <span class="clip f-mono ochre">旧</span>
+                            <span class="clip f-fang long transparent">手账</span>
+                        </div>
+                        <span class="tiny">sun</span>
+                    </article>
+
+                    <article class="note sage">
+                        <h2>note 05</h2>
+                        <div class="cutline" aria-label="别急着合上夜晚">
+                            <span class="clip f-hei rust">别</span>
+                            <span class="clip f-kai">急</span>
+                            <span class="clip f-song small">着</span>
+                            <span class="clip f-impact warm">合</span>
+                            <span class="clip f-fang blue">上</span>
+                            <span class="clip f-mono long ink">夜晚</span>
+                        </div>
+                        <div class="cutline" aria-label="月光还有一行小字">
+                            <span class="clip f-song big transparent">月</span>
+                            <span class="clip f-kai rose">光</span>
+                            <span class="clip f-hei long">还有</span>
+                            <span class="clip f-mono small">一</span>
+                            <span class="clip f-impact sage">行</span>
+                            <span class="clip f-fang long warm">小字</span>
+                        </div>
+                        <span class="tiny">moon</span>
+                    </article>
+
+                    <article class="note blue">
+                        <h2>note 06</h2>
+                        <div class="cutline" aria-label="那些没有说完的话">
+                            <span class="clip f-kai long">那些</span>
+                            <span class="clip f-impact tall ink">没</span>
+                            <span class="clip f-song sage">有</span>
+                            <span class="clip f-hei blue">说</span>
+                            <span class="clip f-fang warm">完</span>
+                            <span class="clip f-mono small">的</span>
+                            <span class="clip f-serif rose">话</span>
+                        </div>
+                        <div class="cutline" aria-label="先替我安静地生活">
+                            <span class="clip f-hei small">先</span>
+                            <span class="clip f-kai">替</span>
+                            <span class="clip f-song transparent">我</span>
+                            <span class="clip f-impact long ochre">安静</span>
+                            <span class="clip f-mono small ink">地</span>
+                            <span class="clip f-fang long">生活</span>
+                        </div>
+                        <span class="tiny">quiet</span>
+                    </article>
+
+                    <article class="note wide">
+                        <h2>excerpt</h2>
+                        <div class="cutline" aria-label="如果今天只能留下一个证据">
+                            <span class="clip f-kai long">如果</span>
+                            <span class="clip f-impact big warm">今</span>
+                            <span class="clip f-song">天</span>
+                            <span class="clip f-hei long ink">只能</span>
+                            <span class="clip f-fang">留下</span>
+                            <span class="clip f-mono small">一</span>
+                            <span class="clip f-song rose">个</span>
+                            <span class="clip f-impact long sage">证据</span>
+                        </div>
+                        <div class="cutline" aria-label="就留下一枚浅色纸片">
+                            <span class="clip f-song small">就</span>
+                            <span class="clip f-hei">留</span>
+                            <span class="clip f-kai">下</span>
+                            <span class="clip f-mono long blue">一枚</span>
+                            <span class="clip f-fang warm">浅色</span>
+                            <span class="clip f-impact long transparent">纸片</span>
+                        </div>
+                        <div class="cutline" aria-label="证明心事曾经被温柔地整理过">
+                            <span class="clip f-hei rust">证明</span>
+                            <span class="clip f-kai">心事</span>
+                            <span class="clip f-song sage">曾经</span>
+                            <span class="clip f-mono small ink">被</span>
+                            <span class="clip f-fang rose">温柔</span>
+                            <span class="clip f-impact long">整理过</span>
+                        </div>
+                        <span class="tiny">kept</span>
+                    </article>
+                </section>
+            </div>
+
+            <div class="page-no">006 / kraft journal</div>
+        </section>
+    </main>
+    <button class="fab-add" id="add-note-btn" type="button" aria-label="新增屏蔽词便签">+</button>
+
+    <div class="editor-modal" id="note-editor" hidden>
+        <section class="editor-sheet" role="dialog" aria-modal="true" aria-labelledby="editor-title">
+            <div class="editor-head">
+                <h2 id="editor-title">编辑屏蔽词便签</h2>
+                <button class="editor-close" id="editor-close" type="button" aria-label="关闭">×</button>
+            </div>
+            <div class="editor-body">
+                <div class="field">
+                    <label class="field-title" for="editor-text">屏蔽文本 / 便签文字</label>
+                    <textarea class="editor-textarea" id="editor-text" placeholder="输入字、词或一句短句"></textarea>
+                    <div class="hint">保存后会自动切成剪报字块，贴回便签上。</div>
+                </div>
+
+                <div class="field">
+                    <span class="field-title">启用状态</span>
+                    <label class="choice">
+                        <input type="checkbox" id="editor-enabled" checked>
+                        <span>启用此屏蔽词</span>
+                    </label>
+                </div>
+
+                <div class="field">
+                    <span class="field-title">生效范围</span>
+                    <div class="choice-grid">
+                        <label class="choice">
+                            <input type="radio" name="editor-scope" value="global" checked>
+                            <span>整个网页</span>
+                        </label>
+                        <label class="choice">
+                            <input type="radio" name="editor-scope" value="chat">
+                            <span>聊天页面</span>
+                        </label>
+                    </div>
+                    <div class="hint">整个网页：隐藏这个文本。聊天页面：可继续设置整条消息或仅隐藏文本。</div>
+                </div>
+
+                <div class="field chat-only" id="chat-mode-field" hidden>
+                    <span class="field-title">聊天屏蔽方式</span>
+                    <div class="choice-grid">
+                        <label class="choice">
+                            <input type="radio" name="editor-chat-mode" value="message" checked>
+                            <span>屏蔽整条消息</span>
+                        </label>
+                        <label class="choice">
+                            <input type="radio" name="editor-chat-mode" value="text">
+                            <span>只屏蔽这个文本</span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="field chat-only" id="contact-scope-field" hidden>
+                    <span class="field-title">应用联系人</span>
+                    <div class="choice-grid">
+                        <label class="choice">
+                            <input type="radio" name="editor-contact-scope" value="all" checked>
+                            <span>全部联系人</span>
+                        </label>
+                        <label class="choice">
+                            <input type="radio" name="editor-contact-scope" value="selected">
+                            <span>指定联系人</span>
+                        </label>
+                    </div>
+                    <div class="contact-list selected-contacts" id="selected-contacts" hidden>
+                        <label class="choice"><input type="checkbox" value="小夏">小夏</label>
+                        <label class="choice"><input type="checkbox" value="阿澈">阿澈</label>
+                        <label class="choice"><input type="checkbox" value="林栀">林栀</label>
+                        <label class="choice"><input type="checkbox" value="沈默">沈默</label>
+                    </div>
+                </div>
+            </div>
+            <div class="editor-actions">
+                <span class="delete-wrap" id="delete-wrap" hidden>
+                    <button class="paper-btn danger" id="editor-delete" type="button">删除</button>
+                </span>
+                <span>
+                    <button class="paper-btn" id="editor-cancel" type="button">取消</button>
+                    <button class="paper-btn primary" id="editor-save" type="button">完成</button>
+                </span>
+            </div>
+        </section>
+    </div>
+
+    <script>
+        (function () {
+            const STORAGE_KEY = 'kraftCollageBlockNotes.v2';
+            const styleCycle = ['square', 'receipt', 'tracing', 'rose', 'sage', 'blue', 'wide'];
+            const noteShapeCycle = ['shape-soft', 'shape-torn', 'shape-bottom-rip', 'shape-corner'];
+            const fontCycle = ['f-song', 'f-kai', 'f-hei', 'f-mono', 'f-serif', 'f-impact', 'f-fang'];
+            const sizeCycle = ['', 'small', 'tall', '', 'big', 'long'];
+            const shapeCycle = ['', 'plain', 'slant', 'slash', 'ticket', 'corner', 'trapezoid', 'top-rip', 'bottom-rip', 'zigzag', 'narrow', 'poster'];
+            const tagCycle = ['fold', 'sprout', 'time', 'sun', 'moon', 'quiet', 'kept'];
+            const notePalettes = {
+                square: ['#e7f0cf', '#d7e5b4', '#c6d99a', '#b6ca84', '#ffffff'],
+                receipt: ['#ffe8b3', '#f4d58e', '#e7c16d', '#d7aa4f', '#ffffff'],
+                tracing: ['#dff4ec', '#caeadf', '#adddcc', '#91cdb8', '#ffffff'],
+                rose: ['#f1d3cf', '#e4b7b0', '#d49a91', '#c78178', '#ffffff'],
+                sage: ['#e0efcf', '#c9e0b1', '#adc98e', '#96b879', '#ffffff'],
+                blue: ['#d7eef6', '#bfe2ef', '#9fcfe1', '#82b9ce', '#ffffff'],
+                wide: ['#ffe6ad', '#f2cf83', '#e2b85f', '#cfa044', '#ffffff']
+            };
+            const board = document.querySelector('.notes-board');
+            const backBtn = document.getElementById('kraft-back-btn');
+            const editor = document.getElementById('note-editor');
+            const editorTitle = document.getElementById('editor-title');
+            const textInput = document.getElementById('editor-text');
+            const enabledInput = document.getElementById('editor-enabled');
+            const chatModeField = document.getElementById('chat-mode-field');
+            const contactScopeField = document.getElementById('contact-scope-field');
+            const selectedContacts = document.getElementById('selected-contacts');
+            const deleteWrap = document.getElementById('delete-wrap');
+            let notes = [];
+            let editingId = null;
+            let contactOptions = [];
+
+            function cleanText(value) {
+                return String(value || '').replace(/\s+/g, ' ').trim();
+            }
+
+            function escapeHtml(value) {
+                return String(value || '').replace(/[&<>"']/g, (char) => ({
+                    '&': '&amp;',
+                    '<': '&lt;',
+                    '>': '&gt;',
+                    '"': '&quot;',
+                    "'": '&#39;'
+                }[char]));
+            }
+
+            function makeId() {
+                return 'note_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+            }
+
+            function hashString(value) {
+                let hash = 2166136261;
+                const text = String(value || '');
+                for (let i = 0; i < text.length; i++) {
+                    hash ^= text.charCodeAt(i);
+                    hash = Math.imul(hash, 16777619);
+                }
+                return hash >>> 0;
+            }
+
+            function seededRandom(seed) {
+                let value = seed >>> 0;
+                value += 0x6D2B79F5;
+                value = Math.imul(value ^ (value >>> 15), value | 1);
+                value ^= value + Math.imul(value ^ (value >>> 7), value | 61);
+                return ((value ^ (value >>> 14)) >>> 0) / 4294967296;
+            }
+
+            function pickStable(list, seed) {
+                return list[Math.floor(seededRandom(seed) * list.length) % list.length];
+            }
+
+            function getParentState() {
+                try {
+                    return window.parent && window.parent !== window && window.parent.iphoneSimState
+                        ? window.parent.iphoneSimState
+                        : null;
+                } catch (error) {
+                    return null;
+                }
+            }
+
+            function readContactOptions() {
+                const parentState = getParentState();
+                const contacts = parentState && Array.isArray(parentState.contacts) ? parentState.contacts : [];
+                const normalized = contacts
+                    .filter(contact => contact && contact.id !== undefined && contact.id !== null)
+                    .map(contact => ({
+                        id: String(contact.id),
+                        name: String(contact.remark || contact.nickname || contact.name || `联系人 ${contact.id}`)
+                    }));
+                contactOptions = normalized.length ? normalized : [
+                    { id: 'sample_xia', name: '小夏' },
+                    { id: 'sample_che', name: '阿澈' },
+                    { id: 'sample_zhi', name: '林栀' },
+                    { id: 'sample_mo', name: '沈默' }
+                ];
+                return contactOptions;
+            }
+
+            function contactNameById(contactId) {
+                const contacts = contactOptions.length ? contactOptions : readContactOptions();
+                const match = contacts.find(contact => String(contact.id) === String(contactId));
+                return match ? match.name : String(contactId);
+            }
+
+            function renderContactOptions(selectedIds = []) {
+                const contacts = readContactOptions();
+                selectedContacts.innerHTML = contacts.map(contact => {
+                    const checked = selectedIds.map(String).includes(String(contact.id)) ? ' checked' : '';
+                    return `<label class="choice"><input type="checkbox" value="${escapeHtml(contact.id)}"${checked}>${escapeHtml(contact.name)}</label>`;
+                }).join('');
+            }
+
+            function randomBetween(min, max) {
+                return min + Math.random() * (max - min);
+            }
+
+            function hexToRgb(hex) {
+                const normalized = String(hex || '').replace('#', '').trim();
+                if (normalized.length !== 6) return { r: 255, g: 255, b: 255 };
+                return {
+                    r: parseInt(normalized.slice(0, 2), 16),
+                    g: parseInt(normalized.slice(2, 4), 16),
+                    b: parseInt(normalized.slice(4, 6), 16)
+                };
+            }
+
+            function relativeLuminance(hex) {
+                const { r, g, b } = hexToRgb(hex);
+                const values = [r, g, b].map((channel) => {
+                    const value = channel / 255;
+                    return value <= 0.03928 ? value / 12.92 : Math.pow((value + 0.055) / 1.055, 2.4);
+                });
+                return values[0] * 0.2126 + values[1] * 0.7152 + values[2] * 0.0722;
+            }
+
+            function getClipTextColor(background) {
+                return relativeLuminance(background) < 0.58 ? '#ffffff' : '#111111';
+            }
+
+            function lineTextFromArticle(article) {
+                return Array.from(article.querySelectorAll('.cutline'))
+                    .map(line => cleanText(line.getAttribute('aria-label') || line.textContent))
+                    .filter(Boolean)
+                    .join('，');
+            }
+
+            function collectInitialNotes() {
+                return Array.from(board.querySelectorAll('.note')).map((article, index) => {
+                    const style = styleCycle.find(item => article.classList.contains(item)) || styleCycle[index % styleCycle.length];
+                    return {
+                        id: makeId(),
+                        text: lineTextFromArticle(article),
+                        title: article.querySelector('h2') ? article.querySelector('h2').textContent : `note ${String(index + 1).padStart(2, '0')}`,
+                        tag: article.querySelector('.tiny') ? article.querySelector('.tiny').textContent : tagCycle[index % tagCycle.length],
+                        style,
+                        enabled: true,
+                        scope: index % 3 === 0 ? 'chat' : 'global',
+                        chatMode: index % 2 === 0 ? 'message' : 'text',
+                        contactScope: 'all',
+                        contacts: [],
+                        shape: pickStable(noteShapeCycle, hashString(`${style}|${index}|shape`)),
+                        rotation: randomBetween(-3.2, 3.2),
+                        offsetY: randomBetween(-5, 8)
+                    };
+                });
+            }
+
+            function loadNotes() {
+                try {
+                    const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null');
+                    if (Array.isArray(saved) && saved.length) {
+                        notes = saved;
+                        renderNotes();
+                        return;
+                    }
+                } catch (error) {}
+                notes = [];
+                saveNotes();
+                renderNotes();
+            }
+
+            function saveNotes() {
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(notes));
+                try {
+                    window.dispatchEvent(new CustomEvent('kraft-block-words-updated', { detail: { notes } }));
+                    if (window.parent && window.parent !== window) {
+                        window.parent.postMessage({ type: 'kraft-block-words-updated', notes }, '*');
+                    }
+                } catch (error) {}
+            }
+
+            function textToLines(text, note) {
+                const raw = cleanText(text).replace(/[，。,.、；;！!？?]/g, ' ');
+                const chars = Array.from(raw).filter(char => char.trim());
+                const lines = [];
+                let line = [];
+                let target = 5 + Math.floor(seededRandom(hashString(`${note.id}|line|0`)) * 4);
+                chars.forEach((char, index) => {
+                    line.push(char);
+                    if (line.length >= target) {
+                        lines.push(line);
+                        line = [];
+                        target = 4 + Math.floor(seededRandom(hashString(`${note.id}|line|${index}`)) * 5);
+                    }
+                });
+                if (line.length) lines.push(line);
+                return lines.length ? lines : [['空', '白', '便', '签']];
+            }
+
+            function renderClip(note, char, index, lineIndex, animate) {
+                const seedBase = `${note.id}|${note.text}|${note.style}|${char}|${lineIndex}|${index}`;
+                const seed = hashString(seedBase);
+                const font = pickStable(fontCycle, seed);
+                const size = seededRandom(seed + 17) > 0.72 ? pickStable(sizeCycle.filter(Boolean), seed + 23) : '';
+                let shape = pickStable(shapeCycle, seed + 31);
+                if (char.length > 1 && (shape === 'narrow' || shape === 'poster')) {
+                    shape = pickStable(['plain', 'slant', 'ticket', 'trapezoid', 'bottom-rip'], seed + 37);
+                }
+                const palette = notePalettes[note.style] || notePalettes.square;
+                const useColor = seededRandom(seed + 41) > 0.5;
+                const color = useColor ? pickStable(palette.slice(0, -1), seed + 47) : '#ffffff';
+                const textColor = getClipTextColor(color);
+                const rotation = Math.round(seededRandom(seed + 53) * 18 - 9);
+                const y = Math.round(seededRandom(seed + 67) * 8 - 4);
+                const classes = ['clip', font, size, shape].filter(Boolean).join(' ');
+                const styleParts = [
+                    `--r:${rotation}deg`,
+                    `--y:${y}px`,
+                    `--clip-bg:${color}`,
+                    `color:${textColor}`
+                ];
+                if (animate) styleParts.unshift(`--i:${index + lineIndex * 8}`);
+                const style = ` style="${styleParts.join(';')}"`;
+                return `<span class="${classes}"${style}>${escapeHtml(char)}</span>`;
+            }
+
+            function renderCutlines(text, note, animate = false) {
+                return textToLines(text, note).map((line, lineIndex) => {
+                    const label = line.join('');
+                    const clips = line.map((char, index) => renderClip(note, char, index, lineIndex, animate)).join('');
+                    return `<div class="cutline" aria-label="${escapeHtml(label)}">${clips}</div>`;
+                }).join('');
+            }
+
+            function settingChips(note) {
+                const chips = [];
+                chips.push(`<span class="note-chip${note.enabled ? '' : ' off'}">${note.enabled ? 'ON' : 'OFF'}</span>`);
+                chips.push(`<span class="note-chip">${note.scope === 'chat' ? '聊天' : '全网页'}</span>`);
+                if (note.scope === 'chat') {
+                    chips.push(`<span class="note-chip">${note.chatMode === 'message' ? '整条消息' : '仅文本'}</span>`);
+                    chips.push(`<span class="note-chip">${note.contactScope === 'selected' && note.contacts.length ? note.contacts.map(contactNameById).join(' / ') : '全部联系人'}</span>`);
+                }
+                return `<div class="note-settings">${chips.join('')}</div>`;
+            }
+
+            function appendSettings(article, note) {
+                const existing = article.querySelector('.note-settings');
+                if (existing) existing.remove();
+                const tiny = article.querySelector('.tiny');
+                if (tiny) tiny.insertAdjacentHTML('beforebegin', settingChips(note));
+            }
+
+            function noteInner(note, index, animate = false) {
+                return `
+                    <h2>${escapeHtml(note.title || `note ${String(index + 1).padStart(2, '0')}`)}</h2>
+                    ${renderCutlines(note.text, note, animate)}
+                    ${settingChips(note)}
+                    <span class="tiny">${escapeHtml(note.tag || tagCycle[index % tagCycle.length])}</span>
+                `;
+            }
+
+            function noteStyleAttr(note) {
+                const fallbackSeed = hashString(`${note.id}|${note.text}|note-tilt`);
+                const rotation = Number.isFinite(Number(note.rotation)) ? Number(note.rotation) : (seededRandom(fallbackSeed) * 6.4 - 3.2);
+                const offsetY = Number.isFinite(Number(note.offsetY)) ? Number(note.offsetY) : (seededRandom(fallbackSeed + 7) * 12 - 5);
+                return ` style="--note-rotate:${rotation.toFixed(2)}deg;--note-y:${offsetY.toFixed(1)}px"`;
+            }
+
+            function noteArticle(note, index, animate = false) {
+                const noteShape = noteShapeCycle.includes(note.shape)
+                    ? note.shape
+                    : pickStable(noteShapeCycle, hashString(`${note.id}|${note.text}|shape`));
+                const disabledClass = note.enabled === false ? ' is-disabled' : '';
+                const newClass = animate ? ' is-new' : '';
+                const styleClass = note.style || styleCycle[index % styleCycle.length];
+                const wideClass = styleClass === 'wide' ? ' wide-wrap' : '';
+                return `<div class="note-wrap${wideClass}${disabledClass}${newClass}" data-note-id="${escapeHtml(note.id)}"${noteStyleAttr(note)}><button class="note-tape" type="button" aria-label="${note.enabled === false ? '启用这张便签' : '关闭这张便签'}"></button><article class="note ${escapeHtml(styleClass)} ${escapeHtml(noteShape)}" role="button" tabindex="0" aria-label="编辑 ${escapeHtml(note.text)}">${noteInner(note, index, animate)}</article></div>`;
+            }
+
+            function renderNotes() {
+                board.innerHTML = notes.map((note, index) => noteArticle(note, index)).join('');
+                document.documentElement.classList.add('notes-ready');
+            }
+
+            function closeBlockWordsPage() {
+                try {
+                    if (window.parent && window.parent !== window) {
+                        window.parent.postMessage({ type: 'close-kraft-block-words' }, '*');
+                        return;
+                    }
+                } catch (error) {}
+                if (window.history.length > 1) {
+                    window.history.back();
+                } else {
+                    window.location.href = 'index.html';
+                }
+            }
+
+            function animateNotesIntoPlace(previousRects) {
+                requestAnimationFrame(() => {
+                    board.querySelectorAll('.note-wrap').forEach(wrap => {
+                        const previous = previousRects.get(wrap.dataset.noteId);
+                        if (!previous) return;
+                        const next = wrap.getBoundingClientRect();
+                        const dx = previous.left - next.left;
+                        const dy = previous.top - next.top;
+                        if (Math.abs(dx) < 1 && Math.abs(dy) < 1) return;
+                        wrap.style.setProperty('--gap-x', `${dx.toFixed(1)}px`);
+                        wrap.style.setProperty('--gap-y', `${dy.toFixed(1)}px`);
+                        wrap.classList.add('is-closing-gap');
+                        wrap.addEventListener('animationend', () => {
+                            wrap.classList.remove('is-closing-gap');
+                            wrap.style.removeProperty('--gap-x');
+                            wrap.style.removeProperty('--gap-y');
+                        }, { once: true });
+                    });
+                });
+            }
+
+            function setRadio(name, value) {
+                const input = editor.querySelector(`input[name="${name}"][value="${value}"]`);
+                if (input) input.checked = true;
+            }
+
+            function getRadio(name) {
+                const input = editor.querySelector(`input[name="${name}"]:checked`);
+                return input ? input.value : '';
+            }
+
+            function updateConditionalFields() {
+                const isChat = getRadio('editor-scope') === 'chat';
+                chatModeField.hidden = !isChat;
+                contactScopeField.hidden = !isChat;
+                selectedContacts.hidden = !isChat || getRadio('editor-contact-scope') !== 'selected';
+            }
+
+            function openEditor(noteId = null) {
+                editingId = noteId;
+                const note = notes.find(item => item.id === noteId);
+                editorTitle.textContent = note ? '编辑屏蔽词便签' : '新增屏蔽词便签';
+                deleteWrap.hidden = !note;
+                textInput.value = note ? note.text : '';
+                enabledInput.checked = note ? note.enabled !== false : true;
+                setRadio('editor-scope', note ? note.scope : 'global');
+                setRadio('editor-chat-mode', note ? note.chatMode : 'message');
+                setRadio('editor-contact-scope', note ? note.contactScope : 'all');
+                renderContactOptions(note && Array.isArray(note.contacts) ? note.contacts : []);
+                selectedContacts.querySelectorAll('input[type="checkbox"]').forEach(input => {
+                    input.checked = !!note && Array.isArray(note.contacts) && note.contacts.includes(input.value);
+                });
+                updateConditionalFields();
+                editor.hidden = false;
+                setTimeout(() => textInput.focus(), 30);
+            }
+
+            function closeEditor() {
+                editor.hidden = true;
+                editingId = null;
+            }
+
+            function readEditorNote(existing = null) {
+                const text = cleanText(textInput.value) || '空白便签';
+                const scope = getRadio('editor-scope') || 'global';
+                const contactScope = getRadio('editor-contact-scope') || 'all';
+                const contacts = Array.from(selectedContacts.querySelectorAll('input:checked')).map(input => input.value);
+                const index = existing ? notes.indexOf(existing) : 0;
+                const id = existing ? existing.id : makeId();
+                const styleSeed = hashString(`${id}|${text}|note-style`);
+                return {
+                    id,
+                    text,
+                    title: existing ? existing.title : `note ${String(notes.length + 1).padStart(2, '0')}`,
+                    tag: existing ? existing.tag : 'new',
+                    style: existing ? existing.style : pickStable(styleCycle, styleSeed),
+                    shape: existing && noteShapeCycle.includes(existing.shape) ? existing.shape : pickStable(noteShapeCycle, hashString(`${id}|${text}|shape`)),
+                    rotation: existing && Number.isFinite(Number(existing.rotation)) ? Number(existing.rotation) : randomBetween(-3.4, 3.4),
+                    offsetY: existing && Number.isFinite(Number(existing.offsetY)) ? Number(existing.offsetY) : randomBetween(-6, 8),
+                    enabled: enabledInput.checked,
+                    scope,
+                    chatMode: getRadio('editor-chat-mode') || 'message',
+                    contactScope,
+                    contacts: contactScope === 'selected' ? contacts : []
+                };
+            }
+
+            function saveEditor() {
+                const existing = notes.find(item => item.id === editingId);
+                if (existing) {
+                    const next = readEditorNote(existing);
+                    const index = notes.indexOf(existing);
+                    notes[index] = next;
+                    saveNotes();
+                    const article = board.querySelector(`[data-note-id="${CSS.escape(next.id)}"]`);
+                    if (article) {
+                        article.className = `note-wrap${next.style === 'wide' ? ' wide-wrap' : ''}${next.enabled === false ? ' is-disabled' : ''}`;
+                        article.setAttribute('style', noteStyleAttr(next).replace(/^ style="|"$/g, ''));
+                        article.innerHTML = `<button class="note-tape" type="button" aria-label="${next.enabled === false ? '启用这张便签' : '关闭这张便签'}"></button><article class="note ${next.style} ${next.shape}" role="button" tabindex="0" aria-label="编辑 ${escapeHtml(next.text)}">${noteInner(next, index, true)}</article>`;
+                        article.setAttribute('aria-label', `编辑 ${next.text}`);
+                        article.classList.add('is-new');
+                        setTimeout(() => article.classList.remove('is-new'), 1200);
+                    } else {
+                        renderNotes();
+                    }
+                    closeEditor();
+                    return;
+                }
+
+                const note = readEditorNote(null);
+                notes.unshift(note);
+                saveNotes();
+                const index = 0;
+                const blank = document.createElement('div');
+                blank.className = `note-wrap${note.style === 'wide' ? ' wide-wrap' : ''}${note.enabled === false ? ' is-disabled' : ''} is-blank`;
+                blank.dataset.noteId = note.id;
+                blank.setAttribute('style', noteStyleAttr(note).replace(/^ style="|"$/g, ''));
+                blank.innerHTML = `<button class="note-tape" type="button" aria-label="${note.enabled === false ? '启用这张便签' : '关闭这张便签'}"></button><article class="note ${note.style} ${note.shape}" role="button" tabindex="0" aria-label="编辑 ${escapeHtml(note.text)}"><h2>${escapeHtml(note.title)}</h2><span class="tiny">${escapeHtml(note.tag)}</span></article>`;
+                board.classList.add('is-making-room');
+                board.prepend(blank);
+                closeEditor();
+                requestAnimationFrame(() => {
+                    setTimeout(() => {
+                        blank.className = `note-wrap${note.style === 'wide' ? ' wide-wrap' : ''}${note.enabled === false ? ' is-disabled' : ''} is-new`;
+                        blank.setAttribute('aria-label', `编辑 ${note.text}`);
+                        blank.innerHTML = `<button class="note-tape" type="button" aria-label="${note.enabled === false ? '启用这张便签' : '关闭这张便签'}"></button><article class="note ${note.style} ${note.shape}" role="button" tabindex="0" aria-label="编辑 ${escapeHtml(note.text)}">${noteInner(note, index, true)}</article>`;
+                        blank.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                        setTimeout(() => blank.classList.remove('is-new'), 1600);
+                    }, 180);
+                });
+                setTimeout(() => board.classList.remove('is-making-room'), 620);
+            }
+
+            function deleteEditingNote() {
+                if (!editingId) return;
+                const noteId = editingId;
+                const wrap = board.querySelector(`[data-note-id="${CSS.escape(noteId)}"]`);
+                closeEditor();
+                if (!wrap) {
+                    notes = notes.filter(note => note.id !== noteId);
+                    saveNotes();
+                    renderNotes();
+                    return;
+                }
+                wrap.classList.add('is-removing');
+                setTimeout(() => {
+                    const previousRects = new Map(
+                        Array.from(board.querySelectorAll('.note-wrap:not(.is-removing)')).map(item => [item.dataset.noteId, item.getBoundingClientRect()])
+                    );
+                    notes = notes.filter(note => note.id !== noteId);
+                    saveNotes();
+                    renderNotes();
+                    animateNotesIntoPlace(previousRects);
+                }, 560);
+            }
+
+            function toggleNoteEnabled(noteId) {
+                const note = notes.find(item => item.id === noteId);
+                if (!note) return;
+                note.enabled = note.enabled === false;
+                saveNotes();
+                renderNotes();
+            }
+
+            board.addEventListener('click', (event) => {
+                const tape = event.target.closest('.note-tape');
+                if (tape) {
+                    event.stopPropagation();
+                    const wrap = tape.closest('.note-wrap');
+                    if (wrap) toggleNoteEnabled(wrap.dataset.noteId);
+                    return;
+                }
+                const article = event.target.closest('.note');
+                if (!article) return;
+                const wrap = article.closest('.note-wrap');
+                if (wrap) openEditor(wrap.dataset.noteId);
+            });
+
+            board.addEventListener('keydown', (event) => {
+                if (event.key !== 'Enter' && event.key !== ' ') return;
+                const tape = event.target.closest('.note-tape');
+                if (tape) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    const wrap = tape.closest('.note-wrap');
+                    if (wrap) toggleNoteEnabled(wrap.dataset.noteId);
+                    return;
+                }
+                const article = event.target.closest('.note');
+                if (!article) return;
+                event.preventDefault();
+                const wrap = article.closest('.note-wrap');
+                if (wrap) openEditor(wrap.dataset.noteId);
+            });
+
+            document.getElementById('add-note-btn').addEventListener('click', () => openEditor(null));
+            if (backBtn) backBtn.addEventListener('click', closeBlockWordsPage);
+            document.getElementById('editor-close').addEventListener('click', closeEditor);
+            document.getElementById('editor-cancel').addEventListener('click', closeEditor);
+            document.getElementById('editor-save').addEventListener('click', saveEditor);
+            document.getElementById('editor-delete').addEventListener('click', deleteEditingNote);
+            editor.addEventListener('click', (event) => {
+                if (event.target === editor) closeEditor();
+            });
+            editor.querySelectorAll('input[name="editor-scope"], input[name="editor-contact-scope"]').forEach(input => {
+                input.addEventListener('change', updateConditionalFields);
+            });
+
+            loadNotes();
+        })();
+    </script>
+</body>
+</html>

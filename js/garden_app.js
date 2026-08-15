@@ -29,9 +29,15 @@
         tomato: { id: 'tomato', name: '番茄', emoji: '🍅', category: 'crops', sellPrice: 50 },
         corn: { id: 'corn', name: '玉米', emoji: '🌽', category: 'crops', sellPrice: 65 },
         pumpkin: { id: 'pumpkin', name: '南瓜', emoji: '🎃', category: 'crops', sellPrice: 90 },
+        giant_wheat: { id: 'giant_wheat', name: '巨大' + '小麦', emoji: '🌾', category: 'crops', sellPrice: 60, variantOf: 'wheat', isGiant: true },
+        giant_carrot: { id: 'giant_carrot', name: '巨大' + '胡萝卜', emoji: '🥕', category: 'crops', sellPrice: 105, variantOf: 'carrot', isGiant: true },
+        giant_tomato: { id: 'giant_tomato', name: '巨大' + '番茄', emoji: '🍅', category: 'crops', sellPrice: 150, variantOf: 'tomato', isGiant: true },
+        giant_corn: { id: 'giant_corn', name: '巨大' + '玉米', emoji: '🌽', category: 'crops', sellPrice: 195, variantOf: 'corn', isGiant: true },
+        giant_pumpkin: { id: 'giant_pumpkin', name: '巨大' + '南瓜', emoji: '🎃', category: 'crops', sellPrice: 270, variantOf: 'pumpkin', isGiant: true },
         egg: { id: 'egg', name: '鸡蛋', emoji: '🥚', category: 'products', sellPrice: 30 },
         milk: { id: 'milk', name: '牛奶', emoji: '🥛', category: 'products', sellPrice: 200 },
         pork: { id: 'pork', name: '猪肉', emoji: '🥩', category: 'products', sellPrice: 80 },
+        truffle: { id: 'truffle', name: '松露', emoji: '🍄', category: 'products', sellPrice: 625 },
         wool: { id: 'wool', name: '羊毛', emoji: '🧶', category: 'products', sellPrice: 130 },
         bread: { id: 'bread', name: '香喷喷面包', emoji: '🍞', category: 'cooked', sellPrice: 90 },
         cake: { id: 'cake', name: '美味蛋糕', emoji: '🍰', category: 'cooked', sellPrice: 320 },
@@ -42,43 +48,474 @@
         stirfry: { id: 'stirfry', name: '营养炖菜', emoji: '🥘', category: 'cooked', sellPrice: 180 }
     };
 
+    Object.assign(ITEM_META, {
+        wheat_flour: { id: 'wheat_flour', name: '小麦粉', emoji: '🌾', category: 'ingredients', sellPrice: 50 },
+        oil: { id: 'oil', name: '油', emoji: '🫙', category: 'ingredients', sellPrice: 100 },
+        cheese: { id: 'cheese', name: '奶酪', emoji: '🧀', category: 'ingredients', sellPrice: 230 },
+        sugar: { id: 'sugar', name: '糖', emoji: '🍚', category: 'ingredients', sellPrice: 40 },
+        vinegar: { id: 'vinegar', name: '醋', emoji: '🫙', category: 'ingredients', sellPrice: 60 },
+        rice: { id: 'rice', name: '米', emoji: '🍚', category: 'ingredients', sellPrice: 60 },
+        bread: { id: 'bread', name: '面包', emoji: '🍞', category: 'cooked', sellPrice: 60 },
+        tortilla: { id: 'tortilla', name: '玉米饼', emoji: '🫓', category: 'cooked', sellPrice: 50 },
+        fried_egg: { id: 'fried_egg', name: '煎蛋', emoji: '🍳', category: 'cooked', sellPrice: 35 },
+        omelet: { id: 'omelet', name: '煎蛋卷', emoji: '🥚', category: 'cooked', sellPrice: 125 },
+        hashbrowns: { id: 'hashbrowns', name: '薯饼', emoji: '🥔', category: 'cooked', sellPrice: 120 },
+        pancakes: { id: 'pancakes', name: '薄煎饼', emoji: '🥞', category: 'cooked', sellPrice: 120 },
+        parsnip_soup: { id: 'parsnip_soup', name: '防风草汤', emoji: '🥣', category: 'cooked', sellPrice: 120 },
+        pizza: { id: 'pizza', name: '披萨', emoji: '🍕', category: 'cooked', sellPrice: 300 },
+        vegetable_medley: { id: 'vegetable_medley', name: '蔬菜杂烩', emoji: '🥗', category: 'cooked', sellPrice: 120 },
+        pumpkin_soup: { id: 'pumpkin_soup', name: '南瓜汤', emoji: '🎃', category: 'cooked', sellPrice: 300 },
+        eggplant_parmesan: { id: 'eggplant_parmesan', name: '茄子帕玛森', emoji: '🍆', category: 'cooked', sellPrice: 200 },
+        complete_breakfast: { id: 'complete_breakfast', name: '丰盛早餐', emoji: '🍽️', category: 'cooked', sellPrice: 350 },
+        cheese_cauliflower: { id: 'cheese_cauliflower', name: '奶酪花椰菜', emoji: '🧀', category: 'cooked', sellPrice: 300 },
+        pepper_poppers: { id: 'pepper_poppers', name: '辣椒爆米花', emoji: '🌶️', category: 'cooked', sellPrice: 200 },
+        autumns_bounty: { id: 'autumns_bounty', name: '秋日恩赐', emoji: '🍂', category: 'cooked', sellPrice: 350 },
+        glazed_yams: { id: 'glazed_yams', name: '糖霜山药', emoji: '🍠', category: 'cooked', sellPrice: 200 },
+        artichoke_dip: { id: 'artichoke_dip', name: '洋蓟蘸酱', emoji: '🥣', category: 'cooked', sellPrice: 210 },
+        cranberry_sauce: { id: 'cranberry_sauce', name: '蔓越莓酱', emoji: '🫙', category: 'cooked', sellPrice: 120 },
+        poppyseed_muffin: { id: 'poppyseed_muffin', name: '罂粟籽松饼', emoji: '🧁', category: 'cooked', sellPrice: 250 },
+        pumpkin_pie: { id: 'pumpkin_pie', name: '南瓜派', emoji: '🥧', category: 'cooked', sellPrice: 385 },
+        radish_salad: { id: 'radish_salad', name: '萝卜沙拉', emoji: '🥗', category: 'cooked', sellPrice: 300 },
+        rice_pudding: { id: 'rice_pudding', name: '米布丁', emoji: '🍚', category: 'cooked', sellPrice: 260 },
+        super_meal: { id: 'super_meal', name: '超级餐', emoji: '🍱', category: 'cooked', sellPrice: 220 },
+        bruschetta: { id: 'bruschetta', name: '意式烤面包', emoji: '🍅', category: 'cooked', sellPrice: 120 },
+        red_plate: { id: 'red_plate', name: '红盘餐', emoji: '🍽️', category: 'cooked', sellPrice: 400 },
+        icecream: { id: 'icecream', name: '冰淇淋', emoji: '🍨', category: 'cooked', sellPrice: 120 },
+        blueberry_tart: { id: 'blueberry_tart', name: '蓝莓挞', emoji: '🫐', category: 'cooked', sellPrice: 150 },
+        pink_cake: { id: 'pink_cake', name: '粉红蛋糕', emoji: '🍰', category: 'cooked', sellPrice: 480 },
+        spaghetti: { id: 'spaghetti', name: '意面', emoji: '🍝', category: 'cooked', sellPrice: 120 },
+        cookie: { id: 'cookie', name: '曲奇', emoji: '🍪', category: 'cooked', sellPrice: 140 },
+        farmers_lunch: { id: 'farmers_lunch', name: '农夫午餐', emoji: '🥘', category: 'cooked', sellPrice: 150 }
+    });
+
     const ROGUE_ACTIVE_ITEM_POOL_V2 = {
         fertilizer: { id: 'fertilizer', name: '丰产肥料', emoji: '🧪', scope: 'farm', desc: '对一块农田使用，本次收获有较高概率额外 +1。', recommendedUse: '适合当前缺基础材料时补一次高产。', effectType: 'farm_bonus_yield', charges: 1 },
         greenhouse_spray: { id: 'greenhouse_spray', name: '温室喷雾', emoji: '💦', scope: 'farm', desc: '让一块作物立刻加速成熟。', recommendedUse: '适合赶当前节点进度或补最后一份原料。', effectType: 'farm_finish_now', charges: 1 },
-        pasture_whistle: { id: 'pasture_whistle', name: '牧场口哨', emoji: '📯', scope: 'pasture', desc: '立即推进一只动物到可收获状态。', recommendedUse: '适合急缺鸡蛋、牛奶、猪肉或羊毛时使用。', effectType: 'pasture_finish_now', charges: 1 },
+        pasture_whistle: { id: 'pasture_whistle', name: '牧场口哨', emoji: '📯', scope: 'pasture', desc: '立即推进一只动物到可收获状态。', recommendedUse: '适合急缺鸡蛋、牛奶、松露或羊毛时使用。', effectType: 'pasture_finish_now', charges: 1 },
         nutrient_feed: { id: 'nutrient_feed', name: '营养饲料', emoji: '🥣', scope: 'pasture', desc: '对一只动物使用，下一次收获额外 +1。', recommendedUse: '适合想放大高价值畜产时使用。', effectType: 'pasture_bonus_yield', charges: 1 },
         kitchen_spice: { id: 'kitchen_spice', name: '厨房香料', emoji: '🧂', scope: 'kitchen', desc: '下一次成功烹饪额外产出 1 份熟食。', recommendedUse: '适合做高价值熟食或冲市场订单时使用。', effectType: 'kitchen_bonus_output', charges: 1 },
         market_coupon: { id: 'market_coupon', name: '市场加价券', emoji: '🎟️', scope: 'market', desc: '下一张市场订单奖励提升。', recommendedUse: '适合第三幕卖货爆发或冲 Boss 收益。', effectType: 'market_bonus_order', charges: 1 }
     };
 
-    const STORAGE_TABS = {
-        crops: { id: 'crops', label: '作物', itemIds: ['wheat', 'carrot', 'tomato', 'corn', 'pumpkin'] },
-        products: { id: 'products', label: '畜产', itemIds: ['egg', 'milk', 'pork', 'wool'] },
-        cooked: { id: 'cooked', label: '熟食', itemIds: ['bread', 'cake', 'salad', 'pizza', 'taco', 'icecream', 'stirfry'] }
-    };
-
-    const INVENTORY_ITEM_IDS = Object.keys(ITEM_META);
+    const FARM_MUTATION_CONFIG = Object.freeze({
+        waterChance: 0.08,
+        timeCheckInterval: 15 * 1000,
+        timeCheckChance: 0.015,
+        valueMultiplier: 3
+    });
+    const FARM_MAX_LEVEL = 100;
+    const FARM_BASE_HARVEST_YIELD = 20;
+    const FARM_LEVEL_REQUIREMENTS = Object.freeze({
+        1: { exp: 80, salesGold: 100 },
+        2: { exp: 180, salesGold: 350 },
+        3: { exp: 320, salesGold: 800 },
+        4: { exp: 520, salesGold: 1600 }
+    });
 
     function getFarmSeedGrowTimeByCost(cost) {
         return Math.max(60 * 1000, cost * 6000);
     }
 
     const FARM_SEEDS = {
-        wheat: { id: 'wheat', inventoryId: 'wheat', name: '小麦', emoji: '🌾', cost: 10, time: getFarmSeedGrowTimeByCost(10) },
-        carrot: { id: 'carrot', inventoryId: 'carrot', name: '胡萝卜', emoji: '🥕', cost: 15, time: getFarmSeedGrowTimeByCost(15) },
-        tomato: { id: 'tomato', inventoryId: 'tomato', name: '番茄', emoji: '🍅', cost: 20, time: getFarmSeedGrowTimeByCost(20) },
-        corn: { id: 'corn', inventoryId: 'corn', name: '玉米', emoji: '🌽', cost: 25, time: getFarmSeedGrowTimeByCost(25) },
-        pumpkin: { id: 'pumpkin', inventoryId: 'pumpkin', name: '南瓜', emoji: '🎃', cost: 35, time: getFarmSeedGrowTimeByCost(35) }
+        wheat: { id: 'wheat', inventoryId: 'wheat', name: '小麦', emoji: '🌾', cost: 10, time: getFarmSeedGrowTimeByCost(10), unlockLevel: 1, harvestExp: 12 },
+        carrot: { id: 'carrot', inventoryId: 'carrot', name: '胡萝卜', emoji: '🥕', cost: 15, time: getFarmSeedGrowTimeByCost(15), unlockLevel: 2, harvestExp: 22 },
+        tomato: { id: 'tomato', inventoryId: 'tomato', name: '番茄', emoji: '🍅', cost: 20, time: getFarmSeedGrowTimeByCost(20), unlockLevel: 3, harvestExp: 36 },
+        corn: { id: 'corn', inventoryId: 'corn', name: '玉米', emoji: '🌽', cost: 25, time: getFarmSeedGrowTimeByCost(25), unlockLevel: 4, harvestExp: 54 },
+        pumpkin: { id: 'pumpkin', inventoryId: 'pumpkin', name: '南瓜', emoji: '🎃', cost: 35, time: getFarmSeedGrowTimeByCost(35), unlockLevel: 5, harvestExp: 78 }
     };
 
+    const FARM_EXTRA_CROP_DEFINITIONS = [
+        { id: 'cucumber', name: '黄瓜', emoji: '🥒', seedCost: 45, sellPrice: 115, unlockLevel: 8, harvestExp: 105 },
+        { id: 'potato', name: '土豆', emoji: '🥔', seedCost: 55, sellPrice: 145, unlockLevel: 11, harvestExp: 140 },
+        { id: 'onion', name: '洋葱', emoji: '🧅', seedCost: 65, sellPrice: 180, unlockLevel: 14, harvestExp: 178 },
+        { id: 'strawberry', name: '草莓', emoji: '🍓', seedCost: 78, sellPrice: 220, unlockLevel: 17, harvestExp: 220 },
+        { id: 'watermelon', name: '西瓜', emoji: '🍉', seedCost: 92, sellPrice: 270, unlockLevel: 20, harvestExp: 268 },
+        { id: 'eggplant', name: '茄子', emoji: '🍆', seedCost: 108, sellPrice: 325, unlockLevel: 23, harvestExp: 320 },
+        { id: 'pepper', name: '辣椒', emoji: '🌶️', seedCost: 125, sellPrice: 385, unlockLevel: 26, harvestExp: 375 },
+        { id: 'cabbage', name: '卷心菜', emoji: '🥬', seedCost: 145, sellPrice: 450, unlockLevel: 29, harvestExp: 435 },
+        { id: 'lettuce', name: '生菜', emoji: '🥗', seedCost: 168, sellPrice: 520, unlockLevel: 32, harvestExp: 500 },
+        { id: 'blueberry', name: '蓝莓', emoji: '🫐', seedCost: 194, sellPrice: 600, unlockLevel: 35, harvestExp: 570 },
+        { id: 'grape', name: '葡萄', emoji: '🍇', seedCost: 224, sellPrice: 690, unlockLevel: 38, harvestExp: 645 },
+        { id: 'rice', name: '水稻', emoji: '🌾', seedCost: 258, sellPrice: 790, unlockLevel: 41, harvestExp: 725 },
+        { id: 'soybean', name: '大豆', emoji: '🫘', seedCost: 296, sellPrice: 900, unlockLevel: 44, harvestExp: 810 },
+        { id: 'sweet_potato', name: '红薯', emoji: '🍠', seedCost: 340, sellPrice: 1020, unlockLevel: 47, harvestExp: 900 },
+        { id: 'radish', name: '樱桃萝卜', emoji: '🌱', seedCost: 390, sellPrice: 1150, unlockLevel: 50, harvestExp: 995 },
+        { id: 'garlic', name: '大蒜', emoji: '🧄', seedCost: 446, sellPrice: 1300, unlockLevel: 53, harvestExp: 1095 },
+        { id: 'broccoli', name: '西兰花', emoji: '🥦', seedCost: 510, sellPrice: 1470, unlockLevel: 56, harvestExp: 1200 },
+        { id: 'mushroom', name: '蘑菇', emoji: '🍄', seedCost: 582, sellPrice: 1660, unlockLevel: 59, harvestExp: 1310 },
+        { id: 'pineapple', name: '菠萝', emoji: '🍍', seedCost: 664, sellPrice: 1880, unlockLevel: 62, harvestExp: 1425 },
+        { id: 'coconut', name: '椰子', emoji: '🥥', seedCost: 756, sellPrice: 2120, unlockLevel: 65, harvestExp: 1545 },
+        { id: 'coffee', name: '咖啡豆', emoji: '☕', seedCost: 860, sellPrice: 2400, unlockLevel: 68, harvestExp: 1670 },
+        { id: 'cocoa', name: '可可豆', emoji: '🍫', seedCost: 978, sellPrice: 2700, unlockLevel: 71, harvestExp: 1800 },
+        { id: 'lotus', name: '莲藕', emoji: '🪷', seedCost: 1110, sellPrice: 3050, unlockLevel: 74, harvestExp: 1935 },
+        { id: 'saffron', name: '藏红花', emoji: '🌺', seedCost: 1260, sellPrice: 3450, unlockLevel: 80, harvestExp: 2075 },
+        { id: 'dragonfruit', name: '火龙果', emoji: '🐉', seedCost: 1430, sellPrice: 3900, unlockLevel: 90, harvestExp: 2220 },
+        { id: 'tea', name: '茶叶', emoji: '🍵', seedCost: 1620, sellPrice: 4400, unlockLevel: 93, harvestExp: 2370 },
+        { id: 'starfruit', name: '杨桃', emoji: '⭐', seedCost: 2090, sellPrice: 5800, unlockLevel: 99, harvestExp: 2685 }
+    ];
+
+    const FARM_MORE_CROP_DEFINITIONS = [
+        { id: 'peach', name: '蜜桃', emoji: '🍑' },
+        { id: 'cherry', name: '樱桃', emoji: '🍒' },
+        { id: 'apple', name: '苹果', emoji: '🍎' },
+        { id: 'pear', name: '梨', emoji: '🍐' },
+        { id: 'orange', name: '橙子', emoji: '🍊' },
+        { id: 'lemon', name: '柠檬', emoji: '🍋' },
+        { id: 'lime', name: '青柠', emoji: '🍈' },
+        { id: 'mango', name: '芒果', emoji: '🥭' },
+        { id: 'papaya', name: '木瓜', emoji: '🥭' },
+        { id: 'kiwi', name: '猕猴桃', emoji: '🥝' },
+        { id: 'fig', name: '无花果', emoji: '🫒' },
+        { id: 'pomegranate', name: '石榴', emoji: '🔴' },
+        { id: 'persimmon', name: '柿子', emoji: '🟠' },
+        { id: 'apricot', name: '杏子', emoji: '🍑' },
+        { id: 'plum', name: '李子', emoji: '🟣' },
+        { id: 'avocado', name: '牛油果', emoji: '🥑' },
+        { id: 'olive', name: '橄榄', emoji: '🫒' },
+        { id: 'date', name: '椰枣', emoji: '🌴' },
+        { id: 'raspberry', name: '树莓', emoji: '🍓' },
+        { id: 'blackberry', name: '黑莓', emoji: '🫐' },
+        { id: 'cranberry', name: '蔓越莓', emoji: '🔴' },
+        { id: 'gooseberry', name: '醋栗', emoji: '🟢' },
+        { id: 'blackcurrant', name: '黑加仑', emoji: '⚫' },
+        { id: 'cantaloupe', name: '哈密瓜', emoji: '🍈' },
+        { id: 'okra', name: '秋葵', emoji: '🌿' },
+        { id: 'celery', name: '芹菜', emoji: '🌿' },
+        { id: 'spinach', name: '菠菜', emoji: '🥬' },
+        { id: 'kale', name: '羽衣甘蓝', emoji: '🥬' },
+        { id: 'beet', name: '甜菜根', emoji: '🟣' },
+        { id: 'turnip', name: '芜菁', emoji: '⚪' },
+        { id: 'pea', name: '豌豆', emoji: '🟢' },
+        { id: 'artichoke', name: '洋蓟', emoji: '🌿' },
+        { id: 'asparagus', name: '芦笋', emoji: '🌱' },
+        { id: 'zucchini', name: '西葫芦', emoji: '🥒' },
+        { id: 'chili', name: '小米椒', emoji: '🌶️' },
+        { id: 'basil', name: '罗勒', emoji: '🌿' },
+        { id: 'mint', name: '薄荷', emoji: '🌿' },
+        { id: 'rosemary', name: '迷迭香', emoji: '🌿' },
+        { id: 'thyme', name: '百里香', emoji: '🌱' },
+        { id: 'lavender', name: '薰衣草', emoji: '💜' },
+        { id: 'chamomile', name: '洋甘菊', emoji: '🌼' },
+        { id: 'sunflower', name: '向日葵', emoji: '🌻' },
+        { id: 'rose', name: '玫瑰', emoji: '🌹' },
+        { id: 'jasmine', name: '茉莉花', emoji: '🌼' },
+        { id: 'tulip', name: '郁金香', emoji: '🌷' },
+        { id: 'chrysanthemum', name: '菊花', emoji: '🌼' },
+        { id: 'marigold', name: '万寿菊', emoji: '🌼' },
+        { id: 'cotton', name: '棉花', emoji: '☁️' },
+        { id: 'sugarcane', name: '甘蔗', emoji: '🎋' },
+        { id: 'hops', name: '啤酒花', emoji: '🌿' },
+        { id: 'vanilla', name: '香草荚', emoji: '🌱' }
+    ];
+
+    const FARM_ALL_ADDITIONAL_CROP_DEFINITIONS = [
+        ...FARM_EXTRA_CROP_DEFINITIONS,
+        ...FARM_MORE_CROP_DEFINITIONS
+    ];
+
+    Object.assign(ITEM_META, FARM_ALL_ADDITIONAL_CROP_DEFINITIONS.reduce((result, crop, index) => {
+        const moreCropIndex = index - FARM_EXTRA_CROP_DEFINITIONS.length;
+        const sellPrice = crop.sellPrice || (6200 + Math.max(0, moreCropIndex) * 480);
+        result[crop.id] = {
+            id: crop.id,
+            name: crop.name,
+            emoji: crop.emoji,
+            category: 'crops',
+            sellPrice
+        };
+        result[`giant_${crop.id}`] = {
+            id: `giant_${crop.id}`,
+            name: `巨大${crop.name}`,
+            emoji: crop.emoji,
+            category: 'crops',
+            sellPrice: sellPrice * FARM_MUTATION_CONFIG.valueMultiplier,
+            variantOf: crop.id,
+            isGiant: true
+        };
+        return result;
+    }, {}));
+
+    FARM_ALL_ADDITIONAL_CROP_DEFINITIONS.forEach((crop, index) => {
+        const moreCropIndex = index - FARM_EXTRA_CROP_DEFINITIONS.length;
+        const sellPrice = crop.sellPrice || (6200 + Math.max(0, moreCropIndex) * 480);
+        const seedCost = Math.max(1, Math.min(
+            crop.seedCost || (2500 + Math.max(0, moreCropIndex) * 220),
+            sellPrice
+        ));
+        const unlockLevel = crop.unlockLevel || (90 + Math.min(10, Math.floor(Math.max(0, moreCropIndex) / 5)));
+        const harvestExp = crop.harvestExp || (2900 + Math.max(0, moreCropIndex) * 180);
+        FARM_SEEDS[crop.id] = {
+            id: crop.id,
+            inventoryId: crop.id,
+            name: crop.name,
+            emoji: crop.emoji,
+            cost: seedCost,
+            time: getFarmSeedGrowTimeByCost(seedCost),
+            unlockLevel,
+            harvestExp
+        };
+    });
+
+    const FARM_STARDEW_CROP_CATALOG = [
+        { id: 'wheat', name: '小麦', emoji: '🌾', seedCost: 10, sellPrice: 25, growDays: 4, unlockLevel: 1, spriteStages: 5 },
+        { id: 'hops', name: '啤酒花', emoji: '🌿', seedCost: 25, sellPrice: 25, growDays: 11, unlockLevel: 2, spriteStages: 7 },
+        { id: 'rice_shoot', name: '水稻', emoji: '🌾', seedCost: 30, sellPrice: 30, growDays: 8, unlockLevel: 3, spriteStages: 5 },
+        { id: 'tulip', name: '郁金香', emoji: '🌷', seedCost: 20, sellPrice: 30, growDays: 6, unlockLevel: 5, spriteStages: 5 },
+        { id: 'parsnip', name: '防风草', emoji: '🥕', seedCost: 20, sellPrice: 35, growDays: 4, unlockLevel: 7, spriteStages: 5 },
+        { id: 'carrot', name: '胡萝卜', emoji: '🥕', seedCost: 10, sellPrice: 35, growDays: 3, unlockLevel: 9, spriteStages: 4 },
+        { id: 'green_bean', name: '四季豆', emoji: '🫛', seedCost: 40, sellPrice: 40, growDays: 10, unlockLevel: 11, spriteStages: 7 },
+        { id: 'hot_pepper', name: '辣椒', emoji: '🌶️', seedCost: 40, sellPrice: 40, growDays: 5, unlockLevel: 13, spriteStages: 6 },
+        { id: 'summer_squash', name: '夏日西葫芦', emoji: '🥒', seedCost: 30, sellPrice: 45, growDays: 6, unlockLevel: 15, spriteStages: 7 },
+        { id: 'blue_jazz', name: '蓝爵士花', emoji: '🌸', seedCost: 30, sellPrice: 50, growDays: 7, unlockLevel: 17, spriteStages: 5 },
+        { id: 'blueberry', name: '蓝莓', emoji: '🫐', seedCost: 50, sellPrice: 50, growDays: 13, unlockLevel: 19, spriteStages: 7 },
+        { id: 'corn', name: '玉米', emoji: '🌽', seedCost: 50, sellPrice: 50, growDays: 14, unlockLevel: 21, spriteStages: 7 },
+        { id: 'garlic', name: '大蒜', emoji: '🧄', seedCost: 40, sellPrice: 60, growDays: 4, unlockLevel: 23, spriteStages: 5 },
+        { id: 'tomato', name: '番茄', emoji: '🍅', seedCost: 50, sellPrice: 60, growDays: 11, unlockLevel: 25, spriteStages: 7 },
+        { id: 'eggplant', name: '茄子', emoji: '🍆', seedCost: 20, sellPrice: 60, growDays: 5, unlockLevel: 27, spriteStages: 7 },
+        { id: 'powdermelon', name: '粉瓜', emoji: '🍈', seedCost: 20, sellPrice: 60, growDays: 7, unlockLevel: 29, spriteStages: 6 },
+        { id: 'broccoli', name: '西兰花', emoji: '🥦', seedCost: 20, sellPrice: 70, growDays: 8, unlockLevel: 31, spriteStages: 5 },
+        { id: 'cranberry', name: '蔓越莓', emoji: '🔴', seedCost: 75, sellPrice: 75, growDays: 7, unlockLevel: 33, spriteStages: 7 },
+        { id: 'potato', name: '土豆', emoji: '🥔', seedCost: 50, sellPrice: 80, growDays: 6, unlockLevel: 34, spriteStages: 6 },
+        { id: 'bok_choy', name: '青江菜', emoji: '🥬', seedCost: 50, sellPrice: 80, growDays: 4, unlockLevel: 36, spriteStages: 5 },
+        { id: 'grape', name: '葡萄', emoji: '🍇', seedCost: 60, sellPrice: 80, growDays: 10, unlockLevel: 38, spriteStages: 7 },
+        { id: 'sunflower', name: '向日葵', emoji: '🌻', seedCost: 80, sellPrice: 80, growDays: 8, unlockLevel: 40, spriteStages: 5 },
+        { id: 'radish', name: '萝卜', emoji: '🌱', seedCost: 40, sellPrice: 90, growDays: 6, unlockLevel: 43, spriteStages: 5 },
+        { id: 'summer_spangle', name: '夏日亮片花', emoji: '🌼', seedCost: 50, sellPrice: 90, growDays: 8, unlockLevel: 45, spriteStages: 5 },
+        { id: 'taro_root', name: '芋头', emoji: '🍠', seedCost: 20, sellPrice: 100, growDays: 10, unlockLevel: 47, spriteStages: 5 },
+        { id: 'beet', name: '甜菜', emoji: '🟣', seedCost: 20, sellPrice: 100, growDays: 6, unlockLevel: 48, spriteStages: 5 },
+        { id: 'kale', name: '羽衣甘蓝', emoji: '🥬', seedCost: 70, sellPrice: 110, growDays: 6, unlockLevel: 49, spriteStages: 5 },
+        { id: 'strawberry', name: '草莓', emoji: '🍓', seedCost: 100, sellPrice: 120, growDays: 8, unlockLevel: 52, spriteStages: 7 },
+        { id: 'poppy', name: '虞美人', emoji: '🌺', seedCost: 100, sellPrice: 140, growDays: 7, unlockLevel: 54, spriteStages: 5 },
+        { id: 'amaranth', name: '苋菜', emoji: '🌿', seedCost: 70, sellPrice: 150, growDays: 7, unlockLevel: 57, spriteStages: 5 },
+        { id: 'yam', name: '山药', emoji: '🍠', seedCost: 60, sellPrice: 160, growDays: 10, unlockLevel: 59, spriteStages: 5 },
+        { id: 'artichoke', name: '洋蓟', emoji: '🌿', seedCost: 30, sellPrice: 160, growDays: 8, unlockLevel: 61, spriteStages: 6 },
+        { id: 'cauliflower', name: '花椰菜', emoji: '🥦', seedCost: 80, sellPrice: 175, growDays: 12, unlockLevel: 64, spriteStages: 6 },
+        { id: 'melon', name: '甜瓜', emoji: '🍈', seedCost: 80, sellPrice: 250, growDays: 12, unlockLevel: 67, spriteStages: 6 },
+        { id: 'red_cabbage', name: '红甘蓝', emoji: '🥬', seedCost: 100, sellPrice: 260, growDays: 9, unlockLevel: 68, spriteStages: 6 },
+        { id: 'fairy_rose', name: '仙女玫瑰', emoji: '🌹', seedCost: 200, sellPrice: 290, growDays: 12, unlockLevel: 71, spriteStages: 5 },
+        { id: 'pineapple', name: '菠萝', emoji: '🍍', seedCost: 300, sellPrice: 300, growDays: 14, unlockLevel: 74, spriteStages: 7 },
+        { id: 'pumpkin', name: '南瓜', emoji: '🎃', seedCost: 100, sellPrice: 320, growDays: 13, unlockLevel: 78, spriteStages: 6 },
+        { id: 'ancient_fruit', name: '远古果实', emoji: '🟣', seedCost: 550, sellPrice: 550, growDays: 28, unlockLevel: 84, spriteStages: 7 },
+        { id: 'starfruit', name: '杨桃', emoji: '⭐', seedCost: 400, sellPrice: 750, growDays: 13, unlockLevel: 91, spriteStages: 6 },
+        { id: 'sweet_gem_berry', name: '甜蜜宝石莓', emoji: '🔮', seedCost: 1000, sellPrice: 3000, growDays: 24, unlockLevel: 100, spriteStages: 6 }
+    ];
+
+    Object.keys(FARM_SEEDS).forEach((cropId) => {
+        delete FARM_SEEDS[cropId];
+    });
+    Object.keys(ITEM_META).forEach((itemId) => {
+        if (ITEM_META[itemId].category === 'crops') delete ITEM_META[itemId];
+    });
+    FARM_STARDEW_CROP_CATALOG.forEach((crop) => {
+        const time = Math.max(60 * 1000, crop.growDays * 15 * 1000);
+        const harvestExp = Math.max(12, Math.round(crop.sellPrice * 0.2));
+        const seedCost = Math.max(1, Math.min(crop.seedCost, crop.sellPrice));
+        ITEM_META[crop.id] = {
+            id: crop.id,
+            name: crop.name,
+            emoji: crop.emoji,
+            category: 'crops',
+            sellPrice: crop.sellPrice
+        };
+        ITEM_META[`giant_${crop.id}`] = {
+            id: `giant_${crop.id}`,
+            name: `巨大${crop.name}`,
+            emoji: crop.emoji,
+            category: 'crops',
+            sellPrice: crop.sellPrice * FARM_MUTATION_CONFIG.valueMultiplier,
+            variantOf: crop.id,
+            isGiant: true
+        };
+        FARM_SEEDS[crop.id] = {
+            id: crop.id,
+            inventoryId: crop.id,
+            name: crop.name,
+            emoji: crop.emoji,
+            cost: seedCost,
+            time,
+            unlockLevel: crop.unlockLevel,
+            harvestExp,
+            spriteStages: crop.spriteStages
+        };
+    });
+
+    const LEGACY_FARM_CROP_REPLACEMENTS = Object.freeze({
+        cucumber: 'green_bean',
+        onion: 'garlic',
+        watermelon: 'melon',
+        cabbage: 'red_cabbage',
+        lettuce: 'bok_choy',
+        soybean: 'green_bean',
+        sweet_potato: 'yam',
+        mushroom: 'ancient_fruit',
+        coconut: 'pineapple',
+        cocoa: 'starfruit',
+        lotus: 'taro_root',
+        saffron: 'fairy_rose',
+        dragonfruit: 'starfruit',
+        tea: 'blue_jazz',
+        peach: 'strawberry',
+        cherry: 'grape',
+        apple: 'parsnip',
+        pear: 'parsnip',
+        orange: 'pumpkin',
+        lemon: 'starfruit',
+        lime: 'powdermelon',
+        mango: 'pineapple',
+        papaya: 'pineapple',
+        kiwi: 'sweet_gem_berry',
+        fig: 'grape',
+        pomegranate: 'red_cabbage',
+        persimmon: 'pumpkin',
+        apricot: 'strawberry',
+        plum: 'blueberry',
+        avocado: 'bok_choy',
+        olive: 'grape',
+        date: 'ancient_fruit',
+        raspberry: 'strawberry',
+        blackberry: 'blueberry',
+        cranberry: 'cranberry',
+        gooseberry: 'blueberry',
+        blackcurrant: 'blueberry',
+        cantaloupe: 'powdermelon',
+        okra: 'green_bean',
+        celery: 'bok_choy',
+        spinach: 'kale',
+        beet: 'beet',
+        turnip: 'parsnip',
+        pea: 'green_bean',
+        zucchini: 'summer_squash',
+        chili: 'hot_pepper',
+        basil: 'kale',
+        mint: 'blue_jazz',
+        rosemary: 'amaranth',
+        thyme: 'amaranth',
+        lavender: 'fairy_rose',
+        chamomile: 'summer_spangle',
+        rose: 'fairy_rose',
+        jasmine: 'blue_jazz',
+        chrysanthemum: 'summer_spangle',
+        marigold: 'summer_spangle',
+        cotton: 'cauliflower',
+        sugarcane: 'wheat',
+        vanilla: 'sweet_gem_berry'
+    });
+    const LEGACY_FARM_CROP_IDS = new Set(FARM_ALL_ADDITIONAL_CROP_DEFINITIONS.map((crop) => crop.id));
+
+    function getCurrentFarmCropId(rawCropId) {
+        const cropId = String(rawCropId || '');
+        if (FARM_SEEDS[cropId]) return cropId;
+        if (!LEGACY_FARM_CROP_IDS.has(cropId)) return '';
+        const replacementId = LEGACY_FARM_CROP_REPLACEMENTS[cropId];
+        return FARM_SEEDS[replacementId] ? replacementId : '';
+    }
+
+    const FARM_CROP_ITEM_IDS = Object.values(ITEM_META)
+        .filter((item) => item.category === 'crops')
+        .map((item) => item.id);
+
+    const STORAGE_TABS = {
+        crops: { id: 'crops', label: '作物', itemIds: FARM_CROP_ITEM_IDS },
+        products: { id: 'products', label: '畜产', itemIds: ['egg', 'milk', 'truffle', 'wool'] },
+        cooked: { id: 'cooked', label: '熟食', itemIds: ['bread', 'tortilla', 'fried_egg', 'omelet', 'hashbrowns', 'pancakes', 'parsnip_soup', 'pizza', 'vegetable_medley', 'pumpkin_soup', 'eggplant_parmesan', 'complete_breakfast', 'cheese_cauliflower', 'pepper_poppers', 'autumns_bounty', 'glazed_yams', 'artichoke_dip', 'cranberry_sauce', 'poppyseed_muffin', 'pumpkin_pie', 'radish_salad', 'rice_pudding', 'super_meal', 'bruschetta', 'red_plate', 'icecream', 'blueberry_tart', 'pink_cake', 'spaghetti', 'cookie', 'farmers_lunch', 'cake', 'salad', 'taco', 'stirfry'] }
+    };
+
+    const INVENTORY_ITEM_IDS = Object.keys(ITEM_META);
+
+    const KITCHEN_RECIPE_ASSET_FILES = Object.freeze({
+        bread: 'bread.png',
+        tortilla: 'tortilla.png',
+        fried_egg: 'fried_egg.png',
+        omelet: 'omelet.png',
+        hashbrowns: 'hashbrowns.png',
+        pancakes: 'pancakes.png',
+        parsnip_soup: 'parsnip_soup.png',
+        pizza: 'pizza.png',
+        vegetable_medley: 'vegetable_medley.png',
+        pumpkin_soup: 'pumpkin_soup.png',
+        eggplant_parmesan: 'eggplant_parmesan.png',
+        complete_breakfast: 'complete_breakfast.png',
+        cheese_cauliflower: 'cheese_cauliflower.png',
+        pepper_poppers: 'pepper_poppers.png',
+        autumns_bounty: 'autumns_bounty.png',
+        glazed_yams: 'glazed_yams.png',
+        artichoke_dip: 'artichoke_dip.png',
+        cranberry_sauce: 'cranberry_sauce.png',
+        poppyseed_muffin: 'poppyseed_muffin.png',
+        pumpkin_pie: 'pumpkin_pie.png',
+        radish_salad: 'radish_salad.png',
+        rice_pudding: 'rice_pudding.png',
+        super_meal: 'super_meal.png',
+        bruschetta: 'bruschetta.png',
+        red_plate: 'red_plate.png',
+        icecream: 'icecream.png',
+        blueberry_tart: 'blueberry_tart.png',
+        pink_cake: 'pink_cake.png',
+        spaghetti: 'spaghetti.png',
+        cookie: 'cookie.png',
+        farmers_lunch: 'farmers_lunch.png'
+    });
+
+    const KITCHEN_ITEM_ASSET_FILES = Object.freeze({
+        egg: 'egg.png',
+        milk: 'milk.png',
+        truffle: 'truffle.png',
+        wool: 'wool.png',
+        wheat_flour: 'wheat_flour.png',
+        oil: 'oil.png',
+        cheese: 'cheese.png',
+        sugar: 'sugar.png',
+        vinegar: 'vinegar.png',
+        rice: 'rice.png'
+    });
+
+    const KITCHEN_VIRTUAL_INGREDIENT_SOURCES = Object.freeze({
+        wheat_flour: ['wheat'],
+        oil: ['corn', 'sunflower'],
+        cheese: ['milk', 'goat_milk'],
+        sugar: ['wheat'],
+        vinegar: ['rice_shoot'],
+        rice: ['rice_shoot']
+    });
+
+    const KITCHEN_CONTACT_FEED_VALUES = Object.freeze({
+        hunger: 25,
+        mood: 8,
+        energy: 12
+    });
+
     const KITCHEN_RECIPES = {
-        bread: { id: 'bread', name: '香喷喷面包', emoji: '🍞', primaryIngredient: 'wheat', ingredients: { wheat: 2, egg: 1 } },
-        cake: { id: 'cake', name: '美味蛋糕', emoji: '🍰', primaryIngredient: 'wheat', ingredients: { wheat: 3, milk: 1 } },
-        salad: { id: 'salad', name: '田园沙拉', emoji: '🥗', primaryIngredient: 'tomato', ingredients: { tomato: 2, carrot: 1 } },
-        pizza: { id: 'pizza', name: '农家披萨', emoji: '🍕', primaryIngredient: 'wheat', ingredients: { wheat: 3, tomato: 2, pork: 1 } },
-        taco: { id: 'taco', name: '烤肉卷饼', emoji: '🌮', primaryIngredient: 'wheat', ingredients: { wheat: 2, pork: 2 } },
-        icecream: { id: 'icecream', name: '奶香冰淇淋', emoji: '🍨', primaryIngredient: 'milk', ingredients: { milk: 2, egg: 1 } },
-        stirfry: { id: 'stirfry', name: '营养炖菜', emoji: '🥘', primaryIngredient: 'carrot', ingredients: { carrot: 2, pork: 1 } }
+        bread: { id: 'bread', name: '面包', emoji: '🍞', primaryIngredient: 'wheat', ingredients: { wheat_flour: 1 } },
+        tortilla: { id: 'tortilla', name: '玉米饼', emoji: '🫓', primaryIngredient: 'corn', ingredients: { corn: 1 } },
+        fried_egg: { id: 'fried_egg', name: '煎蛋', emoji: '🍳', primaryIngredient: 'egg', ingredients: { egg: 1 } },
+        omelet: { id: 'omelet', name: '煎蛋卷', emoji: '🥚', primaryIngredient: 'egg', ingredients: { egg: 1, milk: 1 } },
+        hashbrowns: { id: 'hashbrowns', name: '薯饼', emoji: '🥔', primaryIngredient: 'potato', ingredients: { potato: 1, oil: 1 } },
+        pancakes: { id: 'pancakes', name: '薄煎饼', emoji: '🥞', primaryIngredient: 'wheat', ingredients: { wheat_flour: 1, egg: 1 } },
+        parsnip_soup: { id: 'parsnip_soup', name: '防风草汤', emoji: '🥣', primaryIngredient: 'parsnip', ingredients: { parsnip: 1, milk: 1, vinegar: 1 } },
+        pizza: { id: 'pizza', name: '披萨', emoji: '🍕', primaryIngredient: 'tomato', ingredients: { wheat_flour: 1, tomato: 1, cheese: 1 } },
+        vegetable_medley: { id: 'vegetable_medley', name: '蔬菜杂烩', emoji: '🥗', primaryIngredient: 'tomato', ingredients: { tomato: 1, beet: 1 } },
+        pumpkin_soup: { id: 'pumpkin_soup', name: '南瓜汤', emoji: '🎃', primaryIngredient: 'pumpkin', ingredients: { pumpkin: 1, milk: 1 } },
+        eggplant_parmesan: { id: 'eggplant_parmesan', name: '茄子帕玛森', emoji: '🍆', primaryIngredient: 'eggplant', ingredients: { eggplant: 1, tomato: 1 } },
+        complete_breakfast: { id: 'complete_breakfast', name: '丰盛早餐', emoji: '🍽️', primaryIngredient: 'fried_egg', ingredients: { fried_egg: 1, milk: 1, hashbrowns: 1, pancakes: 1 } },
+        cheese_cauliflower: { id: 'cheese_cauliflower', name: '奶酪花椰菜', emoji: '🧀', primaryIngredient: 'cauliflower', ingredients: { cauliflower: 1, cheese: 1 } },
+        pepper_poppers: { id: 'pepper_poppers', name: '辣椒爆米花', emoji: '🌶️', primaryIngredient: 'hot_pepper', ingredients: { hot_pepper: 1, cheese: 1 } },
+        autumns_bounty: { id: 'autumns_bounty', name: '秋日恩赐', emoji: '🍂', primaryIngredient: 'pumpkin', ingredients: { yam: 1, pumpkin: 1 } },
+        glazed_yams: { id: 'glazed_yams', name: '糖霜山药', emoji: '🍠', primaryIngredient: 'yam', ingredients: { yam: 1, sugar: 1 } },
+        artichoke_dip: { id: 'artichoke_dip', name: '洋蓟蘸酱', emoji: '🥣', primaryIngredient: 'artichoke', ingredients: { artichoke: 1, milk: 1 } },
+        cranberry_sauce: { id: 'cranberry_sauce', name: '蔓越莓酱', emoji: '🫙', primaryIngredient: 'cranberry', ingredients: { cranberry: 1, sugar: 1 } },
+        poppyseed_muffin: { id: 'poppyseed_muffin', name: '罂粟籽松饼', emoji: '🧁', primaryIngredient: 'poppy', ingredients: { poppy: 1, wheat_flour: 1, sugar: 1 } },
+        pumpkin_pie: { id: 'pumpkin_pie', name: '南瓜派', emoji: '🥧', primaryIngredient: 'pumpkin', ingredients: { pumpkin: 1, wheat_flour: 1, milk: 1, sugar: 1 } },
+        radish_salad: { id: 'radish_salad', name: '萝卜沙拉', emoji: '🥗', primaryIngredient: 'radish', ingredients: { oil: 1, vinegar: 1, radish: 1 } },
+        rice_pudding: { id: 'rice_pudding', name: '米布丁', emoji: '🍚', primaryIngredient: 'milk', ingredients: { milk: 1, sugar: 1, rice: 1 } },
+        super_meal: { id: 'super_meal', name: '超级餐', emoji: '🍱', primaryIngredient: 'bok_choy', ingredients: { bok_choy: 1, cranberry: 1, artichoke: 1 } },
+        bruschetta: { id: 'bruschetta', name: '意式烤面包', emoji: '🍅', primaryIngredient: 'bread', ingredients: { bread: 1, oil: 1, tomato: 1 } },
+        red_plate: { id: 'red_plate', name: '红盘餐', emoji: '🍽️', primaryIngredient: 'red_cabbage', ingredients: { red_cabbage: 1, radish: 1 } },
+        icecream: { id: 'icecream', name: '冰淇淋', emoji: '🍨', primaryIngredient: 'milk', ingredients: { milk: 1, sugar: 1 } },
+        blueberry_tart: { id: 'blueberry_tart', name: '蓝莓挞', emoji: '🫐', primaryIngredient: 'blueberry', ingredients: { blueberry: 1, wheat_flour: 1, sugar: 1, egg: 1 } },
+        pink_cake: { id: 'pink_cake', name: '粉红蛋糕', emoji: '🍰', primaryIngredient: 'melon', ingredients: { melon: 1, wheat_flour: 1, sugar: 1, egg: 1 } },
+        spaghetti: { id: 'spaghetti', name: '意面', emoji: '🍝', primaryIngredient: 'tomato', ingredients: { wheat_flour: 1, tomato: 1 } },
+        cookie: { id: 'cookie', name: '曲奇', emoji: '🍪', primaryIngredient: 'egg', ingredients: { wheat_flour: 1, sugar: 1, egg: 1 } },
+        farmers_lunch: { id: 'farmers_lunch', name: '农夫午餐', emoji: '🥘', primaryIngredient: 'omelet', ingredients: { omelet: 1, parsnip: 1 } }
     };
 
     const ROGUE_V2_NODE_LABELS = {
@@ -190,10 +627,37 @@
 
     const PASTURE_ANIMAL_DATA = {
         chicken: { id: 'chicken', babyEmoji: '🐥', adultEmoji: '🐓', food: '🌾', inventoryId: 'egg', produceName: '鸡蛋', produceEmoji: '🥚', cost: 20, growTime: 5000, produceTime: 6000 },
-        pig: { id: 'pig', babyEmoji: '🐷', adultEmoji: '🐖', food: '🥬', inventoryId: 'pork', produceName: '猪肉', produceEmoji: '🥩', cost: 50, growTime: 8000, produceTime: 10000 },
+        pig: { id: 'pig', babyEmoji: '🐷', adultEmoji: '🐖', food: '🥬', inventoryId: 'truffle', produceName: '松露', produceEmoji: '🍄', cost: 50, growTime: 8000, produceTime: 10000 },
         sheep: { id: 'sheep', babyEmoji: '🐑', adultEmoji: '🐏', food: '🌿', inventoryId: 'wool', produceName: '羊毛', produceEmoji: '🧶', cost: 80, growTime: 12000, produceTime: 15000 },
         cow: { id: 'cow', babyEmoji: '🐮', adultEmoji: '🐄', food: '🌽', inventoryId: 'milk', produceName: '牛奶', produceEmoji: '🥛', cost: 120, growTime: 15000, produceTime: 20000 }
     };
+
+    const PASTURE_ANIMAL_SPRITES = Object.freeze({
+        chicken: {
+            baby: { sheet: 'animals/chicken/baby_sheet.png', frameWidth: 16, frameHeight: 16, columns: 4, rows: 14, renderWidth: 46, idleFrames: [[0, 0], [1, 0], [0, 0], [2, 0]], moveFrames: [[0, 0], [1, 0], [2, 0], [3, 0], [2, 0], [1, 0]], idleFrameDuration: 420, moveFrameDuration: 115 },
+            adult: { sheet: 'animals/chicken/adult_sheet.png', frameWidth: 16, frameHeight: 16, columns: 4, rows: 7, renderWidth: 36, idleFrames: [[0, 0], [1, 0], [0, 0], [2, 0]], moveFrames: [[0, 0], [1, 0], [2, 0], [3, 0], [2, 0], [1, 0]], idleFrameDuration: 420, moveFrameDuration: 110 }
+        },
+        pig: {
+            baby: { sheet: 'animals/pig/baby_sheet.png', frameWidth: 32, frameHeight: 32, columns: 4, rows: 5, renderWidth: 50, idleFrames: [[0, 0], [1, 0], [0, 0], [2, 0]], moveFrames: [[0, 0], [1, 0], [2, 0], [3, 0], [2, 0], [1, 0]], idleFrameDuration: 440, moveFrameDuration: 120 },
+            adult: { sheet: 'animals/pig/adult_sheet.png', frameWidth: 32, frameHeight: 32, columns: 4, rows: 5, renderWidth: 62, idleFrames: [[0, 0], [1, 0], [0, 0], [2, 0]], moveFrames: [[0, 0], [1, 0], [2, 0], [3, 0], [2, 0], [1, 0]], idleFrameDuration: 440, moveFrameDuration: 120 }
+        },
+        sheep: {
+            baby: { sheet: 'animals/sheep/baby_sheet.png', frameWidth: 32, frameHeight: 32, columns: 4, rows: 5, renderWidth: 50, idleFrames: [[0, 0], [1, 0], [0, 0], [2, 0]], moveFrames: [[0, 0], [1, 0], [2, 0], [3, 0], [2, 0], [1, 0]], idleFrameDuration: 440, moveFrameDuration: 120 },
+            adult: { sheet: 'animals/sheep/adult_sheet.png', frameWidth: 32, frameHeight: 32, columns: 4, rows: 5, renderWidth: 62, idleFrames: [[0, 0], [1, 0], [0, 0], [2, 0]], moveFrames: [[0, 0], [1, 0], [2, 0], [3, 0], [2, 0], [1, 0]], idleFrameDuration: 440, moveFrameDuration: 120 }
+        },
+        cow: {
+            baby: { sheet: 'animals/cow/baby_sheet.png', frameWidth: 32, frameHeight: 32, columns: 4, rows: 5, renderWidth: 50, idleFrames: [[0, 0], [1, 0], [0, 0], [2, 0]], moveFrames: [[0, 0], [1, 0], [2, 0], [3, 0], [2, 0], [1, 0]], idleFrameDuration: 440, moveFrameDuration: 120 },
+            adult: { sheet: 'animals/cow/adult_sheet.png', frameWidth: 32, frameHeight: 32, columns: 4, rows: 5, renderWidth: 62, idleFrames: [[0, 0], [1, 0], [0, 0], [2, 0]], moveFrames: [[0, 0], [1, 0], [2, 0], [3, 0], [2, 0], [1, 0]], idleFrameDuration: 440, moveFrameDuration: 120 }
+        },
+        duck: {
+            baby: { sheet: 'animals/duck/baby_sheet.png', frameWidth: 16, frameHeight: 16, columns: 4, rows: 14, renderWidth: 46, idleFrames: [[0, 0], [1, 0], [0, 0], [2, 0]], moveFrames: [[0, 0], [1, 0], [2, 0], [3, 0], [2, 0], [1, 0]], idleFrameDuration: 420, moveFrameDuration: 112 },
+            adult: { sheet: 'animals/duck/adult_sheet.png', frameWidth: 16, frameHeight: 16, columns: 4, rows: 14, renderWidth: 54, idleFrames: [[0, 0], [1, 0], [0, 0], [2, 0]], moveFrames: [[0, 0], [1, 0], [2, 0], [3, 0], [2, 0], [1, 0]], idleFrameDuration: 420, moveFrameDuration: 112 }
+        },
+        goat: {
+            baby: { sheet: 'animals/goat/baby_sheet.png', frameWidth: 32, frameHeight: 32, columns: 4, rows: 5, renderWidth: 50, idleFrames: [[0, 0], [1, 0], [0, 0], [2, 0]], moveFrames: [[0, 0], [1, 0], [2, 0], [3, 0], [2, 0], [1, 0]], idleFrameDuration: 440, moveFrameDuration: 120 },
+            adult: { sheet: 'animals/goat/adult_sheet.png', frameWidth: 32, frameHeight: 32, columns: 4, rows: 5, renderWidth: 62, idleFrames: [[0, 0], [1, 0], [0, 0], [2, 0]], moveFrames: [[0, 0], [1, 0], [2, 0], [3, 0], [2, 0], [1, 0]], idleFrameDuration: 440, moveFrameDuration: 120 }
+        }
+    });
 
     const PANEL_TABS = [
         {
@@ -377,6 +841,7 @@
         currentHomeSection: 'home',
         homeEntryMenuOpen: false,
         farmScreenOpen: false,
+        farmMessageBoardOpen: false,
         pastureScreenOpen: false,
         kitchenScreenOpen: false,
         farmToastTimeout: null,
@@ -391,12 +856,14 @@
             progressTimer: null,
             currentTool: 'pointer',
             currentSeed: 'wheat',
+            seedPanelOpen: false,
             selectedToolItemId: null
         },
         pastureGame: {
             initialized: false,
             progressTimer: null,
             roamTimer: null,
+            animationTimer: null,
             visualEatingUntil: {},
             currentTool: 'pointer',
             selectedAnimalToBuy: 'chicken',
@@ -407,6 +874,8 @@
             initialized: false,
             qteActive: false,
             currentRecipeId: null,
+            selectedRecipeId: null,
+            detailOpen: false,
             currentAngle: 0,
             spinDuration: 0,
             startTime: 0,
@@ -489,12 +958,15 @@
     let homeEntryMenuEl;
     let farmScreenEl;
     let farmCloseBtn;
+    let farmMessageBoardToggleEl;
+    let farmMessageBoardEl;
     let farmGridEl;
     let farmSeedPanelEl;
     let farmPanelTitleEl;
     let farmSeedListEl;
     let farmCoinsEl;
     let farmLevelEl;
+    let farmLevelProgressEl;
     let farmApEl;
     let farmApMaxEl;
     let farmBuffSummaryEl;
@@ -522,7 +994,15 @@
     let kitchenQtePointerEl;
     let kitchenQteHintEl;
     let kitchenToastEl;
-    let kitchenCookBtns = [];
+    let kitchenAreaEl;
+    let kitchenRecipeSheetEl;
+    let kitchenRecipeBackdropEl;
+    let kitchenRecipeImageEl;
+    let kitchenRecipeNameEl;
+    let kitchenRecipePriceEl;
+    let kitchenRecipeFeedEl;
+    let kitchenRecipeIngredientsEl;
+    let kitchenRecipeCookBtnEl;
     let kitchenBuffSummaryEl;
     let kitchenBuffSummaryTextEl;
     let kitchenBuffChipEl;
@@ -1464,7 +1944,11 @@
             state: 'empty',
             seedId: '',
             readyAt: null,
-            growDuration: null
+            growDuration: null,
+            wateredAt: null,
+            nextMutationCheckAt: null,
+            mutated: false,
+            mutationSource: ''
         };
     }
 
@@ -1522,6 +2006,10 @@
         Object.keys(inventory).forEach((itemId) => {
             inventory[itemId] = Math.max(0, Math.floor(Number(rawState.runInventory && rawState.runInventory[itemId]) || 0));
         });
+        const rawFarm = rawState.farm && typeof rawState.farm === 'object' ? rawState.farm : {};
+        const rawFarmPlots = Array.isArray(rawFarm.plots) ? rawFarm.plots : [];
+        const farmPlotCount = rawFarmPlots.length || defaults.farm.plots.length;
+        const farmPlots = Array.from({ length: farmPlotCount }, (_, index) => normalizeFarmPlot(rawFarmPlots[index], Date.now()));
         return {
             ...defaults,
             starterRoleId: roleId,
@@ -1547,7 +2035,11 @@
             currentMarket: rawState.currentMarket && typeof rawState.currentMarket === 'object' ? rawState.currentMarket : defaults.currentMarket,
             currentGuestEvent: rawState.currentGuestEvent || null,
             runInventory: inventory,
-            farm: rawState.farm && typeof rawState.farm === 'object' ? rawState.farm : defaults.farm,
+            farm: {
+                ...defaults.farm,
+                ...rawFarm,
+                plots: farmPlots
+            },
             pasture: rawState.pasture && typeof rawState.pasture === 'object' ? rawState.pasture : defaults.pasture,
             kitchen: rawState.kitchen && typeof rawState.kitchen === 'object' ? rawState.kitchen : defaults.kitchen,
             relics: Array.isArray(rawState.relics) ? rawState.relics.filter((id) => !!ROGUE_RELIC_POOL_V2[id]) : defaults.relics,
@@ -1626,6 +2118,7 @@
             farm: {
                 level: 1,
                 exp: 0,
+                salesGold: 0,
                 plots: Array.from({ length: 9 }, () => createEmptyFarmPlotState())
             },
             pasture: {
@@ -1661,16 +2154,86 @@
             const count = Number(rawInventory[itemId]);
             inventory[itemId] = Number.isFinite(count) && count > 0 ? Math.floor(count) : 0;
         });
+        if (inventory.truffle === 0) {
+            const legacyPorkCount = Number(rawInventory.pork);
+            if (Number.isFinite(legacyPorkCount) && legacyPorkCount > 0) {
+                inventory.truffle = Math.floor(legacyPorkCount);
+            }
+        }
+        Object.keys(rawInventory).forEach((itemId) => {
+            if (ITEM_META[itemId]) return;
+            const isGiant = itemId.startsWith('giant_');
+            const rawCropId = isGiant ? itemId.slice('giant_'.length) : itemId;
+            const replacementId = getCurrentFarmCropId(rawCropId);
+            if (!replacementId || !ITEM_META[replacementId]) return;
+            const count = Number(rawInventory[itemId]);
+            if (!Number.isFinite(count) || count <= 0) return;
+            const targetItemId = isGiant ? getGiantCropItemId(replacementId) : replacementId;
+            if (!targetItemId || !Object.prototype.hasOwnProperty.call(inventory, targetItemId)) return;
+            inventory[targetItemId] += Math.floor(count);
+        });
         return inventory;
+    }
+
+    function getGiantCropItemId(itemId) {
+        const giantItemId = `giant_${itemId}`;
+        return ITEM_META[giantItemId] && ITEM_META[giantItemId].isGiant ? giantItemId : null;
+    }
+
+    function getFarmMutationChance(trigger) {
+        let chance = trigger === 'water'
+            ? FARM_MUTATION_CONFIG.waterChance
+            : FARM_MUTATION_CONFIG.timeCheckChance;
+        if (isRogueActivityMode() && state.rogueRunV2) {
+            getRogueRelicDefs().forEach((relic) => {
+                const effects = relic && relic.effects ? relic.effects : {};
+                chance += Number(effects.mutationChanceBonus) || 0;
+                if (trigger === 'water' && ['rain', 'storm', '暴雨', '流星雨'].includes(state.rogueRunV2.currentWeather)) {
+                    chance += Number(effects.rainMutationBonus) || 0;
+                }
+            });
+        }
+        return Math.max(0, Math.min(0.95, chance));
+    }
+
+    function rollFarmMutation(plot, trigger) {
+        if (!plot || plot.mutated || !plot.seedId) return false;
+        if (Math.random() >= getFarmMutationChance(trigger)) return false;
+        plot.mutated = true;
+        plot.mutationSource = trigger;
+        plot.nextMutationCheckAt = null;
+        return true;
     }
 
     function advanceFarmPlotByClock(plot, now) {
         if (!plot || plot.state !== 'growing' || !isFiniteNumber(plot.readyAt)) return false;
-        if (plot.readyAt > now) return false;
-        plot.state = 'ready';
-        plot.readyAt = null;
-        plot.growDuration = null;
-        return true;
+        const currentTime = isFiniteNumber(now) ? now : Date.now();
+        let changed = false;
+        const growthEndAt = Math.min(plot.readyAt, currentTime);
+        let nextCheckAt = isFiniteNumber(plot.nextMutationCheckAt)
+            ? plot.nextMutationCheckAt
+            : (plot.wateredAt || currentTime) + FARM_MUTATION_CONFIG.timeCheckInterval;
+
+        while (!plot.mutated && nextCheckAt <= growthEndAt) {
+            if (rollFarmMutation(plot, 'time')) {
+                changed = true;
+                break;
+            }
+            nextCheckAt += FARM_MUTATION_CONFIG.timeCheckInterval;
+            changed = true;
+        }
+
+        if (!plot.mutated) {
+            plot.nextMutationCheckAt = nextCheckAt;
+        }
+        if (plot.readyAt <= currentTime) {
+            plot.state = 'ready';
+            plot.readyAt = null;
+            plot.growDuration = null;
+            plot.nextMutationCheckAt = null;
+            changed = true;
+        }
+        return changed;
     }
 
     function normalizeFarmPlot(rawPlot, now) {
@@ -1679,9 +2242,13 @@
 
         const nextState = rawPlot.state;
         plot.state = nextState === 'planted' || nextState === 'growing' || nextState === 'ready' ? nextState : 'empty';
-        plot.seedId = FARM_SEEDS[rawPlot.seedId] ? rawPlot.seedId : '';
+        plot.seedId = getCurrentFarmCropId(rawPlot.seedId);
         plot.readyAt = isFiniteNumber(rawPlot.readyAt) ? rawPlot.readyAt : null;
         plot.growDuration = isFiniteNumber(rawPlot.growDuration) ? Math.max(1000, Math.floor(rawPlot.growDuration)) : null;
+        plot.wateredAt = isFiniteNumber(rawPlot.wateredAt) ? rawPlot.wateredAt : null;
+        plot.nextMutationCheckAt = isFiniteNumber(rawPlot.nextMutationCheckAt) ? rawPlot.nextMutationCheckAt : null;
+        plot.mutationSource = ['water', 'time'].includes(rawPlot.mutationSource) ? rawPlot.mutationSource : '';
+        plot.mutated = rawPlot.mutated === true && Boolean(plot.mutationSource);
 
         if (!plot.seedId) {
             return createEmptyFarmPlotState();
@@ -1692,11 +2259,14 @@
         if (plot.state === 'ready') {
             plot.readyAt = null;
             plot.growDuration = null;
+            plot.nextMutationCheckAt = null;
             return plot;
         }
         if (plot.state === 'planted') {
             plot.readyAt = null;
             plot.growDuration = null;
+            plot.wateredAt = null;
+            plot.nextMutationCheckAt = null;
             return plot;
         }
         if (!isFiniteNumber(plot.readyAt)) {
@@ -1708,6 +2278,12 @@
         if (!isFiniteNumber(plot.growDuration)) {
             const seed = FARM_SEEDS[plot.seedId];
             plot.growDuration = seed ? seed.time : null;
+        }
+        if (!isFiniteNumber(plot.wateredAt)) {
+            plot.wateredAt = Math.max(0, plot.readyAt - plot.growDuration);
+        }
+        if (!plot.mutated && !isFiniteNumber(plot.nextMutationCheckAt)) {
+            plot.nextMutationCheckAt = plot.wateredAt + FARM_MUTATION_CONFIG.timeCheckInterval;
         }
         advanceFarmPlotByClock(plot, now);
         return plot;
@@ -1746,7 +2322,10 @@
             state: ['hungry', 'growing', 'producing', 'ready'].includes(rawAnimal.state) ? rawAnimal.state : 'hungry',
             x: isFiniteNumber(Number(rawAnimal.x)) ? Number(rawAnimal.x) : 50,
             y: isFiniteNumber(Number(rawAnimal.y)) ? Number(rawAnimal.y) : 50,
-            stateEndsAt: isFiniteNumber(Number(rawAnimal.stateEndsAt)) ? Number(rawAnimal.stateEndsAt) : null
+            stateEndsAt: isFiniteNumber(Number(rawAnimal.stateEndsAt)) ? Number(rawAnimal.stateEndsAt) : null,
+            facing: rawAnimal.facing === 'left' ? 'left' : 'right',
+            moveUntil: isFiniteNumber(Number(rawAnimal.moveUntil)) ? Number(rawAnimal.moveUntil) : 0,
+            moveDuration: isFiniteNumber(Number(rawAnimal.moveDuration)) ? Number(rawAnimal.moveDuration) : 0
         };
         if (animal.age === 'baby' && animal.state === 'ready') {
             animal.state = 'hungry';
@@ -1777,6 +2356,7 @@
             farm: {
                 level: isFiniteNumber(Number(rawState.farm && rawState.farm.level)) ? Math.max(1, Math.floor(Number(rawState.farm.level))) : defaults.farm.level,
                 exp: isFiniteNumber(Number(rawState.farm && rawState.farm.exp)) ? Math.max(0, Math.floor(Number(rawState.farm.exp))) : defaults.farm.exp,
+                salesGold: isFiniteNumber(Number(rawState.farm && rawState.farm.salesGold)) ? Math.max(0, Math.floor(Number(rawState.farm.salesGold))) : defaults.farm.salesGold,
                 plots: farmPlots
             },
             pasture: {
@@ -1787,6 +2367,7 @@
                 tab: sanitizeStorageTab(rawState.storage && rawState.storage.tab)
             }
         };
+        tryAdvanceFarmLevel(normalizedState.farm);
         return normalizedState;
     }
 
@@ -1893,6 +2474,17 @@
         }
     }
 
+    function discardRemovedRogueActivityState() {
+        state.rogueRunV2 = null;
+        state.rogueMetaV2 = null;
+        try {
+            window.localStorage.removeItem(GARDEN_ROGUE_RUN_STORAGE_KEY_V2);
+            window.localStorage.removeItem(GARDEN_ROGUE_META_STORAGE_KEY_V2);
+        } catch (error) {
+            return;
+        }
+    }
+
     function syncGardenGameReference() {
         state.gardenGame = state.casualGardenGame;
     }
@@ -1908,8 +2500,8 @@
     }
 
     function setGardenMode(mode) {
-        const nextMode = mode === 'rogue_activity' ? 'rogue_activity' : 'casual';
-        if (nextMode === 'casual' && !state.casualGardenGame) {
+        const nextMode = 'casual';
+        if (!state.casualGardenGame) {
             state.casualGardenGame = loadGardenGameState('casual');
         }
         state.gardenMode = nextMode;
@@ -1920,25 +2512,46 @@
         }
     }
 
+    function getActiveInventoryStore() {
+        if (isRogueActivityMode() && state.rogueRunV2 && state.rogueRunV2.runInventory) {
+            return state.rogueRunV2.runInventory;
+        }
+        return state.gardenGame && state.gardenGame.inventory ? state.gardenGame.inventory : null;
+    }
+
+    function migrateLegacyPorkInventory(inventory) {
+        if (!inventory || typeof inventory !== 'object') return false;
+        const legacyPorkCount = Math.max(0, Math.floor(Number(inventory.pork) || 0));
+        if (legacyPorkCount < 1) return false;
+        const currentTruffleCount = Math.max(0, Math.floor(Number(inventory.truffle) || 0));
+        inventory.truffle = currentTruffleCount + legacyPorkCount;
+        inventory.pork = 0;
+        return true;
+    }
+
+    function getNormalizedInventoryCount(inventory, itemId) {
+        if (!inventory || !ITEM_META[itemId]) return 0;
+        const directCount = Math.max(0, Math.floor(Number(inventory[itemId]) || 0));
+        if (itemId === 'truffle' && directCount < 1) {
+            return Math.max(0, Math.floor(Number(inventory.pork) || 0));
+        }
+        return directCount;
+    }
+
     function getInventoryCount(itemId) {
         if (!ITEM_META[itemId]) return 0;
-        if (isRogueActivityMode() && state.rogueRunV2 && state.rogueRunV2.runInventory) {
-            return Math.max(0, Math.floor(Number(state.rogueRunV2.runInventory[itemId]) || 0));
-        }
-        return state.gardenGame && state.gardenGame.inventory && isFiniteNumber(Number(state.gardenGame.inventory[itemId]))
-            ? Math.max(0, Math.floor(Number(state.gardenGame.inventory[itemId])))
-            : 0;
+        return getNormalizedInventoryCount(getActiveInventoryStore(), itemId);
     }
 
     function addInventoryItem(itemId, amount) {
         if (!ITEM_META[itemId]) return;
-        const nextAmount = Math.max(0, getInventoryCount(itemId) + amount);
-        if (isRogueActivityMode() && state.rogueRunV2 && state.rogueRunV2.runInventory) {
-            state.rogueRunV2.runInventory[itemId] = nextAmount;
-            return;
+        const inventory = getActiveInventoryStore();
+        if (!inventory) return;
+        if (itemId === 'truffle') {
+            migrateLegacyPorkInventory(inventory);
         }
-        if (!state.gardenGame) return;
-        state.gardenGame.inventory[itemId] = nextAmount;
+        const nextAmount = Math.max(0, getNormalizedInventoryCount(inventory, itemId) + amount);
+        inventory[itemId] = nextAmount;
     }
 
     function getRogueRunV2() {
@@ -2710,7 +3323,7 @@ ${taskCard.action}`;
         const run = getRogueRunV2();
         if (!run) return '当前没有进行中的 build 信息。';
         if (nodeType === 'farm') return `当前仓库：小麦 ${getRogueRunInventoryCount('wheat')} / 胡萝卜 ${getRogueRunInventoryCount('carrot')} / 番茄 ${getRogueRunInventoryCount('tomato')}。`;
-        if (nodeType === 'pasture') return `当前仓库：鸡蛋 ${getRogueRunInventoryCount('egg')} / 牛奶 ${getRogueRunInventoryCount('milk')} / 猪肉 ${getRogueRunInventoryCount('pork')}。`;
+        if (nodeType === 'pasture') return `当前仓库：鸡蛋 ${getRogueRunInventoryCount('egg')} / 牛奶 ${getRogueRunInventoryCount('milk')} / 松露 ${getRogueRunInventoryCount('truffle')}。`;
         if (nodeType === 'kitchen') return `当前可做配方 ${Object.values(KITCHEN_RECIPES).filter((recipe) => hasInventoryItems(recipe.ingredients || {})).length} 个。`;
         if (nodeType === 'market') return `当前局内金币 ${run.runCoins}，适合把已有库存兑现。`;
         if (nodeType === 'rest') return `当前士气 ${run.morale}/${run.moraleCap}。`;
@@ -3139,16 +3752,64 @@ ${taskCard.action}`;
         showRogueToast(`${matchedEntry.name} 升到 Lv.${level + 1}`);
     }
 
+    function getInventoryCountWithGiant(itemId) {
+        const giantItemId = getGiantCropItemId(itemId);
+        return getInventoryCount(itemId) + (giantItemId ? getInventoryCount(giantItemId) : 0);
+    }
+
+    function getKitchenIngredientSourceIds(itemId) {
+        return KITCHEN_VIRTUAL_INGREDIENT_SOURCES[itemId]
+            ? [...KITCHEN_VIRTUAL_INGREDIENT_SOURCES[itemId]]
+            : [itemId];
+    }
+
+    function getRecipeIngredientAvailableCount(itemId) {
+        return getKitchenIngredientSourceIds(itemId)
+            .reduce((sum, sourceId) => sum + getInventoryCountWithGiant(sourceId), 0);
+    }
+
+    function takeInventoryLikeItem(itemId, amount) {
+        let remaining = Math.max(0, Math.floor(amount || 0));
+        const baseCount = Math.min(getInventoryCount(itemId), remaining);
+        if (baseCount > 0) {
+            addInventoryItem(itemId, -baseCount);
+            remaining -= baseCount;
+        }
+        const giantItemId = getGiantCropItemId(itemId);
+        if (remaining > 0 && giantItemId) {
+            const giantCount = Math.min(getInventoryCount(giantItemId), remaining);
+            if (giantCount > 0) {
+                addInventoryItem(giantItemId, -giantCount);
+                remaining -= giantCount;
+            }
+        }
+        return remaining <= 0;
+    }
+
+    function spendRecipeIngredient(itemId, amount) {
+        let remaining = Math.max(0, Math.floor(amount || 0));
+        getKitchenIngredientSourceIds(itemId).forEach((sourceId) => {
+            if (remaining <= 0) return;
+            const available = getInventoryCountWithGiant(sourceId);
+            const spendCount = Math.min(available, remaining);
+            if (spendCount > 0 && takeInventoryLikeItem(sourceId, spendCount)) {
+                remaining -= spendCount;
+            }
+        });
+        return remaining <= 0;
+    }
+
     function hasInventoryItems(ingredients) {
-        return Object.entries(ingredients || {}).every(([itemId, requiredCount]) => getInventoryCount(itemId) >= requiredCount);
+        return Object.entries(ingredients || {}).every(([itemId, requiredCount]) => (
+            getRecipeIngredientAvailableCount(itemId) >= Math.max(0, Math.floor(requiredCount || 0))
+        ));
     }
 
     function spendInventoryItems(ingredients) {
         if (!hasInventoryItems(ingredients)) return false;
-        Object.entries(ingredients || {}).forEach(([itemId, requiredCount]) => {
-            addInventoryItem(itemId, -requiredCount);
-        });
-        return true;
+        return Object.entries(ingredients || {}).every(([itemId, requiredCount]) => (
+            spendRecipeIngredient(itemId, requiredCount)
+        ));
     }
 
     function getFarmPlots() {
@@ -3236,6 +3897,10 @@ ${taskCard.action}`;
     }
 
     function refreshGardenEconomyUi() {
+        const migratedInventory = migrateLegacyPorkInventory(getActiveInventoryStore());
+        if (migratedInventory) {
+            saveActiveGardenModeState();
+        }
         syncFarmStats();
         syncPastureStats();
         syncKitchenCookButtons();
@@ -3511,7 +4176,9 @@ ${taskCard.action}`;
     function getSellUnitPrice(itemId) {
         const meta = ITEM_META[itemId];
         if (!meta) return 0;
-        let price = meta.sellPrice;
+        let price = meta.isGiant && meta.variantOf && ITEM_META[meta.variantOf]
+            ? ITEM_META[meta.variantOf].sellPrice * FARM_MUTATION_CONFIG.valueMultiplier
+            : meta.sellPrice;
         if (meta.category === 'cooked' && isRogueModifierActive('kitchen_cooked_markup')) {
             price *= 1 + getRogueModifierValue('kitchen_cooked_markup', 0.2);
         }
@@ -4448,12 +5115,15 @@ ${taskCard.action}`;
         homeEntryMenuEl = document.getElementById('garden-home-entry-menu');
         farmScreenEl = document.getElementById('garden-farm-screen');
         farmCloseBtn = document.getElementById('garden-farm-close-btn');
+        farmMessageBoardToggleEl = document.getElementById('garden-farm-message-board-toggle');
+        farmMessageBoardEl = document.getElementById('garden-farm-message-board');
         farmGridEl = document.getElementById('garden-farm-grid');
         farmSeedPanelEl = document.getElementById('garden-farm-seed-panel');
         farmPanelTitleEl = document.getElementById('garden-farm-panel-title');
         farmSeedListEl = document.getElementById('garden-farm-seed-list');
         farmCoinsEl = document.getElementById('garden-farm-coins');
         farmLevelEl = document.getElementById('garden-farm-level');
+        farmLevelProgressEl = document.getElementById('garden-farm-level-progress');
         farmApEl = document.getElementById('garden-farm-ap');
         farmApMaxEl = document.getElementById('garden-farm-ap-max');
         farmBuffSummaryEl = document.getElementById('garden-farm-buff-summary');
@@ -4481,7 +5151,15 @@ ${taskCard.action}`;
         kitchenQtePointerEl = document.getElementById('garden-kitchen-qte-pointer');
         kitchenQteHintEl = document.getElementById('garden-kitchen-qte-hint');
         kitchenToastEl = document.getElementById('garden-kitchen-toast');
-        kitchenCookBtns = Array.from(document.querySelectorAll('#garden-app [data-kitchen-cook]'));
+        kitchenAreaEl = document.getElementById('garden-kitchen-area');
+        kitchenRecipeSheetEl = document.getElementById('garden-kitchen-recipe-sheet');
+        kitchenRecipeBackdropEl = document.getElementById('garden-kitchen-recipe-backdrop');
+        kitchenRecipeImageEl = document.getElementById('garden-kitchen-recipe-detail-image');
+        kitchenRecipeNameEl = document.getElementById('garden-kitchen-recipe-detail-name');
+        kitchenRecipePriceEl = document.getElementById('garden-kitchen-recipe-detail-price');
+        kitchenRecipeFeedEl = document.getElementById('garden-kitchen-recipe-detail-feed');
+        kitchenRecipeIngredientsEl = document.getElementById('garden-kitchen-recipe-detail-ingredients');
+        kitchenRecipeCookBtnEl = document.getElementById('garden-kitchen-recipe-detail-cook');
         kitchenBuffSummaryEl = document.getElementById('garden-kitchen-buff-summary');
         kitchenBuffSummaryTextEl = document.getElementById('garden-kitchen-buff-summary-text');
         kitchenBuffChipEl = document.getElementById('garden-kitchen-buff-chip');
@@ -4536,8 +5214,7 @@ ${taskCard.action}`;
         }
 
         state.casualGardenGame = loadGardenGameState('casual');
-        state.rogueMetaV2 = loadRogueMetaStateV2();
-        state.rogueRunV2 = loadRogueRunStateV2();
+        discardRemovedRogueActivityState();
         setGardenMode('casual');
         state.homeTutorialDismissed = readHomeTutorialDismissed();
         saveActiveGardenModeState();
@@ -4584,6 +5261,14 @@ ${taskCard.action}`;
         }
         if (farmCloseBtn) {
             farmCloseBtn.addEventListener('click', closeFarmScreen);
+        }
+        if (farmMessageBoardToggleEl) {
+            farmMessageBoardToggleEl.addEventListener('click', () => {
+                setFarmMessageBoardOpen(!state.farmMessageBoardOpen);
+            });
+        }
+        if (farmScreenEl) {
+            farmScreenEl.addEventListener('click', handleFarmInventoryOutsideClick);
         }
         if (pastureCloseBtn) {
             pastureCloseBtn.addEventListener('click', closePastureScreen);
@@ -4844,7 +5529,7 @@ ${taskCard.action}`;
                 const plot = document.createElement('div');
                 plot.className = 'garden-farm-plot';
                 plot.dataset.plotIndex = String(index);
-                plot.innerHTML = '<span class="garden-farm-crop"></span><div class="garden-farm-progress-meta"><div class="garden-farm-progress-container"><div class="garden-farm-progress-fill"></div></div><div class="garden-farm-progress-time"></div></div>';
+                plot.innerHTML = '<span class="garden-farm-mutation-badge">巨大变异</span><span class="garden-farm-crop"></span><div class="garden-farm-progress-meta"><div class="garden-farm-progress-container"><div class="garden-farm-progress-fill"></div></div><div class="garden-farm-progress-time"></div></div>';
                 plot.addEventListener('click', () => handleFarmPlotClick(plot));
                 farmGridEl.appendChild(plot);
             }
@@ -4871,6 +5556,56 @@ ${taskCard.action}`;
         renderFarmPlots();
         syncFarmStats();
         syncFarmToolUi();
+        syncFarmMessageBoardUi();
+    }
+
+    function getActiveFarmState() {
+        if (isRogueActivityMode() && state.rogueRunV2 && state.rogueRunV2.farm) {
+            return state.rogueRunV2.farm;
+        }
+        return state.gardenGame ? state.gardenGame.farm : null;
+    }
+
+    function getFarmLevelRequirement(level) {
+        const normalizedLevel = Math.max(1, Math.floor(Number(level) || 1));
+        if (normalizedLevel >= FARM_MAX_LEVEL) return null;
+        if (FARM_LEVEL_REQUIREMENTS[normalizedLevel]) {
+            return FARM_LEVEL_REQUIREMENTS[normalizedLevel];
+        }
+        return {
+            exp: Math.round(80 * Math.pow(normalizedLevel, 1.35)),
+            salesGold: Math.round(100 * Math.pow(normalizedLevel, 1.5))
+        };
+    }
+
+    function tryAdvanceFarmLevel(farmState) {
+        if (!farmState) return 0;
+        farmState.level = Math.max(1, Math.floor(Number(farmState.level) || 1));
+        farmState.exp = Math.max(0, Math.floor(Number(farmState.exp) || 0));
+        farmState.salesGold = Math.max(0, Math.floor(Number(farmState.salesGold) || 0));
+        let levelUps = 0;
+        while (farmState.level < FARM_MAX_LEVEL) {
+            const requirement = getFarmLevelRequirement(farmState.level);
+            if (!requirement || farmState.exp < requirement.exp || farmState.salesGold < requirement.salesGold) break;
+            farmState.level += 1;
+            levelUps += 1;
+        }
+        return levelUps;
+    }
+
+    function addFarmExperience(amount) {
+        const farmState = getActiveFarmState();
+        if (!farmState) return 0;
+        farmState.exp = Math.max(0, Math.floor(Number(farmState.exp) || 0) + Math.max(0, Math.floor(Number(amount) || 0)));
+        return tryAdvanceFarmLevel(farmState);
+    }
+
+    function recordFarmSaleGold(itemId, amount) {
+        const meta = ITEM_META[itemId];
+        const farmState = getActiveFarmState();
+        if (!meta || meta.category !== 'crops' || !farmState) return 0;
+        farmState.salesGold = Math.max(0, Math.floor(Number(farmState.salesGold) || 0) + Math.max(0, Math.floor(Number(amount) || 0)));
+        return tryAdvanceFarmLevel(farmState);
     }
 
     function syncFarmStats() {
@@ -4878,13 +5613,20 @@ ${taskCard.action}`;
         const coins = isRogue
             ? Math.max(0, Math.floor(Number(state.rogueRunV2.runCoins) || 0))
             : (state.gardenGame ? state.gardenGame.coins : 0);
-        const level = isRogue
-            ? Math.max(1, Math.floor(Number((state.rogueRunV2.farm && state.rogueRunV2.farm.level) || 1)))
-            : (state.gardenGame ? state.gardenGame.farm.level : 1);
+        const farmState = getActiveFarmState();
+        const level = farmState ? Math.max(1, Math.floor(Number(farmState.level) || 1)) : 1;
+        const exp = farmState ? Math.max(0, Math.floor(Number(farmState.exp) || 0)) : 0;
+        const salesGold = farmState ? Math.max(0, Math.floor(Number(farmState.salesGold) || 0)) : 0;
+        const requirement = getFarmLevelRequirement(level);
         const apRemaining = isRogue ? Math.max(0, Math.floor(Number(state.rogueRunV2.apRemaining) || 0)) : 0;
         const dailyAP = isRogue ? Math.max(0, Math.floor(Number(state.rogueRunV2.dailyAP) || 0)) : 0;
         if (farmCoinsEl) farmCoinsEl.textContent = String(coins);
         if (farmLevelEl) farmLevelEl.textContent = String(level);
+        if (farmLevelProgressEl) {
+            farmLevelProgressEl.textContent = requirement
+                ? `经验 ${exp}/${requirement.exp} · 销售 ${salesGold}/${requirement.salesGold} 金币`
+                : '已解锁全部作物';
+        }
         if (farmApEl) farmApEl.textContent = String(apRemaining);
         if (farmApMaxEl) farmApMaxEl.textContent = String(dailyAP);
     }
@@ -4929,6 +5671,107 @@ ${taskCard.action}`;
         return Math.max(0, Math.min(100, ((totalDuration - remaining) / totalDuration) * 100));
     }
 
+    function getFarmCropAssetPath(seed, assetName) {
+        if (!seed || !seed.id || !assetName) return '';
+        return `assets/stardew-valley/crops/${seed.id}/${assetName}`;
+    }
+
+    function getKitchenRecipeAssetPath(recipeId) {
+        const fileName = KITCHEN_RECIPE_ASSET_FILES[recipeId];
+        return fileName ? `assets/stardew-valley/recipes/${fileName}` : '';
+    }
+
+    function getKitchenItemAssetPath(itemId) {
+        const fileName = KITCHEN_ITEM_ASSET_FILES[itemId];
+        return fileName ? `assets/stardew-valley/items/${fileName}` : '';
+    }
+
+    function getFarmItemAssetPath(itemId) {
+        const recipeAssetPath = getKitchenRecipeAssetPath(itemId);
+        if (recipeAssetPath) return recipeAssetPath;
+
+        const itemAssetPath = getKitchenItemAssetPath(itemId);
+        if (itemAssetPath) return itemAssetPath;
+
+        const cropId = getFarmCropIdFromItemId(itemId);
+        const seed = cropId ? FARM_SEEDS[cropId] : null;
+        return seed && seed.spriteStages
+            ? getFarmCropAssetPath(seed, `stage-${seed.spriteStages}.png`)
+            : '';
+    }
+
+    function getFarmCropStageNumber(plot, seed) {
+        const stageCount = Math.max(1, Math.floor(Number(seed && seed.spriteStages) || 0));
+        if (stageCount <= 1 || !plot) return 1;
+        if (plot.state === 'ready') return stageCount;
+        if (plot.state === 'planted') return 1;
+        const progress = getFarmPlotProgress(plot) / 100;
+        return Math.max(1, Math.min(stageCount - 1, 1 + Math.floor(progress * (stageCount - 1))));
+    }
+
+    function renderFarmCropVisual(cropEl, plot, seed, fallbackEmoji) {
+        if (!cropEl) return;
+        const stage = getFarmCropStageNumber(plot, seed);
+        const src = seed && seed.spriteStages ? getFarmCropAssetPath(seed, `stage-${stage}.png`) : '';
+
+        if (!src) {
+            if (cropEl.textContent !== fallbackEmoji) cropEl.textContent = fallbackEmoji;
+            return;
+        }
+
+        const currentSprite = cropEl.querySelector('.garden-farm-crop-sprite');
+        if (currentSprite && currentSprite.dataset.spriteSrc === src) return;
+
+        const sprite = document.createElement('img');
+        sprite.className = 'garden-farm-crop-sprite';
+        sprite.src = src;
+        sprite.alt = '';
+        sprite.draggable = false;
+        sprite.dataset.spriteSrc = src;
+        sprite.addEventListener('error', () => {
+            cropEl.textContent = fallbackEmoji;
+        }, { once: true });
+        cropEl.replaceChildren(sprite);
+    }
+
+    function getFarmSeedSpriteMarkup(seed) {
+        const src = getFarmCropAssetPath(seed, 'seed.png');
+        if (!src) return seed && seed.emoji ? seed.emoji : '🌱';
+        return `<img class="garden-farm-seed-sprite" src="${src}" alt="" draggable="false">`;
+    }
+
+    function getFarmCropIdFromItemId(itemId) {
+        const normalizedItemId = String(itemId || '');
+        const cropId = normalizedItemId.startsWith('giant_')
+            ? normalizedItemId.slice('giant_'.length)
+            : normalizedItemId;
+        return FARM_SEEDS[cropId] ? cropId : '';
+    }
+
+    function getFarmStorageSpriteMarkup(item, className) {
+        const src = getFarmItemAssetPath(item && item.id);
+        if (!src) return item && item.emoji ? item.emoji : '📦';
+        return `<img class="${className}" src="${src}" alt="" draggable="false">`;
+    }
+
+    function renderFarmStorageSellIcon(meta) {
+        if (!storageSellIconEl || !meta) return;
+        const src = getFarmItemAssetPath(meta.id);
+        if (!src) {
+            storageSellIconEl.textContent = meta.emoji;
+            return;
+        }
+        const sprite = document.createElement('img');
+        sprite.className = 'garden-storage-sell-sprite';
+        sprite.src = src;
+        sprite.alt = '';
+        sprite.draggable = false;
+        sprite.addEventListener('error', () => {
+            storageSellIconEl.textContent = meta.emoji;
+        }, { once: true });
+        storageSellIconEl.replaceChildren(sprite);
+    }
+
     function renderFarmPlots() {
         if (!farmGridEl) return;
         const now = Date.now();
@@ -4937,15 +5780,18 @@ ${taskCard.action}`;
             const plot = getFarmPlots()[index] || createEmptyFarmPlotState();
             changed = advanceFarmPlotByClock(plot, now) || changed;
             const cropEl = plotEl.querySelector('.garden-farm-crop');
+            const mutationBadgeEl = plotEl.querySelector('.garden-farm-mutation-badge');
             const progressMetaEl = plotEl.querySelector('.garden-farm-progress-meta');
             const progressFillEl = plotEl.querySelector('.garden-farm-progress-fill');
             const progressTimeEl = plotEl.querySelector('.garden-farm-progress-time');
             plotEl.dataset.state = plot.state;
             plotEl.dataset.seedId = plot.seedId || '';
-            plotEl.classList.remove('planted', 'growing', 'ready');
+            plotEl.classList.remove('planted', 'growing', 'ready', 'mutated');
+            plotEl.title = '';
 
             if (plot.state === 'empty' || !plot.seedId) {
-                if (cropEl) cropEl.textContent = '';
+                if (cropEl) cropEl.replaceChildren();
+                if (mutationBadgeEl) mutationBadgeEl.classList.remove('is-visible');
                 if (progressFillEl) progressFillEl.style.width = '0%';
                 if (progressTimeEl) progressTimeEl.textContent = '';
                 if (progressMetaEl) progressMetaEl.style.display = 'none';
@@ -4953,9 +5799,14 @@ ${taskCard.action}`;
             }
 
             const seed = FARM_SEEDS[plot.seedId];
+            if (plot.mutated) {
+                plotEl.classList.add('mutated');
+                plotEl.title = '巨大变异作物，收获后售价更高';
+            }
+            if (mutationBadgeEl) mutationBadgeEl.classList.toggle('is-visible', Boolean(plot.mutated));
             if (plot.state === 'ready') {
                 plotEl.classList.add('ready');
-                if (cropEl) cropEl.textContent = seed ? seed.emoji : '🌾';
+                renderFarmCropVisual(cropEl, plot, seed, seed ? seed.emoji : '🌾');
                 if (progressFillEl) progressFillEl.style.width = '100%';
                 if (progressTimeEl) progressTimeEl.textContent = '';
                 if (progressMetaEl) progressMetaEl.style.display = 'none';
@@ -4965,7 +5816,7 @@ ${taskCard.action}`;
             if (progressMetaEl) progressMetaEl.style.display = 'flex';
             if (plot.state === 'planted') {
                 plotEl.classList.add('planted');
-                if (cropEl) cropEl.textContent = '🌱';
+                renderFarmCropVisual(cropEl, plot, seed, '🌱');
                 if (progressFillEl) progressFillEl.style.width = '0%';
                 if (progressTimeEl) progressTimeEl.textContent = `成熟 ${seed ? formatFarmDuration(seed.time) : '01:00'}`;
                 return;
@@ -4974,7 +5825,7 @@ ${taskCard.action}`;
             if (plot.state === 'growing') {
                 plotEl.classList.add('growing');
             }
-            if (cropEl) cropEl.textContent = '🌱';
+            renderFarmCropVisual(cropEl, plot, seed, '🌱');
             if (progressFillEl) progressFillEl.style.width = `${getFarmPlotProgress(plot)}%`;
             if (progressTimeEl) {
                 progressTimeEl.textContent = `剩余 ${formatFarmDuration(Math.max(0, (plot.readyAt || now) - now))}`;
@@ -4989,7 +5840,8 @@ ${taskCard.action}`;
             button.classList.toggle('active', button.dataset.farmTool === state.farmGame.currentTool);
         });
         if (farmSeedPanelEl) {
-            farmSeedPanelEl.classList.toggle('is-open', state.farmGame.currentTool === 'plant' || state.farmGame.currentTool === 'tool');
+            const canOpenSeedPanel = state.farmGame.currentTool === 'plant' || state.farmGame.currentTool === 'tool';
+            farmSeedPanelEl.classList.toggle('is-open', canOpenSeedPanel && state.farmGame.seedPanelOpen);
         }
         if (farmPanelTitleEl) {
             farmPanelTitleEl.textContent = state.farmGame.currentTool === 'tool' ? '局内道具' : '种子背包';
@@ -5007,15 +5859,37 @@ ${taskCard.action}`;
         });
     }
 
+    function setFarmMessageBoardOpen(isOpen) {
+        state.farmMessageBoardOpen = Boolean(isOpen);
+        syncFarmMessageBoardUi();
+        vibrate(15);
+    }
+
+    function syncFarmMessageBoardUi() {
+        if (farmMessageBoardEl) {
+            farmMessageBoardEl.classList.toggle('is-open', state.farmMessageBoardOpen);
+            farmMessageBoardEl.setAttribute('aria-hidden', state.farmMessageBoardOpen ? 'false' : 'true');
+        }
+        if (farmMessageBoardToggleEl) {
+            farmMessageBoardToggleEl.classList.toggle('active', state.farmMessageBoardOpen);
+            farmMessageBoardToggleEl.setAttribute('aria-expanded', state.farmMessageBoardOpen ? 'true' : 'false');
+            farmMessageBoardToggleEl.setAttribute('aria-label', state.farmMessageBoardOpen ? '收起农场留言板' : '打开农场留言板');
+        }
+    }
+
     function renderFarmSeedListUi() {
         if (!farmSeedListEl) return;
+        const farmState = getActiveFarmState();
+        const farmLevel = farmState ? Math.max(1, Math.floor(Number(farmState.level) || 1)) : 1;
         const rows = Object.values(FARM_SEEDS).map((seed) => {
-            const selected = state.farmGame.currentSeed === seed.id;
+            const locked = farmLevel < seed.unlockLevel;
+            const selected = !locked && state.farmGame.currentSeed === seed.id;
             return `
-                <button class="garden-farm-seed-item ${selected ? 'active' : ''}" data-farm-seed="${seed.id}" type="button">
-                    <div class="garden-farm-seed-emoji">${seed.emoji}</div>
-                    <div class="garden-farm-seed-info">${seed.name}</div>
-                    <div class="garden-farm-seed-time">${formatFarmDuration(seed.time)}</div>
+                <button class="garden-farm-seed-item ${selected ? 'active' : ''}${locked ? ' is-locked' : ''}" data-farm-seed="${seed.id}" type="button" ${locked ? 'disabled' : ''}>
+                    <div class="garden-farm-seed-emoji">${getFarmSeedSpriteMarkup(seed)}</div>
+                    <div class="garden-farm-seed-info">${locked ? `Lv.${seed.unlockLevel} 解锁` : seed.name}</div>
+                    <div class="garden-farm-seed-time">${locked ? `Lv.${seed.unlockLevel} 后可种` : `${seed.cost} 金币 · ${formatFarmDuration(seed.time)}`}</div>
+                    <div class="garden-farm-seed-reward">售 ${getSellUnitPrice(seed.inventoryId)} · 经验 ${seed.harvestExp}</div>
                 </button>
             `;
         }).join('');
@@ -5047,12 +5921,29 @@ ${taskCard.action}`;
 
     function setFarmTool(toolKey) {
         state.farmGame.currentTool = toolKey || 'plant';
+        state.farmGame.seedPanelOpen = state.farmGame.currentTool === 'plant' || state.farmGame.currentTool === 'tool';
         syncFarmToolUi();
         vibrate(15);
     }
 
+    function handleFarmInventoryOutsideClick(event) {
+        if (!farmSeedPanelEl || !farmSeedPanelEl.classList.contains('is-open')) return;
+        if (isEventWithinElement(event, farmSeedPanelEl)) return;
+        if (isEventWithinElement(event, farmMessageBoardEl) || isEventWithinElement(event, farmMessageBoardToggleEl)) return;
+        if (event.target && typeof event.target.closest === 'function' && event.target.closest('[data-farm-tool]')) return;
+        state.farmGame.seedPanelOpen = false;
+        syncFarmToolUi();
+    }
+
     function setFarmSeed(seedId) {
-        if (!FARM_SEEDS[seedId]) return;
+        const seed = FARM_SEEDS[seedId];
+        if (!seed) return;
+        const farmState = getActiveFarmState();
+        const farmLevel = farmState ? Math.max(1, Math.floor(Number(farmState.level) || 1)) : 1;
+        if (farmLevel < seed.unlockLevel) {
+            showFarmToast(`${seed.name}需要农场达到 ${seed.unlockLevel} 级`);
+            return;
+        }
         state.farmGame.currentSeed = seedId;
         syncFarmToolUi();
         vibrate(15);
@@ -5081,6 +5972,8 @@ ${taskCard.action}`;
         if (!farmScreenEl) return;
         const silent = !!(options && options.silent);
         state.farmScreenOpen = false;
+        state.farmMessageBoardOpen = false;
+        syncFarmMessageBoardUi();
         stopFarmProgressTimer();
         if (editorHost) editorHost.style.display = '';
         state.currentHomeSection = 'home';
@@ -5140,6 +6033,12 @@ ${taskCard.action}`;
             }
             const seed = FARM_SEEDS[state.farmGame.currentSeed];
             if (!seed) return;
+            const currentFarmState = getActiveFarmState();
+            const currentFarmLevel = currentFarmState ? Math.max(1, Math.floor(Number(currentFarmState.level) || 1)) : 1;
+            if (currentFarmLevel < seed.unlockLevel) {
+                showFarmToast(`${seed.name}需要农场达到 ${seed.unlockLevel} 级`);
+                return;
+            }
             const isRogue = isRogueActivityMode() && !!state.rogueRunV2;
             if (isRogue && !tryConsumeRogueActionPoint(1, '播种')) {
                 return;
@@ -5231,6 +6130,10 @@ ${taskCard.action}`;
         plot.seedId = seed.id;
         plot.readyAt = null;
         plot.growDuration = null;
+        plot.wateredAt = null;
+        plot.nextMutationCheckAt = null;
+        plot.mutated = false;
+        plot.mutationSource = '';
         renderFarmPlots();
         saveGardenGameState();
         showFarmToast(rebateGold > 0
@@ -5249,18 +6152,28 @@ ${taskCard.action}`;
         }, 500);
         const fastWaterApplied = consumeRogueModifier('farm_fast_water');
         const growDuration = Math.max(60 * 1000, Math.round(seed.time * (fastWaterApplied ? getRogueModifierValue('farm_fast_water', 0.75) : 1)));
+        const mutatedByWater = rollFarmMutation(plot, 'water');
+        const wateredAt = Date.now();
         plot.state = 'growing';
         plot.growDuration = growDuration;
-        plot.readyAt = Date.now() + growDuration;
+        plot.wateredAt = wateredAt;
+        plot.readyAt = wateredAt + growDuration;
+        plot.nextMutationCheckAt = plot.mutated ? null : wateredAt + FARM_MUTATION_CONFIG.timeCheckInterval;
         renderFarmPlots();
         saveGardenGameState();
-        showFarmToast(fastWaterApplied ? '已浇水，速熟效果已生效' : '已浇水，开始按现实时间生长');
+        if (mutatedByWater) {
+            showFarmToast(`浇水时发生变异！${seed.name}长成巨大作物`);
+        } else {
+            showFarmToast(fastWaterApplied ? '已浇水，速熟效果已生效' : '已浇水，开始按现实时间生长');
+        }
     }
 
     function harvestFarmCrop(plotEl, seed) {
         const plot = getFarmPlotStateByElement(plotEl);
         if (!plot) return;
-        let rewardQty = 1;
+        const wasMutated = plot.mutated === true;
+        const harvestedItemId = wasMutated ? getGiantCropItemId(seed.inventoryId) : seed.inventoryId;
+        let rewardQty = FARM_BASE_HARVEST_YIELD;
         if (Number(plot.bonusYield || 0) > 0) {
             rewardQty += Math.max(0, Math.floor(Number(plot.bonusYield) || 0));
             plot.bonusYield = 0;
@@ -5272,33 +6185,133 @@ ${taskCard.action}`;
         if (cropMeta && cropMeta.sellPrice >= 25 && isRogueModifierActive('farm_big_crop')) {
             rewardQty += 1;
         }
-        addInventoryItem(seed.inventoryId, rewardQty);
+        addInventoryItem(harvestedItemId || seed.inventoryId, rewardQty);
+        playFarmHarvestBurst(plotEl, seed, rewardQty, wasMutated);
+        const harvestedName = harvestedItemId && ITEM_META[harvestedItemId]
+            ? ITEM_META[harvestedItemId].name
+            : seed.name;
         plot.state = 'empty';
         plot.seedId = '';
         plot.readyAt = null;
         plot.growDuration = null;
+        plot.wateredAt = null;
+        plot.nextMutationCheckAt = null;
+        plot.mutated = false;
+        plot.mutationSource = '';
+        const farmState = getActiveFarmState();
+        const harvestExp = Math.max(1, Math.floor(Number(seed.harvestExp) || 0))
+            * rewardQty
+            * (wasMutated ? 2 : 1);
+        const leveledUp = addFarmExperience(harvestExp);
         if (isRogueActivityMode() && state.rogueRunV2) {
-            state.rogueRunV2.farm.exp = Math.max(0, Math.floor(Number(state.rogueRunV2.farm.exp) || 0) + 10);
             progressRogueFarmHarvestV2();
-        } else if (state.gardenGame) {
-            state.gardenGame.farm.exp += 10;
+        } else {
             progressRogueFarmHarvest();
-        }
-
-        let leveledUp = false;
-        const farmState = isRogueActivityMode() && state.rogueRunV2 ? state.rogueRunV2.farm : state.gardenGame.farm;
-        while (farmState.exp >= 100) {
-            farmState.exp -= 100;
-            farmState.level += 1;
-            leveledUp = true;
         }
 
         renderFarmPlots();
         saveActiveGardenModeState();
         refreshGardenEconomyUi();
+        syncFarmToolUi();
         showFarmToast(leveledUp
-            ? `收获 ${seed.name} x${rewardQty}，已存入仓库 · 升到 ${farmState.level} 级`
-            : `收获 ${seed.name} x${rewardQty}，已存入仓库`);
+            ? `收获 ${harvestedName} x${rewardQty}，获得经验 ${harvestExp} · 升到 ${farmState ? farmState.level : 1} 级`
+            : `收获 ${harvestedName} x${rewardQty}，获得经验 ${harvestExp}`);
+    }
+
+    function playFarmHarvestBurst(plotEl, seed, rewardQty, wasMutated) {
+        if (!plotEl || !seed) return;
+        const burst = document.createElement('div');
+        burst.className = `garden-farm-harvest-burst${wasMutated ? ' is-giant' : ''}`;
+        const particleCount = Math.min(7, Math.max(5, Math.ceil(rewardQty / 8)));
+        const randomBetween = (min, max) => min + Math.random() * (max - min);
+        const spriteSrc = seed.spriteStages
+            ? getFarmCropAssetPath(seed, `stage-${seed.spriteStages}.png`)
+            : '';
+
+        for (let index = 0; index < particleCount; index += 1) {
+            const particle = document.createElement('span');
+            const launchX = randomBetween(-14, 14);
+            const peakX = launchX + randomBetween(-24, 24);
+            const groundX = peakX + randomBetween(-18, 18);
+            const peakY = randomBetween(-76, -42);
+            const groundY = randomBetween(30, 52);
+            const firstBounceY = groundY - randomBetween(12, 24);
+            const secondBounceY = groundY - randomBetween(5, 11);
+            const startRotation = randomBetween(-16, 16);
+            const peakRotation = startRotation + randomBetween(-28, 28);
+            const groundRotation = peakRotation + randomBetween(-18, 18);
+            const duration = Math.round(randomBetween(820, 1060));
+            const delay = Math.round(randomBetween(0, 120));
+            particle.className = 'garden-farm-harvest-emoji';
+            if (spriteSrc) {
+                const sprite = document.createElement('img');
+                sprite.className = 'garden-farm-harvest-sprite';
+                sprite.src = spriteSrc;
+                sprite.alt = '';
+                sprite.draggable = false;
+                sprite.addEventListener('error', () => {
+                    particle.textContent = seed.emoji;
+                }, { once: true });
+                particle.appendChild(sprite);
+            } else {
+                particle.textContent = seed.emoji;
+            }
+            particle.style.setProperty('--farm-harvest-size', `${Math.round(randomBetween(25, 38))}px`);
+            burst.appendChild(particle);
+
+            particle.animate([
+                {
+                    opacity: 0,
+                    transform: `translate(-50%, -50%) scale(0.24) rotate(${startRotation}deg)`,
+                    offset: 0,
+                    easing: 'cubic-bezier(0.16, 0.78, 0.35, 1)'
+                },
+                {
+                    opacity: 1,
+                    transform: `translate(calc(-50% + ${launchX}px), calc(-50% - 12px)) scale(1.06) rotate(${startRotation}deg)`,
+                    offset: 0.1,
+                    easing: 'cubic-bezier(0.16, 0.78, 0.35, 1)'
+                },
+                {
+                    transform: `translate(calc(-50% + ${peakX}px), calc(-50% + ${peakY}px)) scale(1.14) rotate(${peakRotation}deg)`,
+                    offset: 0.3,
+                    easing: 'cubic-bezier(0.42, 0, 1, 1)'
+                },
+                {
+                    transform: `translate(calc(-50% + ${groundX}px), calc(-50% + ${groundY}px)) scale(0.88) rotate(${groundRotation}deg)`,
+                    offset: 0.58,
+                    easing: 'cubic-bezier(0.18, 0.76, 0.38, 1)'
+                },
+                {
+                    transform: `translate(calc(-50% + ${groundX + randomBetween(-4, 4)}px), calc(-50% + ${firstBounceY}px)) scale(1.01) rotate(${groundRotation + randomBetween(-10, 10)}deg)`,
+                    offset: 0.72,
+                    easing: 'cubic-bezier(0.42, 0, 1, 1)'
+                },
+                {
+                    transform: `translate(calc(-50% + ${groundX}px), calc(-50% + ${groundY}px)) scale(0.88) rotate(${groundRotation}deg)`,
+                    offset: 0.83,
+                    easing: 'cubic-bezier(0.16, 0.78, 0.35, 1)'
+                },
+                {
+                    opacity: 1,
+                    transform: `translate(calc(-50% + ${groundX + randomBetween(-2, 2)}px), calc(-50% + ${secondBounceY}px)) scale(0.94) rotate(${groundRotation + randomBetween(-6, 6)}deg)`,
+                    offset: 0.92,
+                    easing: 'cubic-bezier(0.42, 0, 1, 1)'
+                },
+                {
+                    opacity: 0,
+                    transform: `translate(calc(-50% + ${groundX}px), calc(-50% + ${groundY + 3}px)) scale(0.72) rotate(${groundRotation}deg)`,
+                    offset: 1
+                }
+            ], {
+                duration,
+                delay,
+                fill: 'forwards'
+            });
+        }
+
+        plotEl.appendChild(burst);
+        window.setTimeout(() => burst.remove(), 1400);
     }
 
     function clearFarmPlot(plotEl) {
@@ -5308,6 +6321,10 @@ ${taskCard.action}`;
         plot.seedId = '';
         plot.readyAt = null;
         plot.growDuration = null;
+        plot.wateredAt = null;
+        plot.nextMutationCheckAt = null;
+        plot.mutated = false;
+        plot.mutationSource = '';
         renderFarmPlots();
         saveGardenGameState();
     }
@@ -5338,6 +6355,10 @@ ${taskCard.action}`;
                     const animalType = button.dataset.pastureAnimal;
                     if (animalType) selectPastureAnimalToBuy(animalType);
                 });
+                const icon = button.querySelector('.garden-pasture-shop-icon');
+                if (icon && button.dataset.pastureAnimal) {
+                    icon.innerHTML = getPastureShopAnimalIconMarkup(button.dataset.pastureAnimal);
+                }
             });
             state.pastureGame.initialized = true;
         }
@@ -5377,6 +6398,10 @@ ${taskCard.action}`;
                             const animalType = button.dataset.pastureAnimal;
                             if (animalType) selectPastureAnimalToBuy(animalType);
                         });
+                        const icon = button.querySelector('.garden-pasture-shop-icon');
+                        if (icon && button.dataset.pastureAnimal) {
+                            icon.innerHTML = getPastureShopAnimalIconMarkup(button.dataset.pastureAnimal);
+                        }
                         button.classList.toggle('selected', button.dataset.pastureAnimal === state.pastureGame.selectedAnimalToBuy);
                     });
                 }
@@ -5536,7 +6561,13 @@ ${taskCard.action}`;
             state.pastureGame.roamTimer = window.setInterval(() => {
                 if (!state.pastureScreenOpen) return;
                 roamPastureAnimals();
-            }, 2000);
+            }, 950);
+        }
+        if (!state.pastureGame.animationTimer) {
+            state.pastureGame.animationTimer = window.setInterval(() => {
+                if (!state.pastureScreenOpen) return;
+                refreshPastureAnimalSpriteFrames();
+            }, 140);
         }
     }
 
@@ -5548,6 +6579,10 @@ ${taskCard.action}`;
         if (state.pastureGame.roamTimer) {
             window.clearInterval(state.pastureGame.roamTimer);
             state.pastureGame.roamTimer = null;
+        }
+        if (state.pastureGame.animationTimer) {
+            window.clearInterval(state.pastureGame.animationTimer);
+            state.pastureGame.animationTimer = null;
         }
     }
 
@@ -5605,7 +6640,11 @@ ${taskCard.action}`;
             state: 'hungry',
             x: Math.max(10, Math.min(90, x)),
             y: Math.max(15, Math.min(85, y)),
-            stateEndsAt: null
+            stateEndsAt: null,
+            facing: Math.random() < 0.5 ? 'left' : 'right',
+            moveUntil: 0,
+            moveDuration: 0,
+            animationSeed: Math.floor(Math.random() * 10000)
         };
     }
 
@@ -5615,8 +6654,8 @@ ${taskCard.action}`;
         const nextY = Math.max(15, Math.min(85, y));
         wrapper.dataset.x = String(nextX);
         wrapper.dataset.y = String(nextY);
-        wrapper.style.left = `calc(${nextX}% - 25px)`;
-        wrapper.style.top = `calc(${nextY}% - 30px)`;
+        wrapper.style.left = `calc(${nextX}% - 30px)`;
+        wrapper.style.top = `calc(${nextY}% - 34px)`;
         wrapper.style.zIndex = String(getPastureDepthZ(nextY));
     }
 
@@ -5627,6 +6666,97 @@ ${taskCard.action}`;
 
     function getPastureAnimalById(animalId) {
         return getPastureAnimals().find((animal) => animal.id === animalId) || null;
+    }
+
+    function getPastureAnimalSpriteMeta(type, age) {
+        const sprite = PASTURE_ANIMAL_SPRITES[type];
+        if (!sprite) return null;
+        return sprite[age === 'adult' ? 'adult' : 'baby'] || sprite.adult || sprite.baby || null;
+    }
+
+    function getPastureAnimalAnimationSeed(animal) {
+        if (animal && Number.isFinite(Number(animal.animationSeed))) return Number(animal.animationSeed);
+        return Array.from(String(animal && animal.id ? animal.id : 'pasture'))
+            .reduce((total, char, index) => total + (char.charCodeAt(0) * (index + 3)), 0);
+    }
+
+    function getPastureAnimalFrame(meta, animal, now, options = {}) {
+        if (!meta) return null;
+        const frames = options.forceIdle
+            ? (meta.idleFrames || meta.moveFrames || [[0, 0]])
+            : ((animal && animal.moveUntil > now) ? (meta.moveFrames || meta.idleFrames || [[0, 0]]) : (meta.idleFrames || meta.moveFrames || [[0, 0]]));
+        const duration = options.forceIdle
+            ? (meta.idleFrameDuration || 420)
+            : ((animal && animal.moveUntil > now) ? (meta.moveFrameDuration || 120) : (meta.idleFrameDuration || 420));
+        const seed = options.forceIdle ? 0 : getPastureAnimalAnimationSeed(animal);
+        const frameIndex = Math.floor((now + seed) / Math.max(80, duration)) % frames.length;
+        const [column, row] = frames[frameIndex] || frames[0] || [0, 0];
+        return { column, row };
+    }
+
+    function applyPastureSpriteStyleVars(element, meta, frame, renderWidthOverride) {
+        if (!element || !meta || !frame) return;
+        const renderWidth = Math.max(1, Number(renderWidthOverride || meta.renderWidth || meta.frameWidth));
+        const scale = renderWidth / meta.frameWidth;
+        const renderHeight = Math.round(meta.frameHeight * scale);
+        const backgroundWidth = Math.round(meta.frameWidth * meta.columns * scale);
+        const backgroundHeight = Math.round(meta.frameHeight * meta.rows * scale);
+        const offsetX = Math.round(frame.column * meta.frameWidth * scale);
+        const offsetY = Math.round(frame.row * meta.frameHeight * scale);
+        element.style.setProperty('--pasture-sprite-width', `${renderWidth}px`);
+        element.style.setProperty('--pasture-sprite-height', `${renderHeight}px`);
+        element.style.setProperty('--pasture-sprite-bg-width', `${backgroundWidth}px`);
+        element.style.setProperty('--pasture-sprite-bg-height', `${backgroundHeight}px`);
+        element.style.setProperty('--pasture-sprite-offset-x', `${offsetX}px`);
+        element.style.setProperty('--pasture-sprite-offset-y', `${offsetY}px`);
+        element.style.backgroundImage = `url("assets/stardew-valley/${meta.sheet}")`;
+    }
+
+    function getPastureAnimalSpriteMarkup(type, age, animal, options = {}) {
+        const meta = getPastureAnimalSpriteMeta(type, age);
+        if (!meta) return '';
+        const className = options.className || 'garden-pasture-animal-sprite';
+        const now = Number(options.now) || Date.now();
+        const frame = getPastureAnimalFrame(meta, animal, now, options);
+        const renderWidth = Number(options.renderWidth) || meta.renderWidth || meta.frameWidth;
+        const scale = renderWidth / meta.frameWidth;
+        const renderHeight = Math.round(meta.frameHeight * scale);
+        const backgroundWidth = Math.round(meta.frameWidth * meta.columns * scale);
+        const backgroundHeight = Math.round(meta.frameHeight * meta.rows * scale);
+        const offsetX = Math.round(frame.column * meta.frameWidth * scale);
+        const offsetY = Math.round(frame.row * meta.frameHeight * scale);
+        const style = [
+            `--pasture-sprite-width:${renderWidth}px`,
+            `--pasture-sprite-height:${renderHeight}px`,
+            `--pasture-sprite-bg-width:${backgroundWidth}px`,
+            `--pasture-sprite-bg-height:${backgroundHeight}px`,
+            `--pasture-sprite-offset-x:${offsetX}px`,
+            `--pasture-sprite-offset-y:${offsetY}px`,
+            `background-image:url(assets/stardew-valley/${meta.sheet})`
+        ].join(';');
+        return `<span class="${className} is-sheet" style="${style}" aria-hidden="true"></span>`;
+    }
+
+    function refreshPastureAnimalSpriteFrames() {
+        if (!pastureFieldEl) return;
+        const now = Date.now();
+        pastureFieldEl.querySelectorAll('.garden-pasture-animal-wrapper').forEach((wrapper) => {
+            const animal = getPastureAnimalById(wrapper.dataset.pastureId);
+            if (!animal) return;
+            const sprite = wrapper.querySelector('.garden-pasture-animal-sprite.is-sheet');
+            if (!sprite) return;
+            const meta = getPastureAnimalSpriteMeta(animal.type, animal.age);
+            const frame = getPastureAnimalFrame(meta, animal, now);
+            applyPastureSpriteStyleVars(sprite, meta, frame);
+        });
+    }
+
+    function getPastureShopAnimalIconMarkup(type) {
+        return getPastureAnimalSpriteMarkup(type, 'baby', null, {
+            className: 'garden-pasture-shop-sprite',
+            forceIdle: true,
+            renderWidth: 30
+        }) || '🐣';
     }
 
     function getPastureAnimalBubble(animal, data, isEating) {
@@ -5662,6 +6792,7 @@ ${taskCard.action}`;
             const existingWrapper = existingMap.get(String(animal.id));
             const wrapper = existingWrapper || document.createElement('div');
             const classNames = ['garden-pasture-animal-wrapper', animal.age === 'adult' ? 'garden-pasture-age-adult' : 'garden-pasture-age-baby'];
+            if (animal.moveUntil && animal.moveUntil > now) classNames.push('is-moving');
             if (animal.state === 'hungry') classNames.push('garden-pasture-state-hungry');
             if (animal.state === 'ready') classNames.push('garden-pasture-state-ready');
             if (isEating || animal.state === 'hungry' || animal.state === 'ready') classNames.push('garden-pasture-show-bubble');
@@ -5670,9 +6801,13 @@ ${taskCard.action}`;
             wrapper.dataset.type = animal.type;
             wrapper.dataset.state = animal.state;
             wrapper.dataset.age = animal.age;
+            const visualFacing = animal.facing === 'left' ? '1' : '-1';
+            wrapper.dataset.facing = visualFacing;
+            wrapper.style.setProperty('--pasture-facing', visualFacing);
+            wrapper.style.setProperty('--pasture-move-duration', `${Math.max(1.1, (Number(animal.moveDuration) || 1600) / 1000)}s`);
             wrapper.innerHTML = `
                 <div class="garden-pasture-bubble" style="color:${bubbleMeta.color};">${bubbleMeta.text}</div>
-                <div class="garden-pasture-animal-emoji">${animal.age === 'adult' ? data.adultEmoji : data.babyEmoji}</div>
+                ${getPastureAnimalSpriteMarkup(animal.type, animal.age, animal, { now })}
             `;
             setPastureAnimalPosition(wrapper, animal.x, animal.y);
             if (!existingWrapper) {
@@ -5910,9 +7045,16 @@ ${taskCard.action}`;
         let moved = false;
         getPastureAnimals().forEach((animal) => {
             if (Number(state.pastureGame.visualEatingUntil[animal.id] || 0) > now) return;
-            if (Math.random() >= 0.2) return;
-            animal.x = Math.max(10, Math.min(90, animal.x + (Math.random() * 20 - 10)));
-            animal.y = Math.max(15, Math.min(85, animal.y + (Math.random() * 20 - 10)));
+            if (animal.moveUntil && animal.moveUntil > now) return;
+            if (Math.random() >= 0.16) return;
+            const stride = animal.age === 'baby' ? 5.5 : 7.5;
+            const duration = Math.round(1300 + Math.random() * 900);
+            const prevX = animal.x;
+            animal.x = Math.max(12, Math.min(88, animal.x + (Math.random() * stride * 2 - stride)));
+            animal.y = Math.max(18, Math.min(82, animal.y + (Math.random() * stride * 1.4 - stride * 0.7)));
+            animal.facing = animal.x < prevX ? 'left' : 'right';
+            animal.moveUntil = now + duration;
+            animal.moveDuration = duration;
             moved = true;
         });
         if (!moved) return;
@@ -5920,16 +7062,120 @@ ${taskCard.action}`;
         saveActiveGardenModeState();
     }
 
+    function getKitchenRecipeImageMarkup(recipe, className = 'garden-kitchen-recipe-icon-sprite') {
+        const src = recipe ? getKitchenRecipeAssetPath(recipe.id) : '';
+        if (!src) return recipe && recipe.emoji ? recipe.emoji : '🍳';
+        return `<img class="${className}" src="${src}" alt="" draggable="false">`;
+    }
+
+    function getKitchenIngredientSpriteMarkup(itemId, className = 'garden-kitchen-ingredient-sprite') {
+        const src = getFarmItemAssetPath(itemId);
+        if (!src) return ITEM_META[itemId] && ITEM_META[itemId].emoji ? ITEM_META[itemId].emoji : '📦';
+        return `<img class="${className}" src="${src}" alt="" draggable="false">`;
+    }
+
+    function getKitchenIngredientDisplayName(itemId) {
+        return ITEM_META[itemId] ? ITEM_META[itemId].name : itemId;
+    }
+
+    function renderKitchenRecipeCards() {
+        if (!kitchenAreaEl) return;
+        kitchenAreaEl.innerHTML = Object.values(KITCHEN_RECIPES).map((recipe) => {
+            const canCook = hasInventoryItems(recipe.ingredients);
+            return `
+                <button class="garden-kitchen-recipe-card${canCook ? '' : ' is-disabled'}" data-kitchen-recipe="${recipe.id}" type="button" aria-label="查看 ${recipe.name}">
+                    <div class="garden-kitchen-recipe-icon">${getKitchenRecipeImageMarkup(recipe)}</div>
+                    <div class="garden-kitchen-recipe-name">${recipe.name}</div>
+                </button>
+            `;
+        }).join('');
+    }
+
+    function syncKitchenRecipeDetailSheet() {
+        if (!kitchenRecipeSheetEl) return;
+        const recipeId = state.kitchenGame.selectedRecipeId;
+        const recipe = recipeId ? KITCHEN_RECIPES[recipeId] : null;
+        const isOpen = !!recipe && !!state.kitchenGame.detailOpen;
+        kitchenRecipeSheetEl.classList.toggle('is-open', isOpen);
+        kitchenRecipeSheetEl.setAttribute('aria-hidden', isOpen ? 'false' : 'true');
+        if (!isOpen || !recipe) return;
+
+        const canCook = hasInventoryItems(recipe.ingredients);
+        if (kitchenRecipeImageEl) {
+            const src = getKitchenRecipeAssetPath(recipe.id);
+            if (!src) {
+                kitchenRecipeImageEl.textContent = recipe.emoji;
+            } else {
+                const sprite = document.createElement('img');
+                sprite.className = 'garden-kitchen-recipe-detail-image-sprite';
+                sprite.src = src;
+                sprite.alt = '';
+                sprite.draggable = false;
+                sprite.addEventListener('error', () => {
+                    kitchenRecipeImageEl.textContent = recipe.emoji;
+                }, { once: true });
+                kitchenRecipeImageEl.replaceChildren(sprite);
+            }
+        }
+        if (kitchenRecipeNameEl) kitchenRecipeNameEl.textContent = recipe.name;
+        if (kitchenRecipePriceEl) kitchenRecipePriceEl.textContent = `售价 ${getSellUnitPrice(recipe.id)} 金币`;
+        if (kitchenRecipeFeedEl) {
+            kitchenRecipeFeedEl.textContent = `联系人数值：饱腹 +${KITCHEN_CONTACT_FEED_VALUES.hunger} · 心情 +${KITCHEN_CONTACT_FEED_VALUES.mood} · 精力 +${KITCHEN_CONTACT_FEED_VALUES.energy}`;
+        }
+        if (kitchenRecipeIngredientsEl) {
+            kitchenRecipeIngredientsEl.innerHTML = Object.entries(recipe.ingredients || {}).map(([itemId, requiredCount]) => {
+                const currentCount = getRecipeIngredientAvailableCount(itemId);
+                const enough = currentCount >= requiredCount;
+                return `
+                    <div class="garden-kitchen-recipe-ingredient${enough ? '' : ' is-lacking'}">
+                        <div class="garden-kitchen-recipe-ingredient-icon">${getKitchenIngredientSpriteMarkup(itemId)}</div>
+                        <div class="garden-kitchen-recipe-ingredient-copy">
+                            <div class="garden-kitchen-recipe-ingredient-name">${getKitchenIngredientDisplayName(itemId)}</div>
+                            <div class="garden-kitchen-recipe-ingredient-count">需要 ${requiredCount} · 现有 ${currentCount}</div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+        if (kitchenRecipeCookBtnEl) {
+            kitchenRecipeCookBtnEl.disabled = !canCook;
+            kitchenRecipeCookBtnEl.textContent = canCook ? '开始烹饪' : '材料不足';
+        }
+    }
+
+    function openKitchenRecipeDetail(recipeId) {
+        if (!KITCHEN_RECIPES[recipeId]) return;
+        state.kitchenGame.selectedRecipeId = recipeId;
+        state.kitchenGame.detailOpen = true;
+        syncKitchenRecipeDetailSheet();
+    }
+
+    function closeKitchenRecipeDetail() {
+        state.kitchenGame.detailOpen = false;
+        state.kitchenGame.selectedRecipeId = null;
+        syncKitchenRecipeDetailSheet();
+    }
+
     function initKitchenScreen() {
         if (!kitchenOverlayEl) return;
         if (!state.kitchenGame.initialized) {
-            kitchenCookBtns.forEach((button) => {
-                button.addEventListener('click', () => {
-                    const recipeId = button.dataset.kitchenCook;
-                    if (recipeId) cookKitchenRecipe(recipeId);
+            if (kitchenAreaEl) {
+                kitchenAreaEl.addEventListener('click', (event) => {
+                    const card = event.target.closest('[data-kitchen-recipe]');
+                    if (!card) return;
+                    openKitchenRecipeDetail(card.dataset.kitchenRecipe);
                 });
-            });
-
+            }
+            if (kitchenRecipeBackdropEl) {
+                kitchenRecipeBackdropEl.addEventListener('click', closeKitchenRecipeDetail);
+            }
+            if (kitchenRecipeCookBtnEl) {
+                kitchenRecipeCookBtnEl.addEventListener('click', () => {
+                    if (state.kitchenGame.selectedRecipeId) {
+                        cookKitchenRecipe(state.kitchenGame.selectedRecipeId);
+                    }
+                });
+            }
             kitchenOverlayEl.addEventListener('click', (event) => {
                 if (!state.kitchenGame.qteActive) return;
                 event.stopPropagation();
@@ -5944,17 +7190,8 @@ ${taskCard.action}`;
     }
 
     function syncKitchenCookButtons() {
-        kitchenCookBtns.forEach((button) => {
-            const recipeId = button.dataset.kitchenCook;
-            const recipe = recipeId ? KITCHEN_RECIPES[recipeId] : null;
-            const canCook = !!recipe && hasInventoryItems(recipe.ingredients);
-            const card = button.closest('[data-kitchen-recipe]');
-            button.disabled = !canCook;
-            button.textContent = canCook ? '烹饪' : '材料不足';
-            if (card) {
-                card.classList.toggle('is-disabled', !canCook);
-            }
-        });
+        renderKitchenRecipeCards();
+        syncKitchenRecipeDetailSheet();
         syncKitchenSkipButton();
     }
 
@@ -5982,6 +7219,7 @@ ${taskCard.action}`;
         if (!kitchenScreenEl) return;
         const silent = !!(options && options.silent);
         stopKitchenQte(true);
+        closeKitchenRecipeDetail();
         state.kitchenScreenOpen = false;
         state.currentHomeSection = 'home';
         kitchenScreenEl.classList.remove('is-open');
@@ -5998,6 +7236,7 @@ ${taskCard.action}`;
             return;
         }
         state.kitchenGame.currentRecipeId = recipeId;
+        closeKitchenRecipeDetail();
         startKitchenQte();
     }
 
@@ -6318,9 +7557,9 @@ ${taskCard.action}`;
         }
 
         storageGridEl.innerHTML = items.map((item) => (
-            `<button class="garden-storage-item" data-storage-item-id="${item.id}" type="button">
+            `<button class="garden-storage-item${item.isGiant ? ' is-giant' : ''}" data-storage-item-id="${item.id}" type="button">
                 <div class="garden-storage-item-count">${item.count}</div>
-                <div class="garden-storage-item-icon">${item.emoji}</div>
+                <div class="garden-storage-item-icon">${getFarmStorageSpriteMarkup(item, 'garden-storage-item-sprite')}</div>
                 <div class="garden-storage-item-name">${item.name}</div>
                 <div class="garden-storage-item-price">${getSellUnitPrice(item.id)} 金币/个</div>
             </button>`
@@ -6361,7 +7600,7 @@ ${taskCard.action}`;
         if (!isOpen) return;
 
         state.storageSell.qty = Math.max(1, Math.min(stockCount, state.storageSell.qty || 1));
-        if (storageSellIconEl) storageSellIconEl.textContent = meta.emoji;
+        renderFarmStorageSellIcon(meta);
         if (storageSellNameEl) storageSellNameEl.textContent = meta.name;
         if (storageSellStockEl) storageSellStockEl.textContent = `当前持有 ${stockCount}`;
         if (storageSellPriceEl) storageSellPriceEl.textContent = `单价 ${getSellUnitPrice(itemId)} 金币`;
@@ -6383,9 +7622,20 @@ ${taskCard.action}`;
         const totalGold = calculateStorageSellGold(itemId, sellQty);
         addInventoryItem(itemId, -sellQty);
         updateGardenCoins(totalGold);
+        const farmLevelUps = recordFarmSaleGold(itemId, totalGold);
         const orderResult = applySellToCurrentOrder(itemId, sellQty);
         saveActiveGardenModeState();
         refreshGardenEconomyUi();
+        if (farmLevelUps > 0) syncFarmToolUi();
+        if (farmLevelUps > 0) {
+            const farmState = getActiveFarmState();
+            const levelMessage = `农场升级到 ${farmState ? farmState.level : 1} 级，解锁了新的作物`;
+            if (state.farmScreenOpen) {
+                showFarmToast(levelMessage);
+            } else if (typeof window.showNotification === 'function') {
+                window.showNotification(levelMessage, 2200, 'success');
+            }
+        }
 
         if (orderResult && orderResult.finishedRun) {
             closeStorageSellSheet();
@@ -8302,9 +9552,9 @@ ${taskCard.action}`;
         }
         addInventoryItem(itemId, -1);
         patchGardenContactState(contactId, {
-            hunger: contactState.hunger + 25,
-            mood: contactState.mood + 8,
-            energy: contactState.energy + 12
+            hunger: contactState.hunger + KITCHEN_CONTACT_FEED_VALUES.hunger,
+            mood: contactState.mood + KITCHEN_CONTACT_FEED_VALUES.mood,
+            energy: contactState.energy + KITCHEN_CONTACT_FEED_VALUES.energy
         });
         closeResidentFeedSheet();
         renderStorageItems(state.gardenGame && state.gardenGame.storage ? state.gardenGame.storage.tab : 'cooked');
@@ -8436,9 +9686,12 @@ ${taskCard.action}`;
         } else if (assignment.type === 'kitchen') {
             const recipe = Object.values(KITCHEN_RECIPES).find((candidate) => hasInventoryItems(candidate.ingredients || {})) || null;
             if (recipe) {
-                Object.keys(recipe.ingredients || {}).forEach((itemId) => addInventoryItem(itemId, -(recipe.ingredients[itemId] || 0)));
-                addInventoryItem(recipe.id, 1);
-                message = `TA做了一份 ${recipe.name} ${recipe.emoji}`;
+                if (spendInventoryItems(recipe.ingredients)) {
+                    addInventoryItem(recipe.id, 1);
+                    message = `TA做了一份 ${recipe.name} ${recipe.emoji}`;
+                } else {
+                    message = '厨房的材料刚好被别处用掉了';
+                }
             } else {
                 message = '厨房没有现成材料可做菜';
             }
@@ -9134,8 +10387,7 @@ ${taskCard.action}`;
         init();
         if (!screenEl) return;
         state.casualGardenGame = loadGardenGameState('casual');
-        state.rogueMetaV2 = loadRogueMetaStateV2();
-        state.rogueRunV2 = loadRogueRunStateV2();
+        discardRemovedRogueActivityState();
         setGardenMode('casual');
         saveGardenGameState();
         renderRogueUiV2();
@@ -9202,4 +10454,3 @@ ${taskCard.action}`;
         refreshActiveContactFigure
     };
 })();
-

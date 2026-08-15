@@ -1247,6 +1247,15 @@ function renderMeTab() {
                     <i class="fas fa-chevron-right" style="color: #ccc;"></i>
                 </div>
             </div>
+            <div class="list-item" id="open-block-words-btn" style="cursor: pointer;">
+                <div class="list-content">
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                        <i class="fas fa-shield-alt" style="color: #A88B62; font-size: 20px; width: 24px; text-align: center;"></i>
+                        <label style="cursor: pointer;">屏蔽词</label>
+                    </div>
+                    <i class="fas fa-chevron-right" style="color: #ccc;"></i>
+                </div>
+            </div>
         </div>
     `;
 
@@ -1260,6 +1269,17 @@ function renderMeTab() {
         renderWallet();
         document.getElementById('wallet-screen').classList.remove('hidden');
     });
+    const openBlockWordsBtn = document.getElementById('open-block-words-btn');
+    if (openBlockWordsBtn) {
+        openBlockWordsBtn.addEventListener('click', () => {
+            const screen = document.getElementById('wechat-block-words-screen');
+            const frame = document.getElementById('wechat-block-words-frame');
+            if (frame && !frame.getAttribute('src')) {
+                frame.setAttribute('src', 'kraft_collage_journal.html?wechat=1');
+            }
+            if (screen) screen.classList.remove('hidden');
+        });
+    }
 
     avatarInput.onchange = (e) => handleMeImageUpload(e, 'avatar');
     bgInput.onchange = (e) => handleMeImageUpload(e, 'bgImage');
