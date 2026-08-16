@@ -2551,6 +2551,8 @@ function appendMessageToUI(text, isUser, type = 'text', description = null, repl
             text = text.split('\n').filter(line => !line.trim().startsWith('ACTION:')).join('\n').trim();
             if (!text) return;
         }
+
+        if (!text.trim()) return;
     }
 
     if (type === 'voice_call_text') {

@@ -6,6 +6,7 @@
     let globalObserver = null;
     let globalApplyTimer = null;
     let isApplyingGlobal = false;
+    const WILDCARD_TOKENS = ['＊', '*'];
 
     function getState() {
         return window.iphoneSimState || {};
@@ -26,6 +27,9 @@
                 id: String(rule.id || ''),
                 text: String(rule.text || '').trim(),
                 scope: rule.scope === 'chat' ? 'chat' : 'global',
+                action: rule.action === 'replace' ? 'replace' : 'hide',
+                replacementText: String(rule.replacementText || ''),
+                matchMode: rule.matchMode === 'exact' ? 'exact' : 'contains',
                 chatMode: rule.chatMode === 'text' ? 'text' : 'message',
                 contactScope: rule.contactScope === 'selected' ? 'selected' : 'all',
                 contacts: Array.isArray(rule.contacts) ? rule.contacts.map(String) : []
@@ -51,8 +55,66 @@
         return String(source).split(target).join(replacement);
     }
 
+    function escapeRegExp(value) {
+        return String(value || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    }
+
+    function hasWildcard(value) {
+        const text = String(value || '');
+        return WILDCARD_TOKENS.some(token => text.includes(token));
+    }
+
+    function buildRuleRegExp(rule, global = false) {
+        const source = String(rule && rule.text || '').trim();
+        if (!source) return null;
+        const parts = [];
+        let buffer = '';
+        Array.from(source).forEach(char => {
+            if (WILDCARD_TOKENS.includes(char)) {
+                if (buffer) {
+                    parts.push(escapeRegExp(buffer));
+                    buffer = '';
+                }
+                parts.push('[\\s\\S]+');
+            } else {
+                buffer += char;
+            }
+        });
+        if (buffer) parts.push(escapeRegExp(buffer));
+        const body = parts.join('');
+        const pattern = rule && rule.matchMode === 'exact' ? `^${body}$` : body;
+        return new RegExp(pattern, global ? 'g' : '');
+    }
+
+    function ruleMatchesText(rule, content) {
+        const text = String(content || '');
+        const target = String(rule && rule.text || '').trim();
+        if (!target) return false;
+        if (hasWildcard(target)) {
+            const re = buildRuleRegExp(rule);
+            return !!(re && re.test(text));
+        }
+        return rule && rule.matchMode === 'exact'
+            ? text.trim() === target
+            : text.includes(target);
+    }
+
+    function applyRuleText(source, rule, replacement = '') {
+        const text = String(source || '');
+        const target = String(rule && rule.text || '').trim();
+        if (!target) return text;
+        if (hasWildcard(target)) {
+            const re = buildRuleRegExp(rule, true);
+            return re ? text.replace(re, () => replacement) : text;
+        }
+        if (rule && rule.matchMode === 'exact') {
+            return text.trim() === target ? replacement : text;
+        }
+        return replaceAllText(text, target, replacement);
+    }
+
     function applyTextRules(text, rules) {
-        return rules.reduce((next, rule) => replaceAllText(next, rule.text, ''), String(text || ''));
+        return rules.reduce((next, rule) => applyRuleText(next, rule, ''), String(text || ''));
     }
 
     function isPlainChatTextMessage(message) {
@@ -71,13 +133,21 @@
         if (!rules.length) return { hidden: false, message };
 
         const content = String(message.content || '');
-        const hideWholeMessage = rules.some(rule => rule.chatMode === 'message' && content.includes(rule.text));
-        if (hideWholeMessage) return { hidden: true, message: null };
+        let nextContent = content;
+        for (const rule of rules) {
+            if (rule.action === 'replace') {
+                nextContent = applyRuleText(nextContent, rule, rule.replacementText);
+                continue;
+            }
+            if (rule.chatMode === 'message') {
+                if (ruleMatchesText(rule, nextContent)) return { hidden: true, message: null };
+                continue;
+            }
+            nextContent = applyRuleText(nextContent, rule, '');
+        }
 
-        const textRules = rules.filter(rule => rule.chatMode === 'text');
-        if (!textRules.length) return { hidden: false, message };
-        const nextContent = applyTextRules(content, textRules);
         if (nextContent === content) return { hidden: false, message };
+        if (!nextContent.trim()) return { hidden: true, message: null };
         return { hidden: false, message: Object.assign({}, message, { content: nextContent }) };
     }
 

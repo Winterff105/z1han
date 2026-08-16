@@ -957,6 +957,31 @@
             transform: none;
         }
 
+        .field-title-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            margin-bottom: 8px;
+        }
+
+        .field-title-row .field-title {
+            margin-bottom: 0;
+        }
+
+        .symbol-btn {
+            flex: 0 0 auto;
+            min-height: 30px;
+            padding: 0 10px;
+            border: 1px solid rgba(112, 92, 68, 0.14);
+            border-radius: 999px;
+            background: #fff8e8;
+            color: #3a3129;
+            font-size: 12px;
+            font-weight: 700;
+            cursor: pointer;
+        }
+
         .editor-textarea {
             width: 100%;
             min-height: 92px;
@@ -1511,9 +1536,12 @@
             </div>
             <div class="editor-body">
                 <div class="field">
-                    <label class="field-title" for="editor-text">屏蔽文本 / 便签文字</label>
+                    <div class="field-title-row">
+                        <label class="field-title" for="editor-text">屏蔽文本 / 便签文字</label>
+                        <button class="symbol-btn" id="insert-wildcard-btn" type="button">添加＊</button>
+                    </div>
                     <textarea class="editor-textarea" id="editor-text" placeholder="输入字、词或一句短句"></textarea>
-                    <div class="hint">保存后会自动切成剪报字块，贴回便签上。</div>
+                    <div class="hint">＊代表至少一个任意字，比如“既然＊”会匹配“既然你这样说”，但不会匹配只有“既然”。</div>
                 </div>
 
                 <div class="field">
@@ -1551,6 +1579,39 @@
                             <span>只屏蔽这个文本</span>
                         </label>
                     </div>
+                </div>
+
+                <div class="field chat-only" id="chat-action-field" hidden>
+                    <span class="field-title">聊天处理方式</span>
+                    <div class="choice-grid">
+                        <label class="choice">
+                            <input type="radio" name="editor-action" value="hide" checked>
+                            <span>屏蔽</span>
+                        </label>
+                        <label class="choice">
+                            <input type="radio" name="editor-action" value="replace">
+                            <span>替换</span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="field chat-only" id="match-mode-field" hidden>
+                    <span class="field-title">触发条件</span>
+                    <div class="choice-grid">
+                        <label class="choice">
+                            <input type="radio" name="editor-match-mode" value="contains" checked>
+                            <span>消息中包含时</span>
+                        </label>
+                        <label class="choice">
+                            <input type="radio" name="editor-match-mode" value="exact">
+                            <span>整条消息只有它</span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="field chat-only" id="replacement-field" hidden>
+                    <label class="field-title" for="editor-replacement">替换后文本</label>
+                    <textarea class="editor-textarea" id="editor-replacement" placeholder="例如：把“你好”替换成“你”"></textarea>
                 </div>
 
                 <div class="field chat-only" id="contact-scope-field" hidden>
@@ -1608,8 +1669,13 @@
             const editor = document.getElementById('note-editor');
             const editorTitle = document.getElementById('editor-title');
             const textInput = document.getElementById('editor-text');
+            const replacementInput = document.getElementById('editor-replacement');
+            const insertWildcardBtn = document.getElementById('insert-wildcard-btn');
             const enabledInput = document.getElementById('editor-enabled');
+            const chatActionField = document.getElementById('chat-action-field');
+            const matchModeField = document.getElementById('match-mode-field');
             const chatModeField = document.getElementById('chat-mode-field');
+            const replacementField = document.getElementById('replacement-field');
             const contactScopeField = document.getElementById('contact-scope-field');
             const selectedContacts = document.getElementById('selected-contacts');
             const deleteWrap = document.getElementById('delete-wrap');
@@ -1836,7 +1902,15 @@
                 chips.push(`<span class="note-chip${note.enabled ? '' : ' off'}">${note.enabled ? 'ON' : 'OFF'}</span>`);
                 chips.push(`<span class="note-chip">${note.scope === 'chat' ? '聊天' : '全网页'}</span>`);
                 if (note.scope === 'chat') {
-                    chips.push(`<span class="note-chip">${note.chatMode === 'message' ? '整条消息' : '仅文本'}</span>`);
+                    if (note.action === 'replace') {
+                        chips.push(`<span class="note-chip">替换</span>`);
+                    } else {
+                        chips.push(`<span class="note-chip">${note.chatMode === 'message' ? '整条消息' : '仅文本'}</span>`);
+                    }
+                    chips.push(`<span class="note-chip">${note.matchMode === 'exact' ? '仅整句' : '包含时'}</span>`);
+                    if (String(note.text || '').includes('＊') || String(note.text || '').includes('*')) {
+                        chips.push(`<span class="note-chip">＊</span>`);
+                    }
                     chips.push(`<span class="note-chip">${note.contactScope === 'selected' && note.contacts.length ? note.contacts.map(contactNameById).join(' / ') : '全部联系人'}</span>`);
                 }
                 return `<div class="note-settings">${chips.join('')}</div>`;
@@ -1928,7 +2002,11 @@
 
             function updateConditionalFields() {
                 const isChat = getRadio('editor-scope') === 'chat';
-                chatModeField.hidden = !isChat;
+                const action = getRadio('editor-action') || 'hide';
+                chatActionField.hidden = !isChat;
+                matchModeField.hidden = !isChat;
+                chatModeField.hidden = !isChat || action === 'replace';
+                replacementField.hidden = !isChat || action !== 'replace';
                 contactScopeField.hidden = !isChat;
                 selectedContacts.hidden = !isChat || getRadio('editor-contact-scope') !== 'selected';
             }
@@ -1939,8 +2017,11 @@
                 editorTitle.textContent = note ? '编辑屏蔽词便签' : '新增屏蔽词便签';
                 deleteWrap.hidden = !note;
                 textInput.value = note ? note.text : '';
+                replacementInput.value = note ? (note.replacementText || '') : '';
                 enabledInput.checked = note ? note.enabled !== false : true;
                 setRadio('editor-scope', note ? note.scope : 'global');
+                setRadio('editor-action', note ? (note.action === 'replace' ? 'replace' : 'hide') : 'hide');
+                setRadio('editor-match-mode', note ? (note.matchMode === 'exact' ? 'exact' : 'contains') : 'contains');
                 setRadio('editor-chat-mode', note ? note.chatMode : 'message');
                 setRadio('editor-contact-scope', note ? note.contactScope : 'all');
                 renderContactOptions(note && Array.isArray(note.contacts) ? note.contacts : []);
@@ -1960,6 +2041,7 @@
             function readEditorNote(existing = null) {
                 const text = cleanText(textInput.value) || '空白便签';
                 const scope = getRadio('editor-scope') || 'global';
+                const action = scope === 'chat' && getRadio('editor-action') === 'replace' ? 'replace' : 'hide';
                 const contactScope = getRadio('editor-contact-scope') || 'all';
                 const contacts = Array.from(selectedContacts.querySelectorAll('input:checked')).map(input => input.value);
                 const index = existing ? notes.indexOf(existing) : 0;
@@ -1976,10 +2058,25 @@
                     offsetY: existing && Number.isFinite(Number(existing.offsetY)) ? Number(existing.offsetY) : randomBetween(-6, 8),
                     enabled: enabledInput.checked,
                     scope,
-                    chatMode: getRadio('editor-chat-mode') || 'message',
+                    action,
+                    replacementText: action === 'replace' ? cleanText(replacementInput.value) : '',
+                    matchMode: getRadio('editor-match-mode') === 'exact' ? 'exact' : 'contains',
+                    chatMode: action === 'replace' ? 'text' : (getRadio('editor-chat-mode') || 'message'),
                     contactScope,
                     contacts: contactScope === 'selected' ? contacts : []
                 };
+            }
+
+            function insertWildcardToken() {
+                const token = '＊';
+                const start = textInput.selectionStart || 0;
+                const end = textInput.selectionEnd || 0;
+                const before = textInput.value.slice(0, start);
+                const after = textInput.value.slice(end);
+                textInput.value = `${before}${token}${after}`;
+                textInput.focus();
+                const nextPosition = start + token.length;
+                textInput.setSelectionRange(nextPosition, nextPosition);
             }
 
             function saveEditor() {
@@ -2096,10 +2193,11 @@
             document.getElementById('editor-cancel').addEventListener('click', closeEditor);
             document.getElementById('editor-save').addEventListener('click', saveEditor);
             document.getElementById('editor-delete').addEventListener('click', deleteEditingNote);
+            insertWildcardBtn.addEventListener('click', insertWildcardToken);
             editor.addEventListener('click', (event) => {
                 if (event.target === editor) closeEditor();
             });
-            editor.querySelectorAll('input[name="editor-scope"], input[name="editor-contact-scope"]').forEach(input => {
+            editor.querySelectorAll('input[name="editor-scope"], input[name="editor-action"], input[name="editor-contact-scope"]').forEach(input => {
                 input.addEventListener('change', updateConditionalFields);
             });
 
