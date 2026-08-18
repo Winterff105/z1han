@@ -4,6 +4,8 @@
     const GARDEN_TITLE_STORAGE_KEY = 'garden_app_custom_title_v1';
     const GARDEN_LAYOUT_STORAGE_KEY = 'garden_app_contact_layouts_v1';
     const GARDEN_GAME_STATE_STORAGE_KEY = 'garden_game_state_v1';
+    const GARDEN_FARM_SOCIAL_STORAGE_KEY = 'garden_farm_social_v1';
+    const GARDEN_FARM_SELF_ID = '__self__';
     const GARDEN_ROGUE_RUN_STORAGE_KEY_V2 = 'garden_rogue_run_v2';
     const GARDEN_ROGUE_META_STORAGE_KEY_V2 = 'garden_rogue_meta_v2';
     const GARDEN_HOME_TUTORIAL_DISMISSED_KEY = 'garden_home_tutorial_dismissed_v1';
@@ -45,24 +47,11 @@
 
     function resolvePartitionedAssetPath(assetPath) {
         const normalized = String(assetPath || '').replace(/\\/g, '/').replace(/^\.?\//, '');
+        if (/^(?:https?:|data:|blob:)/i.test(normalized)) {
+            return normalized;
+        }
         const relative = normalized.startsWith('assets/') ? normalized.slice('assets/'.length) : normalized;
-        if (relative.startsWith('fonts/') || relative.startsWith('stardew-valley/animals/')) {
-            return `${PARTITIONED_ASSET_ROOTS.part01}${relative}`;
-        }
-        if (
-            relative.startsWith('stardew-valley/fences/') ||
-            relative.startsWith('stardew-valley/items/') ||
-            relative.startsWith('stardew-valley/recipes/') ||
-            relative.startsWith('stardew-valley/terrain/') ||
-            relative === 'textured-paper.png'
-        ) {
-            return `${PARTITIONED_ASSET_ROOTS.part04}${relative}`;
-        }
-        const cropMatch = relative.match(/^stardew-valley\/crops\/([^/]+)\/([^/]+)$/);
-        if (cropMatch) {
-            return `${getPartitionedCropAssetRoot(cropMatch[1], cropMatch[2])}${relative}`;
-        }
-        return normalized;
+        return normalized.startsWith('assets/') ? normalized : `assets/${relative}`;
     }
 
     const HOME_ENTRY_META = {
@@ -387,6 +376,11 @@
             spriteStages: crop.spriteStages
         };
     });
+
+    const FARM_SOCIAL_STARDEW_CROP_IDS = new Set(FARM_STARDEW_CROP_CATALOG.map((crop) => crop.id));
+    const FARM_SOCIAL_STARDEW_SEEDS = FARM_STARDEW_CROP_CATALOG
+        .map((crop) => FARM_SEEDS[crop.id])
+        .filter(Boolean);
 
     const LEGACY_FARM_CROP_REPLACEMENTS = Object.freeze({
         cucumber: 'green_bean',
@@ -891,6 +885,17 @@
         homeEntryMenuOpen: false,
         farmScreenOpen: false,
         farmMessageBoardOpen: false,
+        farmSocial: {
+            initialized: false,
+            enabled: true,
+            autoGenerateOnOpen: true,
+            selectedContactId: GARDEN_FARM_SELF_ID,
+            lastAutoActionByContact: {},
+            lastRoutineActionByContact: {},
+            contactFarms: {},
+            logs: [],
+            isGenerating: false
+        },
         pastureScreenOpen: false,
         kitchenScreenOpen: false,
         farmToastTimeout: null,
@@ -1010,6 +1015,15 @@
     let farmMessageBoardToggleEl;
     let farmMessageBoardEl;
     let farmGridEl;
+    let farmSocialNavEl;
+    let farmSocialTitleEl;
+    let farmSocialSubtitleEl;
+    let farmSocialPrevBtnEl;
+    let farmSocialNextBtnEl;
+    let farmSocialSettingsBtnEl;
+    let farmSocialSettingsEl;
+    let farmSocialEnabledEl;
+    let farmSocialAutoGenerateEl;
     let farmSeedPanelEl;
     let farmPanelTitleEl;
     let farmSeedListEl;
@@ -1997,7 +2011,9 @@
             wateredAt: null,
             nextMutationCheckAt: null,
             mutated: false,
-            mutationSource: ''
+            mutationSource: '',
+            socialRemaining: FARM_BASE_HARVEST_YIELD,
+            socialTrace: null
         };
     }
 
@@ -2298,6 +2314,24 @@
         plot.nextMutationCheckAt = isFiniteNumber(rawPlot.nextMutationCheckAt) ? rawPlot.nextMutationCheckAt : null;
         plot.mutationSource = ['water', 'time'].includes(rawPlot.mutationSource) ? rawPlot.mutationSource : '';
         plot.mutated = rawPlot.mutated === true && Boolean(plot.mutationSource);
+        plot.socialRemaining = Math.max(
+            0,
+            Math.min(
+                FARM_BASE_HARVEST_YIELD,
+                Math.floor(Number(rawPlot.socialRemaining) || FARM_BASE_HARVEST_YIELD)
+            )
+        );
+        plot.socialTrace = rawPlot.socialTrace && typeof rawPlot.socialTrace === 'object'
+            ? {
+                type: ['footprints', 'note', 'empty'].includes(rawPlot.socialTrace.type)
+                    ? rawPlot.socialTrace.type
+                    : 'footprints',
+                message: String(rawPlot.socialTrace.message || '').slice(0, 240),
+                createdAt: isFiniteNumber(Number(rawPlot.socialTrace.createdAt))
+                    ? Number(rawPlot.socialTrace.createdAt)
+                    : Date.now()
+            }
+            : null;
 
         if (!plot.seedId) {
             return createEmptyFarmPlotState();
@@ -2546,6 +2580,967 @@
         } catch (error) {
             return;
         }
+    }
+
+    function normalizeFarmSocialLog(rawLog) {
+        if (!rawLog || typeof rawLog !== 'object') return null;
+        const message = String(rawLog.message || '').trim();
+        if (!message) return null;
+        return {
+            id: String(rawLog.id || `farm_social_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`),
+            time: isFiniteNumber(Number(rawLog.time)) ? Number(rawLog.time) : Date.now(),
+            actor: rawLog.actor === 'user' ? 'user' : 'contact',
+            direction: ['user_steals_contact', 'contact_steals_user', 'contact_farm_routine'].includes(rawLog.direction)
+                ? rawLog.direction
+                : 'contact_steals_user',
+            contactId: String(rawLog.contactId || ''),
+            itemId: String(rawLog.itemId || ''),
+            seedId: String(rawLog.seedId || ''),
+            actionType: ['plant', 'water', 'harvest', 'steal'].includes(rawLog.actionType) ? rawLog.actionType : 'steal',
+            quantity: Math.max(1, Math.min(4, Math.floor(Number(rawLog.quantity) || 1))),
+            plotIndex: Math.max(0, Math.floor(Number(rawLog.plotIndex) || 0)),
+            traceType: ['footprints', 'note', 'empty'].includes(rawLog.traceType) ? rawLog.traceType : 'footprints',
+            message: message.slice(0, 280),
+            chatMessage: String(rawLog.chatMessage || message).trim().slice(0, 280),
+            noticed: rawLog.noticed === true
+        };
+    }
+
+    function normalizeFarmSocialPlot(rawPlot) {
+        const normalized = normalizeFarmPlot(rawPlot, Date.now());
+        if (!normalized.seedId) {
+            const emptyPlot = createEmptyFarmPlotState();
+            emptyPlot.socialTrace = rawPlot && rawPlot.socialTrace && typeof rawPlot.socialTrace === 'object'
+                ? {
+                    type: ['footprints', 'note', 'empty'].includes(rawPlot.socialTrace.type)
+                        ? rawPlot.socialTrace.type
+                        : 'footprints',
+                    message: String(rawPlot.socialTrace.message || '').slice(0, 240),
+                    createdAt: isFiniteNumber(Number(rawPlot.socialTrace.createdAt))
+                        ? Number(rawPlot.socialTrace.createdAt)
+                        : Date.now()
+                }
+                : null;
+            return emptyPlot;
+        }
+        if (!FARM_SOCIAL_STARDEW_CROP_IDS.has(normalized.seedId)) {
+            const mappedSeedId = getCurrentFarmCropId(normalized.seedId);
+            if (mappedSeedId && FARM_SOCIAL_STARDEW_CROP_IDS.has(mappedSeedId)) {
+                normalized.seedId = mappedSeedId;
+            } else {
+                return createEmptyFarmPlotState();
+            }
+        }
+        normalized.socialRemaining = Math.max(
+            normalized.state === 'ready' ? 1 : 0,
+            Math.min(FARM_BASE_HARVEST_YIELD, Math.floor(Number(rawPlot && rawPlot.socialRemaining) || FARM_BASE_HARVEST_YIELD))
+        );
+        normalized.socialTrace = rawPlot && rawPlot.socialTrace && typeof rawPlot.socialTrace === 'object'
+            ? {
+                type: ['footprints', 'note', 'empty'].includes(rawPlot.socialTrace.type)
+                    ? rawPlot.socialTrace.type
+                    : 'footprints',
+                message: String(rawPlot.socialTrace.message || '').slice(0, 240),
+                createdAt: isFiniteNumber(Number(rawPlot.socialTrace.createdAt))
+                    ? Number(rawPlot.socialTrace.createdAt)
+                    : Date.now()
+            }
+            : null;
+        return normalized;
+    }
+
+    function hashFarmSocialContactId(contactId) {
+        return String(contactId || '').split('').reduce((hash, char) => (
+            ((hash << 5) - hash) + char.charCodeAt(0)
+        ) | 0, 0) >>> 0;
+    }
+
+    function createFarmSocialContactFarm(contactId) {
+        const seedList = FARM_SOCIAL_STARDEW_SEEDS.length ? FARM_SOCIAL_STARDEW_SEEDS : Object.values(FARM_SEEDS).filter((seed) => seed && seed.id);
+        if (!seedList.length) return { plots: Array.from({ length: 9 }, () => createEmptyFarmPlotState()) };
+        const hash = hashFarmSocialContactId(contactId);
+        const plots = Array.from({ length: 9 }, (_, index) => {
+            const seed = seedList[(hash + index * 7) % seedList.length];
+            const plot = createEmptyFarmPlotState();
+            const stateType = (hash + index) % 4;
+            if (stateType === 0) {
+                return plot;
+            }
+            plot.seedId = seed.id;
+            plot.mutated = ((hash + index) % 11) === 0;
+            plot.mutationSource = plot.mutated ? 'time' : '';
+            plot.socialRemaining = FARM_BASE_HARVEST_YIELD;
+            if (stateType === 1) {
+                plot.state = 'planted';
+                return plot;
+            }
+            if (stateType === 2) {
+                const wateredAt = Date.now() - Math.round(seed.time * 0.45);
+                plot.state = 'growing';
+                plot.growDuration = seed.time;
+                plot.wateredAt = wateredAt;
+                plot.readyAt = wateredAt + seed.time;
+                plot.nextMutationCheckAt = plot.mutated ? null : wateredAt + FARM_MUTATION_CONFIG.timeCheckInterval;
+                advanceFarmPlotByClock(plot, Date.now());
+                return plot;
+            }
+            plot.state = 'ready';
+            return plot;
+        });
+        return { plots };
+    }
+
+    function loadFarmSocialState() {
+        const defaults = {
+            initialized: true,
+            enabled: true,
+            autoGenerateOnOpen: true,
+            selectedContactId: GARDEN_FARM_SELF_ID,
+            lastAutoActionByContact: {},
+            lastRoutineActionByContact: {},
+            contactFarms: {},
+            logs: [],
+            isGenerating: false
+        };
+        try {
+            const raw = window.localStorage.getItem(GARDEN_FARM_SOCIAL_STORAGE_KEY);
+            if (!raw) return defaults;
+            const parsed = JSON.parse(raw);
+            const contactFarms = {};
+            Object.keys(parsed && parsed.contactFarms && typeof parsed.contactFarms === 'object' ? parsed.contactFarms : {}).forEach((contactId) => {
+                const plots = Array.isArray(parsed.contactFarms[contactId] && parsed.contactFarms[contactId].plots)
+                    ? parsed.contactFarms[contactId].plots
+                    : [];
+                contactFarms[String(contactId)] = {
+                    plots: Array.from({ length: 9 }, (_, index) => normalizeFarmSocialPlot(plots[index]))
+                };
+            });
+            return {
+                ...defaults,
+                enabled: parsed && parsed.enabled !== false,
+                autoGenerateOnOpen: parsed && parsed.autoGenerateOnOpen !== false,
+                selectedContactId: String(parsed && parsed.selectedContactId || GARDEN_FARM_SELF_ID),
+                lastAutoActionByContact: parsed && parsed.lastAutoActionByContact && typeof parsed.lastAutoActionByContact === 'object'
+                    ? parsed.lastAutoActionByContact
+                    : {},
+                lastRoutineActionByContact: parsed && parsed.lastRoutineActionByContact && typeof parsed.lastRoutineActionByContact === 'object'
+                    ? parsed.lastRoutineActionByContact
+                    : {},
+                contactFarms,
+                logs: Array.isArray(parsed && parsed.logs)
+                    ? parsed.logs.map(normalizeFarmSocialLog).filter(Boolean).slice(-80)
+                    : [],
+                isGenerating: false
+            };
+        } catch (error) {
+            return defaults;
+        }
+    }
+
+    function saveFarmSocialState() {
+        if (!state.farmSocial) return;
+        try {
+            const serializable = {
+                enabled: state.farmSocial.enabled !== false,
+                autoGenerateOnOpen: state.farmSocial.autoGenerateOnOpen !== false,
+                selectedContactId: state.farmSocial.selectedContactId || GARDEN_FARM_SELF_ID,
+                lastAutoActionByContact: state.farmSocial.lastAutoActionByContact || {},
+                lastRoutineActionByContact: state.farmSocial.lastRoutineActionByContact || {},
+                contactFarms: state.farmSocial.contactFarms || {},
+                logs: Array.isArray(state.farmSocial.logs) ? state.farmSocial.logs.slice(-80) : []
+            };
+            window.localStorage.setItem(GARDEN_FARM_SOCIAL_STORAGE_KEY, JSON.stringify(serializable));
+        } catch (error) {
+            return;
+        }
+    }
+
+    function ensureFarmSocialState() {
+        if (state.farmSocial && state.farmSocial.initialized) return;
+        state.farmSocial = loadFarmSocialState();
+    }
+
+    function getFarmSocialContacts() {
+        const contacts = Array.isArray(window.iphoneSimState && window.iphoneSimState.contacts)
+            ? window.iphoneSimState.contacts
+            : [];
+        return contacts.filter((contact) => contact && contact.id !== undefined && contact.id !== null);
+    }
+
+    function getFarmSocialContact(contactId) {
+        return getFarmSocialContacts().find((contact) => String(contact.id) === String(contactId)) || null;
+    }
+
+    function getFarmSocialContactName(contactId) {
+        if (String(contactId) === GARDEN_FARM_SELF_ID) return '\u6211\u7684\u519c\u573a';
+        const contact = getFarmSocialContact(contactId);
+        return String(contact && (contact.remark || contact.name) || '\u8054\u7cfb\u4eba\u7684\u519c\u573a').trim();
+    }
+
+    function getFarmSocialPrimaryContactId() {
+        const resolvedContactId = resolveGardenContactId(state.currentGardenContactId);
+        const contact = resolvedContactId ? getFarmSocialContact(resolvedContactId) : null;
+        return contact ? String(contact.id) : '';
+    }
+
+    function ensureFarmSocialContactFarm(contactId) {
+        ensureFarmSocialState();
+        const cid = String(contactId || '').trim();
+        if (!cid || cid === GARDEN_FARM_SELF_ID) return null;
+        if (!state.farmSocial.contactFarms[cid]) {
+            state.farmSocial.contactFarms[cid] = createFarmSocialContactFarm(cid);
+            saveFarmSocialState();
+        }
+        return state.farmSocial.contactFarms[cid];
+    }
+
+    function isViewingFarmSocialContact() {
+        ensureFarmSocialState();
+        return String(state.farmSocial.selectedContactId || GARDEN_FARM_SELF_ID) !== GARDEN_FARM_SELF_ID;
+    }
+
+    function getVisibleFarmPlots() {
+        ensureFarmSocialState();
+        if (isViewingFarmSocialContact()) {
+            const contactFarm = ensureFarmSocialContactFarm(state.farmSocial.selectedContactId);
+            return contactFarm ? contactFarm.plots : [];
+        }
+        if (isRogueActivityMode() && state.rogueRunV2 && state.rogueRunV2.farm) {
+            return state.rogueRunV2.farm.plots || [];
+        }
+        return state.gardenGame ? state.gardenGame.farm.plots : [];
+    }
+
+    function getFarmSocialTodayKey() {
+        const now = new Date();
+        return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    }
+
+    function getFarmSocialCandidatePlots(plots) {
+        return (Array.isArray(plots) ? plots : [])
+            .map((plot, index) => {
+                const seed = plot && FARM_SEEDS[plot.seedId];
+                if (!plot || plot.state !== 'ready' || !seed || Math.max(0, Number(plot.socialRemaining) || FARM_BASE_HARVEST_YIELD) < 1) {
+                    return null;
+                }
+                const itemMeta = ITEM_META[seed.inventoryId] || {};
+                return {
+                    plotIndex: index,
+                    itemId: seed.inventoryId,
+                    itemName: seed.name,
+                    quantityAvailable: Math.max(1, Math.floor(Number(plot.socialRemaining) || FARM_BASE_HARVEST_YIELD)),
+                    mutated: plot.mutated === true,
+                    sellPrice: Number(itemMeta.sellPrice || 0),
+                    cookingRelevant: ['strawberry', 'blueberry', 'cranberry', 'wheat', 'tomato', 'eggplant', 'pumpkin', 'hot_pepper', 'melon'].includes(seed.inventoryId)
+                };
+            })
+            .filter(Boolean);
+    }
+
+    function appendFarmSocialLog(log) {
+        ensureFarmSocialState();
+        const normalized = normalizeFarmSocialLog(log);
+        if (!normalized) return;
+        state.farmSocial.logs = [...(state.farmSocial.logs || []), normalized].slice(-80);
+        saveFarmSocialState();
+        syncFarmMessageBoardContent();
+    }
+
+    function appendFarmSocialChatContext(contactId, log) {
+        const cid = String(contactId || '').trim();
+        if (!cid || !window.iphoneSimState || !window.iphoneSimState.chatHistory || !log) return;
+        if (!Array.isArray(window.iphoneSimState.chatHistory[cid])) {
+            window.iphoneSimState.chatHistory[cid] = [];
+        }
+        const history = window.iphoneSimState.chatHistory[cid];
+        if (history.some((message) => message && message.metaType === 'garden_farm_social_event' && message.eventId === log.id)) {
+            return;
+        }
+        const contextMessage = {
+            id: `garden_farm_social_${log.id}`,
+            time: log.time,
+            role: 'system',
+            type: 'garden_farm_social_event',
+            hiddenFromUi: true,
+            includeInAiContext: true,
+            metaType: 'garden_farm_social_event',
+            eventId: log.id,
+            content: [
+                '\u519c\u573a\u4e92\u52a8\u4e8b\u4ef6',
+                `\u8054\u7cfb\u4eba\uff1a${getFarmSocialContactName(cid)}`,
+                `\u884c\u52a8\uff1a${
+                    log.direction === 'user_steals_contact'
+                        ? '\u7528\u6237\u8fdb\u5165\u4e86\u5bf9\u65b9\u519c\u573a'
+                        : (log.direction === 'contact_farm_routine'
+                            ? `\u8054\u7cfb\u4eba\u5728\u81ea\u5df1\u7684\u519c\u573a\u91cc${log.actionType === 'plant' ? '\u64ad\u79cd' : (log.actionType === 'water' ? '\u6d47\u6c34' : '\u6536\u83b7')}`
+                            : '\u8054\u7cfb\u4eba\u6765\u8fc7\u7528\u6237\u7684\u519c\u573a')
+                }`,
+                `\u7559\u8a00\uff1a${log.chatMessage || log.message}`
+            ].join('\n'),
+            meta: {
+                itemId: log.itemId,
+                seedId: log.seedId,
+                actionType: log.actionType,
+                quantity: log.quantity,
+                traceType: log.traceType,
+                direction: log.direction
+            }
+        };
+        history.push(contextMessage);
+        if (typeof window.saveConfig === 'function') {
+            try { window.saveConfig(); } catch (error) { /* keep local context if sync is unavailable */ }
+        }
+        if (window.offlinePushSync && typeof window.offlinePushSync.uploadChatSnapshot === 'function') {
+            window.offlinePushSync.uploadChatSnapshot(cid).catch(() => {});
+        }
+    }
+
+    function getGardenFarmAiSettings() {
+        if (typeof window.getPreferredChatAiSettings === 'function') {
+            return window.getPreferredChatAiSettings() || {};
+        }
+        const primary = window.iphoneSimState && window.iphoneSimState.aiSettings
+            ? window.iphoneSimState.aiSettings
+            : {};
+        const secondary = window.iphoneSimState && window.iphoneSimState.aiSettings2
+            ? window.iphoneSimState.aiSettings2
+            : {};
+        if (String(primary.url || '').trim() && String(primary.key || '').trim()) return primary;
+        if (String(secondary.url || '').trim() && String(secondary.key || '').trim()) return secondary;
+        return String(primary.url || '').trim() ? primary : secondary;
+    }
+
+    function getGardenFarmAiUrl(rawUrl) {
+        let value = String(rawUrl || '').trim().replace(/\/+$/, '');
+        if (!value) return '';
+        return /\/chat\/completions$/i.test(value) ? value : `${value}/chat/completions`;
+    }
+
+    function getGardenFarmAiContent(data) {
+        const message = data && Array.isArray(data.choices) && data.choices[0]
+            ? data.choices[0].message
+            : null;
+        if (!message) return '';
+        if (typeof message.content === 'string') return message.content.trim();
+        if (Array.isArray(message.content)) {
+            return message.content.map((part) => {
+                if (!part) return '';
+                return typeof part.text === 'string' ? part.text : (typeof part.content === 'string' ? part.content : '');
+            }).join('\n').trim();
+        }
+        return '';
+    }
+
+    function parseGardenFarmAiJson(content) {
+        const source = String(content || '').trim().replace(/^\s*```(?:json)?/i, '').replace(/```\s*$/i, '').trim();
+        try {
+            return JSON.parse(source);
+        } catch (error) {
+            const start = source.indexOf('{');
+            const end = source.lastIndexOf('}');
+            if (start < 0 || end <= start) throw new Error('farm_social_invalid_json');
+            return JSON.parse(source.slice(start, end + 1));
+        }
+    }
+
+    function getFarmSocialPromptContext(contactId) {
+        if (typeof window.buildGardenFarmAiContext === 'function') {
+            const shared = window.buildGardenFarmAiContext(contactId);
+            if (shared) return shared;
+        }
+        const contact = getFarmSocialContact(contactId);
+        const userProfile = window.iphoneSimState && window.iphoneSimState.userProfile
+            ? window.iphoneSimState.userProfile
+            : {};
+        const userPersona = Array.isArray(window.iphoneSimState && window.iphoneSimState.userPersonas)
+            ? window.iphoneSimState.userPersonas.find((persona) => String(persona && persona.id) === String(contact && contact.userPersonaId))
+            : null;
+        const history = window.iphoneSimState && window.iphoneSimState.chatHistory
+            ? window.iphoneSimState.chatHistory[contactId] || []
+            : [];
+        const worldbook = Array.isArray(window.iphoneSimState && window.iphoneSimState.worldbook)
+            ? window.iphoneSimState.worldbook
+                .filter((entry) => entry && entry.enabled !== false && Array.isArray(contact && contact.linkedWbCategories) && contact.linkedWbCategories.includes(entry.categoryId))
+                .map((entry) => String(entry.content || '').trim())
+                .filter(Boolean)
+                .join('\n')
+            : '';
+        const memories = Array.isArray(window.iphoneSimState && window.iphoneSimState.memories)
+            ? window.iphoneSimState.memories
+                .filter((memory) => String(memory && memory.contactId) === String(contactId))
+                .map((memory) => String(memory && memory.content || '').trim())
+                .filter(Boolean)
+                .join('\n')
+            : '';
+        return {
+            contactId: String(contactId || ''),
+            contactName: String(contact && (contact.remark || contact.name) || '\u8054\u7cfb\u4eba').trim(),
+            contactPersona: String(contact && contact.persona || '').trim() || '\u65e0',
+            userName: String((userPersona && userPersona.name) || userProfile.name || '\u7528\u6237').trim(),
+            userPersona: String((contact && contact.userPersonaPromptOverride) || (userPersona && userPersona.aiPrompt) || '\u65e0').trim(),
+            worldbook: worldbook || '\u65e0',
+            memories: memories || '\u65e0',
+            recentChat: history.slice(-50).map((message) => `${message && message.role || 'unknown'}: ${message && message.content || ''}`).join('\n') || '\u65e0',
+            contextLimit: 50
+        };
+    }
+
+    function buildFarmSocialAiPrompt(contactId, direction, candidates) {
+        const context = getFarmSocialPromptContext(contactId);
+        const recentLogs = (state.farmSocial.logs || [])
+            .filter((log) => String(log.contactId) === String(contactId))
+            .slice(-8)
+            .map((log) => `- ${new Date(log.time).toISOString()}: ${log.message}`)
+            .join('\n') || '\u65e0';
+        const directionText = direction === 'user_steals_contact'
+            ? `\u7528\u6237\u8fdb\u5165\u4e86${context.contactName}\u7684\u519c\u573a\uff0c\u8bf7\u4f60\u4ee5\u5192\u9669\u4e8b\u4ef6\u88c1\u5224\u8005\u7684\u8eab\u4efd\u751f\u6210\u8fd9\u6b21\u884c\u52a8\u3002`
+            : `\u7528\u6237\u79bb\u7ebf\u671f\u95f4\uff0c${context.contactName}\u6765\u5230\u4e86\u7528\u6237\u7684\u519c\u573a\uff0c\u8bf7\u4f60\u4ee5\u8054\u7cfb\u4eba\u7684\u89c6\u89d2\u751f\u6210\u8fd9\u6b21\u884c\u52a8\u3002`;
+        return [
+            '\u4f60\u6b63\u5728\u4e3a\u4e00\u4e2a\u519c\u573a\u793e\u4ea4\u4e8b\u4ef6\u751f\u6210\u884c\u52a8\u3002',
+            directionText,
+            '\u8bf7\u5fc5\u987b\u7ed3\u5408\u5e76\u7406\u89e3\u4ee5\u4e0b\u5b8c\u6574\u4e0a\u4e0b\u6587\uff0c\u4e0d\u8981\u8131\u79bb\u4eba\u8bbe\u81ea\u884c\u5199\u6b7b\u53cd\u5e94\uff1a',
+            `\u8054\u7cfb\u4eba\u59d3\u540d\uff1a${context.contactName}`,
+            `\u8054\u7cfb\u4eba\u4eba\u8bbe\uff1a${context.contactPersona}`,
+            `\u7528\u6237\u59d3\u540d\uff1a${context.userName}`,
+            `\u7528\u6237\u4eba\u8bbe\uff1a${context.userPersona}`,
+            `\u5173\u8054\u4e16\u754c\u4e66\uff1a\n${context.worldbook}`,
+            `\u8054\u7cfb\u4eba\u8bb0\u5fc6\uff1a\n${context.memories}`,
+            `\u6700\u8fd1\u804a\u5929\u4e0a\u4e0b\u6587\uff1a\n${context.recentChat}`,
+            `\u4e4b\u524d\u7684\u519c\u573a\u793e\u4ea4\u8bb0\u5f55\uff1a\n${recentLogs}`,
+            `\u53ef\u9009\u6210\u719f\u4f5c\u7269\uff08\u53ea\u80fd\u4ece\u4e2d\u9009\u62e9\uff09\uff1a\n${JSON.stringify(candidates)}`,
+            '\u884c\u4e3a\u7ea6\u675f\uff1a\u6bcf\u4e2a\u8054\u7cfb\u4eba\u6bcf\u5929\u6700\u591a\u4e00\u6b21\uff1b\u6bcf\u6b21\u53ea\u80fd\u62ff\u8d70 1\u5230 4 \u4e2a\uff1b\u4e0d\u80fd\u6e05\u7a7a\u6574\u5757\u5730\uff1b\u53ea\u80fd\u4ece\u63d0\u4f9b\u7684\u5019\u9009\u4f5c\u7269\u548c\u5269\u4f59\u6570\u91cf\u4e2d\u9009\u62e9\u3002',
+            '\u8bf7\u6839\u636e\u4eba\u8bbe\u81ea\u7136\u4f53\u73b0\u8d2a\u5403\u3001\u8c03\u76ae\u3001\u5c0f\u5fc3\u3001\u53cb\u597d\u3001\u8bb0\u4ec7\u7b49\u503e\u5411\uff1b\u53ef\u4ee5\u9009\u62e9\u4e0d\u884c\u52a8\u3002',
+            '\u5fc5\u987b\u53ea\u8fd4\u56de JSON\uff0c\u4e0d\u8981 Markdown\uff0c\u4e0d\u8981\u89e3\u91ca\u3002message \u548c chatMessage \u90fd\u5fc5\u987b\u662f\u672c\u6b21\u6839\u636e\u4e0a\u4e0b\u6587\u521b\u4f5c\u7684\u65b0\u6587\u5b57\uff0c\u4e0d\u8981\u590d\u7528\u4ee3\u7801\u4e2d\u7684\u56fa\u5b9a\u53e5\u5b50\u3002',
+            '{',
+            '  "shouldAct": true,',
+            '  "actionType": "steal",',
+            '  "targetPlotIndex": 0,',
+            '  "itemId": "strawberry",',
+            '  "quantity": 2,',
+            '  "traceType": "footprints",',
+            '  "noticed": false,',
+            '  "message": "\u5199\u5728\u7559\u8a00\u677f\u4e0a\u7684\u8bdd",',
+            '  "chatMessage": "\u540c\u6b65\u5230\u804a\u5929\u4e0a\u4e0b\u6587\u7684\u8bdd"',
+            '}'
+        ].join('\n');
+    }
+
+    function getFarmRoutineCandidatePlots(plots) {
+        return (Array.isArray(plots) ? plots : [])
+            .map((plot, index) => {
+                const seed = plot && FARM_SEEDS[plot.seedId];
+                if (plot && plot.state === 'empty') {
+                    return {
+                        plotIndex: index,
+                        actionType: 'plant',
+                        currentState: 'empty',
+                        seedOptions: FARM_SOCIAL_STARDEW_SEEDS.slice(0, 18).map((item) => ({
+                            id: item.id,
+                            name: item.name,
+                            unlockLevel: item.unlockLevel
+                        }))
+                    };
+                }
+                if (plot && plot.state === 'planted' && seed) {
+                    return {
+                        plotIndex: index,
+                        actionType: 'water',
+                        currentState: 'planted',
+                        seedId: seed.id,
+                        seedName: seed.name
+                    };
+                }
+                if (plot && plot.state === 'ready' && seed) {
+                    return {
+                        plotIndex: index,
+                        actionType: 'harvest',
+                        currentState: 'ready',
+                        seedId: seed.id,
+                        seedName: seed.name,
+                        quantityAvailable: Math.max(1, Math.floor(Number(plot.socialRemaining) || FARM_BASE_HARVEST_YIELD))
+                    };
+                }
+                return null;
+            })
+            .filter(Boolean);
+    }
+
+    function buildFarmRoutineAiPrompt(contactId, candidatePlots) {
+        const context = getFarmSocialPromptContext(contactId);
+        const recentLogs = (state.farmSocial.logs || [])
+            .filter((log) => String(log.contactId) === String(contactId))
+            .slice(-8)
+            .map((log) => `- ${new Date(log.time).toISOString()}: ${log.message}`)
+            .join('\n') || '\u65e0';
+        return [
+            '\u4f60\u6b63\u5728\u4e3a\u4e00\u4e2a\u8054\u7cfb\u4eba\u7684\u81ea\u5df1\u519c\u573a\u751f\u6210\u4eca\u5929\u7684\u4e00\u6b21\u519c\u4e8b\u52a8\u4f5c\u3002',
+            '\u8fd9\u4e0d\u662f\u5077\u83dc\uff0c\u800c\u662f\u8054\u7cfb\u4eba\u81ea\u5df1\u5728\u79cd\u5730\u3001\u6d47\u6c34\u3001\u6536\u83b7\u7684\u6b63\u5e38\u8fc7\u7a0b\u3002',
+            `\u8054\u7cfb\u4eba\uff1a${context.contactName}`,
+            `\u8054\u7cfb\u4eba\u4eba\u8bbe\uff1a${context.contactPersona}`,
+            `\u7528\u6237\u59d3\u540d\uff1a${context.userName}`,
+            `\u7528\u6237\u4eba\u8bbe\uff1a${context.userPersona}`,
+            `\u5173\u8054\u4e16\u754c\u4e66\uff1a\n${context.worldbook}`,
+            `\u8054\u7cfb\u4eba\u8bb0\u5fc6\uff1a\n${context.memories}`,
+            `\u6700\u8fd1\u804a\u5929\u4e0a\u4e0b\u6587\uff1a\n${context.recentChat}`,
+            `\u4e4b\u524d\u7684\u519c\u573a\u793e\u4ea4\u8bb0\u5f55\uff1a\n${recentLogs}`,
+            `\u53ef\u6267\u884c\u7684\u5408\u6cd5\u5019\u9009\u884c\u52a8\uff1a\n${JSON.stringify(candidatePlots)}`,
+            '\u89c4\u5219\uff1a',
+            '1. 只从候选里选一个动作。',
+            '2. empty 只能 plant，planted 只能 water，ready 只能 harvest。',
+            '3. harvest 时不要清空整块地以外的内容，只更新这一块地。',
+            '4. 如果没有合适动作，shouldAct 设为 false。',
+            '5. message 和 chatMessage 都必须是这一次新生成的自然句子。',
+            '6. 只返回 JSON，不要 Markdown，不要解释。',
+            '{',
+            '  "shouldAct": true,',
+            '  "actionType": "plant",',
+            '  "targetPlotIndex": 0,',
+            '  "seedId": "parsnip",',
+            '  "traceType": "footprints",',
+            '  "message": "今天给空地补上了新种子。",',
+            '  "chatMessage": "我今天在地里忙了一阵。"',
+            '}'
+        ].join('\n');
+    }
+
+    async function requestFarmSocialAiAction(contactId, direction, candidates) {
+        const settings = getGardenFarmAiSettings();
+        const url = getGardenFarmAiUrl(settings.url);
+        const key = String(settings.key || '').replace(/[^\x00-\x7F]/g, '').trim();
+        const model = String(settings.model || '').trim();
+        if (!url || !key || !model) throw new Error('farm_social_missing_ai_settings');
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${key}`
+            },
+            body: JSON.stringify({
+                model,
+                temperature: Number(settings.temperature || 0.7),
+                messages: [
+                    {
+                        role: 'system',
+                        content: '\u4f60\u662f\u519c\u573a\u793e\u4ea4\u884c\u52a8\u751f\u6210\u5668\u3002\u4f60\u7684\u56de\u7b54\u5c06\u76f4\u63a5\u88ab\u7a0b\u5e8f\u6821\u9a8c\uff0c\u8bf7\u4e25\u683c\u9075\u5b88 JSON \u683c\u5f0f\u3002'
+                    },
+                    {
+                        role: 'user',
+                        content: buildFarmSocialAiPrompt(contactId, direction, candidates)
+                    }
+                ]
+            })
+        });
+        if (!response.ok) {
+            throw new Error(`farm_social_api_${response.status}`);
+        }
+        const parsed = parseGardenFarmAiJson(getGardenFarmAiContent(await response.json()));
+        if (parsed && parsed.shouldAct === false) return null;
+        const candidate = candidates.find((item) => (
+            item.plotIndex === Math.floor(Number(parsed && parsed.targetPlotIndex))
+            && item.itemId === String(parsed && parsed.itemId || '')
+        ));
+        if (!candidate || String(parsed && parsed.actionType || 'steal') !== 'steal') {
+            throw new Error('farm_social_invalid_target');
+        }
+        const message = String(parsed.message || '').trim();
+        const chatMessage = String(parsed.chatMessage || '').trim();
+        if (!message || !chatMessage) throw new Error('farm_social_missing_generated_message');
+        return {
+            targetPlotIndex: candidate.plotIndex,
+            itemId: candidate.itemId,
+            quantity: Math.max(1, Math.min(4, Math.min(candidate.quantityAvailable, Math.floor(Number(parsed.quantity) || 1)))),
+            traceType: ['footprints', 'note', 'empty'].includes(parsed.traceType) ? parsed.traceType : 'footprints',
+            noticed: parsed.noticed === true,
+            message: message.slice(0, 280),
+            chatMessage: chatMessage.slice(0, 280)
+        };
+    }
+
+    async function requestFarmRoutineAiAction(contactId, plots) {
+        const settings = getGardenFarmAiSettings();
+        const url = getGardenFarmAiUrl(settings.url);
+        const key = String(settings.key || '').replace(/[^\x00-\x7F]/g, '').trim();
+        const model = String(settings.model || '').trim();
+        if (!url || !key || !model) throw new Error('farm_social_missing_ai_settings');
+        const candidatePlots = getFarmRoutineCandidatePlots(plots);
+        if (!candidatePlots.length) return null;
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${key}`
+            },
+            body: JSON.stringify({
+                model,
+                temperature: Number(settings.temperature || 0.7),
+                messages: [
+                    {
+                        role: 'system',
+                        content: '\u4f60\u662f\u8054\u7cfb\u4eba\u519c\u573a\u65e5\u5e38\u52a8\u4f5c\u751f\u6210\u5668\u3002\u53ea\u80fd\u8fd4\u56de\u5408\u6cd5 JSON\u3002'
+                    },
+                    {
+                        role: 'user',
+                        content: buildFarmRoutineAiPrompt(contactId, candidatePlots)
+                    }
+                ]
+            })
+        });
+        if (!response.ok) {
+            throw new Error(`farm_social_routine_api_${response.status}`);
+        }
+        const parsed = parseGardenFarmAiJson(getGardenFarmAiContent(await response.json()));
+        if (parsed && parsed.shouldAct === false) return null;
+        const actionType = ['plant', 'water', 'harvest'].includes(String(parsed && parsed.actionType || ''))
+            ? String(parsed.actionType)
+            : '';
+        const targetPlotIndex = Math.max(0, Math.floor(Number(parsed && parsed.targetPlotIndex) || 0));
+        const candidate = candidatePlots.find((item) => item.plotIndex === targetPlotIndex && item.actionType === actionType);
+        if (!candidate) throw new Error('farm_social_invalid_routine_target');
+        const message = String(parsed.message || '').trim();
+        const chatMessage = String(parsed.chatMessage || '').trim();
+        if (!message || !chatMessage) throw new Error('farm_social_missing_routine_message');
+        const seedId = actionType === 'plant'
+            ? String(parsed && parsed.seedId || '')
+            : String(candidate.seedId || '');
+        if (actionType === 'plant') {
+            const allowedSeedIds = Array.isArray(candidate.seedOptions) ? candidate.seedOptions.map((item) => String(item.id)) : [];
+            if (!FARM_SEEDS[seedId] || (allowedSeedIds.length && !allowedSeedIds.includes(seedId))) {
+                throw new Error('farm_social_invalid_routine_seed');
+            }
+        }
+        return {
+            actionType,
+            targetPlotIndex,
+            seedId,
+            traceType: ['footprints', 'note', 'empty'].includes(parsed.traceType) ? parsed.traceType : 'footprints',
+            message: message.slice(0, 280),
+            chatMessage: chatMessage.slice(0, 280)
+        };
+    }
+
+    function applyFarmRoutineActionToPlot(plot, action) {
+        if (!plot || !action) return false;
+        const now = Date.now();
+        if (action.actionType === 'plant') {
+            const seed = FARM_SEEDS[action.seedId];
+            if (!seed || plot.state !== 'empty') return false;
+            plot.state = 'planted';
+            plot.seedId = seed.id;
+            plot.readyAt = null;
+            plot.growDuration = null;
+            plot.wateredAt = null;
+            plot.nextMutationCheckAt = null;
+            plot.mutated = false;
+            plot.mutationSource = '';
+            plot.socialRemaining = FARM_BASE_HARVEST_YIELD;
+            plot.socialTrace = {
+                type: action.traceType,
+                message: action.message,
+                createdAt: now
+            };
+            return true;
+        }
+        if (action.actionType === 'water') {
+            const seed = FARM_SEEDS[plot.seedId];
+            if (!seed || plot.state !== 'planted') return false;
+            plot.state = 'growing';
+            plot.growDuration = seed.time;
+            plot.wateredAt = now;
+            plot.readyAt = now + seed.time;
+            plot.nextMutationCheckAt = now + FARM_MUTATION_CONFIG.timeCheckInterval;
+            rollFarmMutation(plot, 'water');
+            plot.socialTrace = {
+                type: action.traceType,
+                message: action.message,
+                createdAt: now
+            };
+            return true;
+        }
+        if (action.actionType === 'harvest') {
+            if (plot.state !== 'ready' || !plot.seedId) return false;
+            plot.state = 'empty';
+            plot.seedId = '';
+            plot.readyAt = null;
+            plot.growDuration = null;
+            plot.wateredAt = null;
+            plot.nextMutationCheckAt = null;
+            plot.mutated = false;
+            plot.mutationSource = '';
+            plot.socialRemaining = FARM_BASE_HARVEST_YIELD;
+            plot.socialTrace = {
+                type: action.traceType,
+                message: action.message,
+                createdAt: now
+            };
+            return true;
+        }
+        return false;
+    }
+
+    async function generateContactFarmRoutineAction(contactId) {
+        ensureFarmSocialState();
+        const contactFarm = ensureFarmSocialContactFarm(contactId);
+        if (!contactFarm || !Array.isArray(contactFarm.plots)) return null;
+        if (state.farmSocial.isGenerating) return null;
+        state.farmSocial.isGenerating = true;
+        try {
+            const action = await requestFarmRoutineAiAction(contactId, contactFarm.plots);
+            if (!action) return null;
+            const plot = contactFarm.plots[action.targetPlotIndex];
+            const previousSeedId = plot && plot.seedId ? plot.seedId : '';
+            if (!applyFarmRoutineActionToPlot(plot, action)) {
+                throw new Error('farm_social_routine_apply_failed');
+            }
+            const log = normalizeFarmSocialLog({
+                id: `farm_social_routine_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+                time: Date.now(),
+                actor: 'contact',
+                direction: 'contact_farm_routine',
+                actionType: action.actionType,
+                contactId,
+                itemId: action.actionType === 'harvest' ? previousSeedId : (plot.seedId || action.seedId || ''),
+                seedId: action.seedId || plot.seedId || previousSeedId || '',
+                quantity: 1,
+                plotIndex: action.targetPlotIndex,
+                traceType: action.traceType,
+                message: action.message,
+                chatMessage: action.chatMessage,
+                noticed: false
+            });
+            appendFarmSocialLog(log);
+            appendFarmSocialChatContext(contactId, log);
+            saveFarmSocialState();
+            renderFarmPlots();
+            if (String(state.farmSocial.selectedContactId || '') === String(contactId)) {
+                showFarmToast(log.message);
+            }
+            return log;
+        } finally {
+            state.farmSocial.isGenerating = false;
+        }
+    }
+
+    async function generateFarmSocialAction(contactId, direction) {
+        ensureFarmSocialState();
+        const sourcePlots = direction === 'user_steals_contact'
+            ? (ensureFarmSocialContactFarm(contactId) || {}).plots
+            : (state.gardenGame && state.gardenGame.farm ? state.gardenGame.farm.plots : []);
+        const candidates = getFarmSocialCandidatePlots(sourcePlots);
+        if (!candidates.length) return null;
+        if (state.farmSocial.isGenerating) return null;
+        state.farmSocial.isGenerating = true;
+        try {
+            const action = await requestFarmSocialAiAction(contactId, direction, candidates);
+            if (!action) return null;
+            const plot = sourcePlots[action.targetPlotIndex];
+            if (!plot || plot.seedId !== action.itemId || plot.state !== 'ready') {
+                throw new Error('farm_social_target_changed');
+            }
+            const quantityAvailable = Math.max(1, Math.floor(Number(plot.socialRemaining) || FARM_BASE_HARVEST_YIELD));
+            const quantity = Math.max(1, Math.min(action.quantity, 4, quantityAvailable));
+            plot.socialRemaining = Math.max(1, quantityAvailable - quantity);
+            plot.socialTrace = {
+                type: action.traceType,
+                message: action.message,
+                createdAt: Date.now()
+            };
+            const log = normalizeFarmSocialLog({
+                id: `farm_social_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+                time: Date.now(),
+                actor: direction === 'user_steals_contact' ? 'user' : 'contact',
+                direction,
+                contactId,
+                itemId: action.itemId,
+                quantity,
+                plotIndex: action.targetPlotIndex,
+                traceType: action.traceType,
+                message: action.message,
+                chatMessage: action.chatMessage,
+                noticed: action.noticed
+            });
+            if (direction === 'user_steals_contact') {
+                addInventoryItem(action.itemId, quantity);
+            }
+            appendFarmSocialLog(log);
+            appendFarmSocialChatContext(contactId, log);
+            if (direction === 'user_steals_contact') {
+                saveGardenGameState();
+                saveFarmSocialState();
+            } else {
+                saveGardenGameState();
+            }
+            renderFarmPlots();
+            refreshGardenEconomyUi();
+            showFarmToast(log.message);
+            return log;
+        } finally {
+            state.farmSocial.isGenerating = false;
+        }
+    }
+
+    async function maybeGenerateFarmSocialActions() {
+        ensureFarmSocialState();
+        if (!state.farmSocial.autoGenerateOnOpen || state.farmSocial.isGenerating) return;
+        const today = getFarmSocialTodayKey();
+        const contactId = getFarmSocialPrimaryContactId();
+        if (!contactId) return;
+        try {
+            if (state.farmSocial.lastRoutineActionByContact[contactId] !== today) {
+                await generateContactFarmRoutineAction(contactId);
+                state.farmSocial.lastRoutineActionByContact[contactId] = today;
+                saveFarmSocialState();
+            }
+            if (state.farmSocial.enabled !== false && state.farmSocial.lastAutoActionByContact[contactId] !== today) {
+                const candidates = getFarmSocialCandidatePlots(state.gardenGame && state.gardenGame.farm ? state.gardenGame.farm.plots : []);
+                if (candidates.length) {
+                    await generateFarmSocialAction(contactId, 'contact_steals_user');
+                    state.farmSocial.lastAutoActionByContact[contactId] = today;
+                    saveFarmSocialState();
+                }
+            }
+        } catch (error) {
+            return;
+        }
+    }
+
+    function syncFarmMessageBoardContent() {
+        if (!farmMessageBoardEl) return;
+        let listEl = farmMessageBoardEl.querySelector('[data-farm-social-log-list]');
+        if (!listEl) {
+            listEl = document.createElement('div');
+            listEl.dataset.farmSocialLogList = 'true';
+            const titleEl = farmMessageBoardEl.querySelector('.garden-farm-message-board-title');
+            if (titleEl && titleEl.nextSibling) {
+                farmMessageBoardEl.insertBefore(listEl, titleEl.nextSibling);
+            } else {
+                farmMessageBoardEl.appendChild(listEl);
+            }
+        }
+        listEl.replaceChildren();
+        const logs = (state.farmSocial && Array.isArray(state.farmSocial.logs) ? state.farmSocial.logs : []).slice(-5).reverse();
+        if (!logs.length) {
+            const emptyEl = document.createElement('p');
+            emptyEl.textContent = '\u8fd8\u6ca1\u6709\u519c\u573a\u4e92\u52a8\u8bb0\u5f55';
+            listEl.appendChild(emptyEl);
+            return;
+        }
+        logs.forEach((log) => {
+            const lineEl = document.createElement('p');
+            lineEl.className = 'garden-farm-social-log-line';
+            lineEl.textContent = log.message;
+            lineEl.title = new Date(log.time).toLocaleString();
+            listEl.appendChild(lineEl);
+        });
+    }
+
+    function getFarmSocialViewEntries() {
+        const entries = [
+            { id: GARDEN_FARM_SELF_ID, name: '\u6211\u7684\u519c\u573a', subtitle: '\u53ef\u4ee5\u79cd\u690d\u3001\u6d47\u6c34\u548c\u6536\u83b7' }
+        ];
+        const contactId = getFarmSocialPrimaryContactId();
+        const contact = contactId ? getFarmSocialContact(contactId) : null;
+        if (contact) {
+            entries.push({
+                id: String(contact.id),
+                name: String(contact.remark || contact.name || '\u8054\u7cfb\u4eba\u519c\u573a').trim(),
+                subtitle: '\u53ef\u4ee5\u5728\u8fd9\u5757\u5730\u91cc\u5077\u6210\u719f\u4f5c\u7269'
+            });
+        }
+        return entries;
+    }
+
+    function syncFarmSocialUi() {
+        ensureFarmSocialState();
+        const entries = getFarmSocialViewEntries();
+        let currentIndex = entries.findIndex((entry) => entry.id === String(state.farmSocial.selectedContactId));
+        if (currentIndex < 0) {
+            currentIndex = 0;
+            state.farmSocial.selectedContactId = GARDEN_FARM_SELF_ID;
+        }
+        const current = entries[currentIndex] || entries[0];
+        const contactView = current && current.id !== GARDEN_FARM_SELF_ID;
+        if (farmSocialTitleEl) farmSocialTitleEl.textContent = current ? current.name : '\u6211\u7684\u519c\u573a';
+        if (farmSocialSubtitleEl) {
+            farmSocialSubtitleEl.textContent = contactView
+                ? '\u5728\u8054\u7cfb\u4eba\u7684\u5730\u91cc\uff0c\u70b9\u51fb\u6210\u719f\u4f5c\u7269\u5c31\u53ef\u4ee5\u5077\u83dc'
+                : (entries.length > 1
+                    ? '\u53f3\u8fb9\u90a3\u5757\u662f\u8054\u7cfb\u4eba\u7684\u5730'
+                    : '\u76ee\u524d\u6ca1\u6709\u53ef\u5207\u6362\u7684\u8054\u7cfb\u4eba\u5730\u5757');
+        }
+        if (farmSocialPrevBtnEl) farmSocialPrevBtnEl.disabled = entries.length < 2;
+        if (farmSocialNextBtnEl) farmSocialNextBtnEl.disabled = entries.length < 2;
+        if (farmSocialEnabledEl) farmSocialEnabledEl.checked = state.farmSocial.enabled !== false;
+        if (farmSocialAutoGenerateEl) farmSocialAutoGenerateEl.checked = state.farmSocial.autoGenerateOnOpen !== false;
+        if (farmSocialSettingsEl) farmSocialSettingsEl.hidden = !farmSocialSettingsEl.classList.contains('is-open');
+        if (farmScreenEl) farmScreenEl.classList.toggle('is-social-contact-farm', contactView);
+        if (contactView) {
+            state.farmGame.currentTool = 'harvest';
+            state.farmGame.seedPanelOpen = false;
+        }
+        syncFarmToolUi();
+    }
+
+    function moveFarmSocialView(delta) {
+        const entries = getFarmSocialViewEntries();
+        if (entries.length < 2) return;
+        const currentIndex = Math.max(0, entries.findIndex((entry) => entry.id === String(state.farmSocial.selectedContactId)));
+        const nextIndex = currentIndex === 0 ? 1 : 0;
+        state.farmSocial.selectedContactId = entries[nextIndex].id;
+        saveFarmSocialState();
+        syncFarmSocialUi();
+        renderFarmPlots();
+        syncFarmStats();
+        vibrate(15);
+    }
+
+    function ensureFarmSocialUi() {
+        if (!farmScreenEl || farmSocialNavEl) return;
+        const worldEl = farmScreenEl.querySelector('.garden-farm-world');
+        const areaEl = farmScreenEl.querySelector('.garden-farm-area');
+        if (!worldEl || !areaEl) return;
+        farmSocialNavEl = document.createElement('div');
+        farmSocialNavEl.className = 'garden-farm-social-nav';
+        farmSocialNavEl.innerHTML = `
+            <button class="garden-farm-social-arrow" type="button" data-farm-social-prev aria-label="\u4e0a\u4e00\u5757\u519c\u573a">\u2039</button>
+            <div class="garden-farm-social-current">
+                <strong data-farm-social-title>\u6211\u7684\u519c\u573a</strong>
+                <span data-farm-social-subtitle></span>
+            </div>
+            <button class="garden-farm-social-arrow" type="button" data-farm-social-next aria-label="\u4e0b\u4e00\u5757\u519c\u573a">\u203a</button>
+            <button class="garden-farm-social-settings-btn" type="button" data-farm-social-settings aria-label="\u519c\u573a\u793e\u4ea4\u8bbe\u7f6e"><i class="ri-settings-3-line"></i></button>
+        `;
+        areaEl.insertBefore(farmSocialNavEl, areaEl.firstChild);
+        farmSocialTitleEl = farmSocialNavEl.querySelector('[data-farm-social-title]');
+        farmSocialSubtitleEl = farmSocialNavEl.querySelector('[data-farm-social-subtitle]');
+        farmSocialPrevBtnEl = farmSocialNavEl.querySelector('[data-farm-social-prev]');
+        farmSocialNextBtnEl = farmSocialNavEl.querySelector('[data-farm-social-next]');
+        farmSocialSettingsBtnEl = farmSocialNavEl.querySelector('[data-farm-social-settings]');
+
+        farmSocialSettingsEl = document.createElement('div');
+        farmSocialSettingsEl.className = 'garden-farm-social-settings';
+        farmSocialSettingsEl.hidden = true;
+        farmSocialSettingsEl.innerHTML = `
+            <label><input type="checkbox" data-farm-social-enabled> \u5141\u8bb8\u8054\u7cfb\u4eba\u6765\u5077\u83dc</label>
+            <label><input type="checkbox" data-farm-social-auto> \u6253\u5f00\u7f51\u9875\u65f6\u81ea\u52a8\u751f\u6210\uff08\u6bcf\u5929\u4e00\u6b21\uff09</label>
+        `;
+        worldEl.appendChild(farmSocialSettingsEl);
+        farmSocialEnabledEl = farmSocialSettingsEl.querySelector('[data-farm-social-enabled]');
+        farmSocialAutoGenerateEl = farmSocialSettingsEl.querySelector('[data-farm-social-auto]');
+
+        farmSocialPrevBtnEl.addEventListener('click', () => moveFarmSocialView(-1));
+        farmSocialNextBtnEl.addEventListener('click', () => moveFarmSocialView(1));
+        farmSocialSettingsBtnEl.addEventListener('click', () => {
+            farmSocialSettingsEl.hidden = !farmSocialSettingsEl.hidden;
+            farmSocialSettingsEl.classList.toggle('is-open', !farmSocialSettingsEl.hidden);
+        });
+        farmSocialEnabledEl.addEventListener('change', () => {
+            state.farmSocial.enabled = farmSocialEnabledEl.checked;
+            saveFarmSocialState();
+        });
+        farmSocialAutoGenerateEl.addEventListener('change', () => {
+            state.farmSocial.autoGenerateOnOpen = farmSocialAutoGenerateEl.checked;
+            saveFarmSocialState();
+        });
     }
 
     function setGardenMode(mode) {
@@ -3862,10 +4857,7 @@ ${taskCard.action}`;
     }
 
     function getFarmPlots() {
-        if (isRogueActivityMode() && state.rogueRunV2 && state.rogueRunV2.farm) {
-            return state.rogueRunV2.farm.plots || [];
-        }
-        return state.gardenGame ? state.gardenGame.farm.plots : [];
+        return getVisibleFarmPlots();
     }
 
     function getPastureAnimals() {
@@ -5263,6 +6255,7 @@ ${taskCard.action}`;
         }
 
         state.casualGardenGame = loadGardenGameState('casual');
+        state.farmSocial = loadFarmSocialState();
         discardRemovedRogueActivityState();
         setGardenMode('casual');
         state.homeTutorialDismissed = readHomeTutorialDismissed();
@@ -5572,13 +6565,15 @@ ${taskCard.action}`;
 
     function initFarmScreen(options = {}) {
         if (!farmGridEl || !farmSeedListEl) return;
+        ensureFarmSocialState();
+        ensureFarmSocialUi();
         if (!state.farmGame.initialized) {
             farmGridEl.innerHTML = '';
             for (let index = 0; index < 9; index += 1) {
                 const plot = document.createElement('div');
                 plot.className = 'garden-farm-plot';
                 plot.dataset.plotIndex = String(index);
-                plot.innerHTML = '<span class="garden-farm-mutation-badge">巨大变异</span><span class="garden-farm-crop"></span><div class="garden-farm-progress-meta"><div class="garden-farm-progress-container"><div class="garden-farm-progress-fill"></div></div><div class="garden-farm-progress-time"></div></div>';
+                plot.innerHTML = '<span class="garden-farm-mutation-badge">\u5de8\u5927\u53d8\u5f02</span><span class="garden-farm-social-trace" aria-hidden="true"></span><span class="garden-farm-crop"></span><div class="garden-farm-progress-meta"><div class="garden-farm-progress-container"><div class="garden-farm-progress-fill"></div></div><div class="garden-farm-progress-time"></div></div>';
                 plot.addEventListener('click', () => handleFarmPlotClick(plot));
                 farmGridEl.appendChild(plot);
             }
@@ -5605,6 +6600,8 @@ ${taskCard.action}`;
         renderFarmPlots();
         syncFarmStats();
         syncFarmToolUi();
+        syncFarmSocialUi();
+        syncFarmMessageBoardContent();
         syncFarmMessageBoardUi();
     }
 
@@ -5697,6 +6694,7 @@ ${taskCard.action}`;
     }
 
     function advanceFarmPlotsByClock() {
+        if (isViewingFarmSocialContact()) return false;
         const now = Date.now();
         let changed = false;
         getFarmPlots().forEach((plot) => {
@@ -5824,19 +6822,38 @@ ${taskCard.action}`;
     function renderFarmPlots() {
         if (!farmGridEl) return;
         const now = Date.now();
+        const isSocialContactFarm = isViewingFarmSocialContact();
         let changed = false;
         Array.from(farmGridEl.children).forEach((plotEl, index) => {
             const plot = getFarmPlots()[index] || createEmptyFarmPlotState();
-            changed = advanceFarmPlotByClock(plot, now) || changed;
+            if (!isSocialContactFarm) {
+                changed = advanceFarmPlotByClock(plot, now) || changed;
+            }
             const cropEl = plotEl.querySelector('.garden-farm-crop');
             const mutationBadgeEl = plotEl.querySelector('.garden-farm-mutation-badge');
+            const socialTraceEl = plotEl.querySelector('.garden-farm-social-trace');
             const progressMetaEl = plotEl.querySelector('.garden-farm-progress-meta');
             const progressFillEl = plotEl.querySelector('.garden-farm-progress-fill');
             const progressTimeEl = plotEl.querySelector('.garden-farm-progress-time');
             plotEl.dataset.state = plot.state;
             plotEl.dataset.seedId = plot.seedId || '';
-            plotEl.classList.remove('planted', 'growing', 'ready', 'mutated');
+            plotEl.classList.remove('planted', 'growing', 'ready', 'mutated', 'social-contact-farm', 'social-traced', 'social-harvested');
+            plotEl.classList.toggle('social-contact-farm', isSocialContactFarm);
             plotEl.title = '';
+            if (socialTraceEl) {
+                const traceType = plot.socialTrace && plot.socialTrace.type;
+                socialTraceEl.textContent = traceType === 'note' ? '📝' : (traceType === 'empty' ? '◌' : '👣');
+                socialTraceEl.classList.toggle('is-visible', Boolean(plot.socialTrace));
+                if (plot.socialTrace) {
+                    plotEl.classList.add('social-traced');
+                    socialTraceEl.title = plot.socialTrace.message || '';
+                } else {
+                    socialTraceEl.title = '';
+                }
+            }
+            if (isSocialContactFarm && Number(plot.socialRemaining) < FARM_BASE_HARVEST_YIELD) {
+                plotEl.classList.add('social-harvested');
+            }
 
             if (plot.state === 'empty' || !plot.seedId) {
                 if (cropEl) cropEl.replaceChildren();
@@ -5859,6 +6876,7 @@ ${taskCard.action}`;
                 if (progressFillEl) progressFillEl.style.width = '100%';
                 if (progressTimeEl) progressTimeEl.textContent = '';
                 if (progressMetaEl) progressMetaEl.style.display = 'none';
+                if (isSocialContactFarm) plotEl.title = `${seed ? seed.name : ''}\u00a0\u00b7 \u70b9\u51fb\u8bf7 AI \u751f\u6210\u8fd9\u6b21\u5077\u83dc`;
                 return;
             }
 
@@ -5885,8 +6903,10 @@ ${taskCard.action}`;
     }
 
     function syncFarmToolUi() {
+        const contactFarm = isViewingFarmSocialContact();
         farmToolBtns.forEach((button) => {
             button.classList.toggle('active', button.dataset.farmTool === state.farmGame.currentTool);
+            button.disabled = contactFarm && button.dataset.farmTool !== 'harvest';
         });
         if (farmSeedPanelEl) {
             const canOpenSeedPanel = state.farmGame.currentTool === 'plant' || state.farmGame.currentTool === 'tool';
@@ -5915,6 +6935,7 @@ ${taskCard.action}`;
     }
 
     function syncFarmMessageBoardUi() {
+        syncFarmMessageBoardContent();
         if (farmMessageBoardEl) {
             farmMessageBoardEl.classList.toggle('is-open', state.farmMessageBoardOpen);
             farmMessageBoardEl.setAttribute('aria-hidden', state.farmMessageBoardOpen ? 'false' : 'true');
@@ -5976,12 +6997,21 @@ ${taskCard.action}`;
     }
 
     function handleFarmInventoryOutsideClick(event) {
-        if (!farmSeedPanelEl || !farmSeedPanelEl.classList.contains('is-open')) return;
+        const seedPanelOpen = !!(farmSeedPanelEl && farmSeedPanelEl.classList.contains('is-open'));
+        const socialSettingsOpen = !!(farmSocialSettingsEl && !farmSocialSettingsEl.hidden);
+        if (!seedPanelOpen && !socialSettingsOpen) return;
         if (isEventWithinElement(event, farmSeedPanelEl)) return;
         if (isEventWithinElement(event, farmMessageBoardEl) || isEventWithinElement(event, farmMessageBoardToggleEl)) return;
+        if (isEventWithinElement(event, farmSocialSettingsEl) || isEventWithinElement(event, farmSocialSettingsBtnEl)) return;
         if (event.target && typeof event.target.closest === 'function' && event.target.closest('[data-farm-tool]')) return;
-        state.farmGame.seedPanelOpen = false;
-        syncFarmToolUi();
+        if (seedPanelOpen) {
+            state.farmGame.seedPanelOpen = false;
+            syncFarmToolUi();
+        }
+        if (socialSettingsOpen && farmSocialSettingsEl) {
+            farmSocialSettingsEl.hidden = true;
+            farmSocialSettingsEl.classList.remove('is-open');
+        }
     }
 
     function setFarmSeed(seedId) {
@@ -6011,9 +7041,14 @@ ${taskCard.action}`;
         state.currentHomeSection = 'farm';
         farmScreenEl.classList.add('is-open');
         farmScreenEl.setAttribute('aria-hidden', 'false');
+        ensureFarmSocialState();
+        state.farmSocial.selectedContactId = GARDEN_FARM_SELF_ID;
+        syncFarmSocialUi();
+        renderFarmPlots();
         syncAssignmentFigures();
         syncMiniGameMissionUi();
         syncRogueBuffSummaryUi();
+        maybeGenerateFarmSocialActions();
         vibrate(20);
     }
 
@@ -6022,6 +7057,10 @@ ${taskCard.action}`;
         const silent = !!(options && options.silent);
         state.farmScreenOpen = false;
         state.farmMessageBoardOpen = false;
+        if (farmSocialSettingsEl) {
+            farmSocialSettingsEl.hidden = true;
+            farmSocialSettingsEl.classList.remove('is-open');
+        }
         syncFarmMessageBoardUi();
         stopFarmProgressTimer();
         if (editorHost) editorHost.style.display = '';
@@ -6036,6 +7075,29 @@ ${taskCard.action}`;
         if (!plotEl) return;
         const plotState = plotEl.dataset.state || 'empty';
         const currentTool = state.farmGame.currentTool;
+
+        if (isViewingFarmSocialContact()) {
+            if (currentTool !== 'harvest') {
+                showFarmToast('\u8fd9\u662f\u8054\u7cfb\u4eba\u7684\u519c\u573a\uff0c\u8bf7\u5207\u6362\u5230\u6536\u83b7\u5de5\u5177');
+                return;
+            }
+            if (plotState !== 'ready') {
+                showFarmToast('\u8fd9\u5757\u5730\u8fd8\u6ca1\u6709\u53ef\u5077\u7684\u6210\u719f\u4f5c\u7269');
+                return;
+            }
+            if (state.farmSocial.isGenerating) return;
+            const contactId = String(state.farmSocial.selectedContactId || '');
+            const contactPlot = getFarmPlotStateByElement(plotEl);
+            if (!contactId || !contactPlot) return;
+            plotEl.classList.add('is-social-pending');
+            generateFarmSocialAction(contactId, 'user_steals_contact')
+                .catch(() => showFarmToast('\u8fd9\u6b21\u6ca1\u6709\u6210\u529f\u8054\u7cfb\u4e0a AI\uff0c\u6ca1\u6709\u4ea7\u751f\u5077\u83dc\u8bb0\u5f55'))
+                .finally(() => {
+                    plotEl.classList.remove('is-social-pending');
+                    renderFarmPlots();
+                });
+            return;
+        }
 
         if (currentTool === 'tool' && isRogueActivityMode()) {
             const selectedTool = state.farmGame.selectedToolItemId;
@@ -6183,6 +7245,8 @@ ${taskCard.action}`;
         plot.nextMutationCheckAt = null;
         plot.mutated = false;
         plot.mutationSource = '';
+        plot.socialRemaining = FARM_BASE_HARVEST_YIELD;
+        plot.socialTrace = null;
         renderFarmPlots();
         saveGardenGameState();
         showFarmToast(rebateGold > 0
@@ -6222,7 +7286,10 @@ ${taskCard.action}`;
         if (!plot) return;
         const wasMutated = plot.mutated === true;
         const harvestedItemId = wasMutated ? getGiantCropItemId(seed.inventoryId) : seed.inventoryId;
-        let rewardQty = FARM_BASE_HARVEST_YIELD;
+        let rewardQty = Math.max(1, Math.min(
+            FARM_BASE_HARVEST_YIELD,
+            Math.floor(Number(plot.socialRemaining) || FARM_BASE_HARVEST_YIELD)
+        ));
         if (Number(plot.bonusYield || 0) > 0) {
             rewardQty += Math.max(0, Math.floor(Number(plot.bonusYield) || 0));
             plot.bonusYield = 0;
@@ -6247,6 +7314,8 @@ ${taskCard.action}`;
         plot.nextMutationCheckAt = null;
         plot.mutated = false;
         plot.mutationSource = '';
+        plot.socialRemaining = FARM_BASE_HARVEST_YIELD;
+        plot.socialTrace = null;
         const farmState = getActiveFarmState();
         const harvestExp = Math.max(1, Math.floor(Number(seed.harvestExp) || 0))
             * rewardQty
@@ -6374,6 +7443,8 @@ ${taskCard.action}`;
         plot.nextMutationCheckAt = null;
         plot.mutated = false;
         plot.mutationSource = '';
+        plot.socialRemaining = FARM_BASE_HARVEST_YIELD;
+        plot.socialTrace = null;
         renderFarmPlots();
         saveGardenGameState();
     }
@@ -7439,6 +8510,7 @@ ${taskCard.action}`;
         closeFloraScreen();
         syncFloraFromEngine();
         screenEl.classList.remove('hidden');
+        maybeGenerateFarmSocialActions();
     }
 
     function openWhisperChallengeFromActivities() {
@@ -10436,6 +11508,7 @@ ${taskCard.action}`;
         init();
         if (!screenEl) return;
         state.casualGardenGame = loadGardenGameState('casual');
+        state.farmSocial = loadFarmSocialState();
         discardRemovedRogueActivityState();
         setGardenMode('casual');
         saveGardenGameState();
@@ -10456,6 +11529,9 @@ ${taskCard.action}`;
         closeFloraScreen();
         syncFloraFromEngine();
         screenEl.classList.remove('hidden');
+        syncFarmSocialUi();
+        syncFarmMessageBoardContent();
+        maybeGenerateFarmSocialActions();
     }
 
     function closeApp() {

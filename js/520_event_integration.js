@@ -2792,6 +2792,32 @@ ${getMarkup()}
         existing.remove();
     }
 
+    window.buildGardenFarmAiContext = function buildGardenFarmAiContext(contactId) {
+        const cid = String(contactId || '').trim();
+        const contacts = Array.isArray(window.iphoneSimState && window.iphoneSimState.contacts)
+            ? window.iphoneSimState.contacts
+            : [];
+        const contact = contacts.find((item) => String(item && item.id) === cid) || null;
+        if (!contact) return null;
+
+        const history = Array.isArray(window.iphoneSimState && window.iphoneSimState.chatHistory && window.iphoneSimState.chatHistory[cid])
+            ? window.iphoneSimState.chatHistory[cid]
+            : [];
+        const persona = getUserPersonaInfo(contact);
+        return {
+            contactId: cid,
+            contactName: String(contact.remark || contact.name || '\u8054\u7cfb\u4eba').trim() || '\u8054\u7cfb\u4eba',
+            contactPersona: String(contact.persona || '').trim() || '\u65e0',
+            userName: persona.userName,
+            userPersona: persona.userPrompt,
+            worldbook: buildWorldbookText(contact),
+            memories: buildAllMemoriesText(cid),
+            recentChat: buildRecentContextText(contact, history, persona.userName),
+            contextLimit: Number(contact.contextLimit || 0) > 0 ? Number(contact.contextLimit) : 50,
+            history
+        };
+    };
+
     window.maybeShow520EventEntryFromWechatChat = function maybeShow520EventEntryFromWechatChat(options = {}) {
         const source = String(options.source || '').trim();
         if (source && source !== 'wechat-contact-list') return false;

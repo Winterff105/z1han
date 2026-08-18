@@ -1,0 +1,328 @@
+/* Generic MCP result cards rendered inside WeChat-style chat messages. */
+#chat-screen .mcp-generic-card,
+#studio-chat-screen .mcp-generic-card {
+    width: min(330px, calc(100vw - 112px));
+    min-width: 250px;
+    overflow: hidden;
+    border: 1px solid #dfe6ec;
+    border-radius: 14px;
+    background: #ffffff;
+    box-shadow: 0 8px 24px rgba(31, 53, 70, 0.09);
+    color: #17212b;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+#chat-screen .mcp-generic-card *,
+#studio-chat-screen .mcp-generic-card * {
+    box-sizing: border-box;
+}
+
+#chat-screen .mcp-generic-card-head,
+#studio-chat-screen .mcp-generic-card-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 13px 14px;
+    border-bottom: 1px solid #e5edf3;
+    background: linear-gradient(135deg, #f5fbff 0%, #eef7fc 100%);
+}
+
+#chat-screen .mcp-generic-card-mark,
+#studio-chat-screen .mcp-generic-card-mark {
+    display: grid;
+    flex: 0 0 auto;
+    width: 34px;
+    height: 34px;
+    place-items: center;
+    border-radius: 10px;
+    background: #dff1ff;
+    color: #2478a8;
+    font-size: 17px;
+}
+
+#chat-screen .mcp-generic-card-title,
+#studio-chat-screen .mcp-generic-card-title {
+    min-width: 0;
+    flex: 1;
+    overflow: hidden;
+}
+
+#chat-screen .mcp-generic-card-title strong,
+#studio-chat-screen .mcp-generic-card-title strong {
+    display: block;
+    overflow: hidden;
+    color: #17212b;
+    font-size: 14px;
+    font-weight: 760;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+#chat-screen .mcp-generic-card-title span,
+#studio-chat-screen .mcp-generic-card-title span {
+    display: block;
+    margin-top: 3px;
+    overflow: hidden;
+    color: #6e8798;
+    font-size: 11px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+#chat-screen .mcp-generic-card-status,
+#studio-chat-screen .mcp-generic-card-status {
+    flex: 0 0 auto;
+    padding: 5px 7px;
+    border-radius: 6px;
+    background: #e1f4e9;
+    color: #25834e;
+    font-size: 10px;
+    font-weight: 750;
+}
+
+#chat-screen .mcp-generic-card-status.is-error,
+#studio-chat-screen .mcp-generic-card-status.is-error {
+    background: #fbe8e8;
+    color: #a84b4b;
+}
+
+#chat-screen .mcp-generic-card-body,
+#studio-chat-screen .mcp-generic-card-body {
+    padding: 0 14px 13px;
+}
+
+#chat-screen .mcp-generic-summary,
+#studio-chat-screen .mcp-generic-summary {
+    padding: 12px 0 10px;
+    color: #566b79;
+    font-size: 12px;
+    line-height: 1.55;
+}
+
+#chat-screen .mcp-generic-section,
+#studio-chat-screen .mcp-generic-section {
+    padding: 11px 0 2px;
+    border-top: 1px solid #e8edf1;
+}
+
+#chat-screen .mcp-generic-section-title,
+#studio-chat-screen .mcp-generic-section-title {
+    margin-bottom: 7px;
+    color: #738692;
+    font-size: 10px;
+    font-weight: 760;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+#chat-screen .mcp-generic-field,
+#studio-chat-screen .mcp-generic-field {
+    display: grid;
+    grid-template-columns: minmax(74px, 0.38fr) minmax(0, 1fr);
+    gap: 10px;
+    padding: 7px 0;
+    border-bottom: 1px solid #f0f3f5;
+}
+
+#chat-screen .mcp-generic-field:last-child,
+#studio-chat-screen .mcp-generic-field:last-child {
+    border-bottom: 0;
+}
+
+#chat-screen .mcp-generic-label,
+#studio-chat-screen .mcp-generic-label {
+    overflow: hidden;
+    color: #8a99a2;
+    font-size: 11px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+#chat-screen .mcp-generic-value,
+#studio-chat-screen .mcp-generic-value {
+    min-width: 0;
+    overflow-wrap: anywhere;
+    color: #263640;
+    font-size: 12px;
+    line-height: 1.45;
+    text-align: right;
+}
+
+#chat-screen .mcp-generic-list,
+#studio-chat-screen .mcp-generic-list {
+    display: grid;
+    gap: 8px;
+}
+
+#chat-screen .mcp-generic-list-item,
+#studio-chat-screen .mcp-generic-list-item {
+    padding: 9px 10px;
+    border: 1px solid #e7edf1;
+    border-radius: 9px;
+    background: #fbfdfe;
+}
+
+#chat-screen .mcp-generic-list-item-title,
+#studio-chat-screen .mcp-generic-list-item-title {
+    margin-bottom: 4px;
+    color: #263640;
+    font-size: 12px;
+    font-weight: 720;
+}
+
+#chat-screen .mcp-generic-link,
+#studio-chat-screen .mcp-generic-link {
+    display: inline-flex;
+    align-items: center;
+    max-width: 100%;
+    gap: 5px;
+    color: #2779a8;
+    font-size: 12px;
+    line-height: 1.45;
+    text-decoration: none;
+    overflow-wrap: anywhere;
+}
+
+#chat-screen .mcp-generic-link:hover,
+#studio-chat-screen .mcp-generic-link:hover {
+    text-decoration: underline;
+}
+
+#chat-screen .mcp-generic-image,
+#studio-chat-screen .mcp-generic-image {
+    display: block;
+    width: 100%;
+    max-height: 170px;
+    margin: 8px 0 2px;
+    border-radius: 10px;
+    background: #f1f4f6;
+    object-fit: cover;
+}
+
+#chat-screen .mcp-generic-audio,
+#studio-chat-screen .mcp-generic-audio {
+    width: 100%;
+    height: 34px;
+    margin-top: 7px;
+}
+
+#chat-screen .mcp-generic-music,
+#studio-chat-screen .mcp-generic-music {
+    display: flex;
+    align-items: center;
+    gap: 11px;
+    padding: 12px 0;
+}
+
+#chat-screen .mcp-generic-music-cover,
+#studio-chat-screen .mcp-generic-music-cover {
+    display: grid;
+    flex: 0 0 auto;
+    width: 62px;
+    height: 62px;
+    place-items: center;
+    overflow: hidden;
+    border-radius: 11px;
+    background: linear-gradient(135deg, #dceeff, #c6d8e7);
+    color: #3a6d89;
+    font-size: 24px;
+}
+
+#chat-screen .mcp-generic-music-cover img,
+#studio-chat-screen .mcp-generic-music-cover img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+#chat-screen .mcp-generic-music-main,
+#studio-chat-screen .mcp-generic-music-main {
+    min-width: 0;
+    flex: 1;
+}
+
+#chat-screen .mcp-generic-music-title,
+#studio-chat-screen .mcp-generic-music-title {
+    overflow: hidden;
+    color: #17212b;
+    font-size: 15px;
+    font-weight: 760;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+#chat-screen .mcp-generic-music-artist,
+#studio-chat-screen .mcp-generic-music-artist {
+    margin-top: 4px;
+    overflow: hidden;
+    color: #71828c;
+    font-size: 12px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+#chat-screen .mcp-generic-music-actions,
+#studio-chat-screen .mcp-generic-music-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 7px;
+    margin-top: 9px;
+}
+
+#chat-screen .mcp-generic-action,
+#studio-chat-screen .mcp-generic-action {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 29px;
+    padding: 5px 9px;
+    border: 1px solid #cfe2ee;
+    border-radius: 7px;
+    background: #f7fcff;
+    color: #2779a8;
+    font-size: 11px;
+    font-weight: 700;
+    text-decoration: none;
+}
+
+#chat-screen .mcp-generic-action:hover,
+#studio-chat-screen .mcp-generic-action:hover {
+    background: #edf8ff;
+}
+
+#chat-screen .mcp-generic-raw,
+#studio-chat-screen .mcp-generic-raw {
+    margin-top: 10px;
+    border-top: 1px solid #e8edf1;
+}
+
+#chat-screen .mcp-generic-raw summary,
+#studio-chat-screen .mcp-generic-raw summary {
+    padding-top: 10px;
+    cursor: pointer;
+    color: #87949c;
+    font-size: 11px;
+    user-select: none;
+}
+
+#chat-screen .mcp-generic-raw pre,
+#studio-chat-screen .mcp-generic-raw pre {
+    max-height: 180px;
+    margin: 8px 0 0;
+    overflow: auto;
+    padding: 9px;
+    border-radius: 8px;
+    background: #f5f7f8;
+    color: #66757e;
+    font: 10px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+@media (max-width: 360px) {
+    #chat-screen .mcp-generic-card,
+    #studio-chat-screen .mcp-generic-card {
+        width: min(310px, calc(100vw - 98px));
+        min-width: 0;
+    }
+}

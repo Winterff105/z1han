@@ -2154,6 +2154,238 @@ function formatMcpMoney(value) {
     return Number.isFinite(amount) ? `¥${amount.toFixed(2)}` : '';
 }
 
+function normalizeMcpResultUrl(value) {
+    const url = String(value || '').trim().replace(/[)\]}>。，；、]+$/g, '');
+    if (!url) return '';
+    if (/^(https?:\/\/|data:(?:image|audio|video)\/|blob:)/i.test(url)) return url;
+    if (/^\/\/[^/]/.test(url)) return `https:${url}`;
+    return '';
+}
+
+function isMcpImageUrl(url) {
+    return /^data:image\//i.test(url) || /\.(?:avif|gif|jpe?g|png|webp)(?:$|[?#])/i.test(url);
+}
+
+function isMcpAudioUrl(url) {
+    return /^data:audio\//i.test(url) || /\.(?:aac|flac|m4a|mp3|ogg|wav)(?:$|[?#])/i.test(url);
+}
+
+function collectMcpResultUrls(value, output = [], depth = 0) {
+    if (depth > 7 || value === null || value === undefined) return output;
+    if (typeof value === 'string') {
+        const matches = value.match(/(?:https?:\/\/|\/\/)[^\s<>"'`]+/gi) || [];
+        matches.forEach((item) => {
+            const normalized = normalizeMcpResultUrl(item);
+            if (normalized && !output.includes(normalized)) output.push(normalized);
+        });
+        return output;
+    }
+    if (Array.isArray(value)) {
+        value.slice(0, 30).forEach((item) => collectMcpResultUrls(item, output, depth + 1));
+        return output;
+    }
+    if (typeof value === 'object') {
+        Object.values(value).slice(0, 50).forEach((item) => collectMcpResultUrls(item, output, depth + 1));
+    }
+    return output;
+}
+
+function parseMcpMusicResult(text, parsed = null, toolName = '') {
+    const source = String(text || '');
+    const musicTag = source.match(/\[music:([^:\]]+):([^:\]]*):([^:\]]*):(https?:\/\/[^\]]+)\]/i);
+    const songUrl = (source.match(/https?:\/\/music\.163\.com\/song\?[^ \n\]]+/i) || [])[0] || '';
+    const candidate = parsed && typeof parsed === 'object' ? parsed : {};
+    const song = candidate.song && typeof candidate.song === 'object' ? candidate.song : candidate;
+    const title = String(
+        (musicTag && musicTag[2])
+        || song.songName
+        || song.songTitle
+        || song.name
+        || song.title
+        || ''
+    ).trim();
+    const artist = String(
+        (musicTag && musicTag[3])
+        || song.artist
+        || song.artists
+        || song.singer
+        || song.author
+        || ''
+    ).trim();
+    const cover = normalizeMcpResultUrl(
+        (musicTag && musicTag[4])
+        || song.cover
+        || song.coverUrl
+        || song.picUrl
+        || song.albumCover
+        || song.image
+        || ''
+    );
+    const audio = normalizeMcpResultUrl(
+        song.audioUrl
+        || song.url
+        || song.songUrl
+        || song.playUrl
+        || ''
+    );
+    const toolLooksLikeMusic = /(music|song|play_music|netease|网易云)/i.test(String(toolName || '')) || /(music|song|play_music|网易云|歌曲|歌手)/i.test(source);
+    if (!musicTag && !songUrl && !title && !toolLooksLikeMusic) return null;
+    return {
+        id: String((musicTag && musicTag[1]) || song.id || song.songId || '').trim(),
+        title: title || '歌曲结果',
+        artist: artist || '未知歌手',
+        cover,
+        songUrl,
+        audioUrl: isMcpAudioUrl(audio) ? audio : ''
+    };
+}
+
+function formatMcpResultLabel(value) {
+    const source = String(value || '').replace(/[_-]+/g, ' ').trim();
+    if (!source) return '字段';
+    const knownLabels = {
+        id: 'ID',
+        url: '链接',
+        name: '名称',
+        title: '标题',
+        description: '说明',
+        artist: '歌手',
+        singer: '歌手',
+        status: '状态',
+        message: '消息',
+        address: '地址',
+        distance: '距离',
+        price: '价格',
+        coverUrl: '封面',
+        imageUrl: '图片'
+    };
+    if (knownLabels[value]) return knownLabels[value];
+    return source.charAt(0).toUpperCase() + source.slice(1);
+}
+
+function renderMcpResultLink(value, label = '打开链接') {
+    const url = normalizeMcpResultUrl(value);
+    if (!url) return '';
+    return `<a class="mcp-generic-link" href="${escapeChatMessageHtml(url)}" target="_blank" rel="noopener noreferrer"><i class="fas fa-arrow-up-right-from-square"></i> ${escapeChatMessageHtml(label)}</a>`;
+}
+
+function renderMcpGenericValue(value, key = '', depth = 0) {
+    if (depth > 3 || value === null || value === undefined) return '';
+    if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+        const stringValue = String(value);
+        const url = normalizeMcpResultUrl(stringValue);
+        if (url) {
+            if (isMcpImageUrl(url)) {
+                return `<img class="mcp-generic-image" src="${escapeChatMessageHtml(url)}" alt="${escapeChatMessageHtml(formatMcpResultLabel(key))}" loading="lazy" referrerpolicy="no-referrer">${renderMcpResultLink(url, '查看原图')}`;
+            }
+            if (isMcpAudioUrl(url)) {
+                return `<audio class="mcp-generic-audio" controls preload="none" src="${escapeChatMessageHtml(url)}"></audio>${renderMcpResultLink(url, '打开音频')}`;
+            }
+            return renderMcpResultLink(url, '打开链接');
+        }
+        return escapeChatMessageHtml(stringValue);
+    }
+    if (Array.isArray(value)) {
+        const items = value.slice(0, 8).map((item, index) => {
+            const inner = renderMcpGenericValue(item, `${key || '项目'} ${index + 1}`, depth + 1);
+            return inner ? `<div class="mcp-generic-list-item">${inner}</div>` : '';
+        }).filter(Boolean).join('');
+        return items ? `<div class="mcp-generic-list">${items}</div>` : '';
+    }
+    if (typeof value === 'object') {
+        const entries = Object.entries(value).slice(0, 18).map(([childKey, childValue]) => {
+            const rendered = renderMcpGenericValue(childValue, childKey, depth + 1);
+            if (!rendered) return '';
+            return `<div class="mcp-generic-field"><span class="mcp-generic-label">${escapeChatMessageHtml(formatMcpResultLabel(childKey))}</span><span class="mcp-generic-value">${rendered}</span></div>`;
+        }).filter(Boolean).join('');
+        return entries;
+    }
+    return '';
+}
+
+function renderMcpGenericStructuredData(parsed) {
+    if (!parsed || typeof parsed !== 'object') return '';
+    const root = parsed.data !== undefined ? parsed.data : parsed;
+    if (Array.isArray(root)) {
+        return renderMcpGenericValue(root, '结果');
+    }
+    if (typeof root !== 'object') return '';
+    const sections = Object.entries(root).slice(0, 18).map(([key, value]) => {
+        const rendered = renderMcpGenericValue(value, key, 0);
+        if (!rendered) return '';
+        const isSimple = typeof value !== 'object' || value === null;
+        return isSimple
+            ? `<div class="mcp-generic-field"><span class="mcp-generic-label">${escapeChatMessageHtml(formatMcpResultLabel(key))}</span><span class="mcp-generic-value">${rendered}</span></div>`
+            : `<div class="mcp-generic-section"><div class="mcp-generic-section-title">${escapeChatMessageHtml(formatMcpResultLabel(key))}</div>${rendered}</div>`;
+    }).filter(Boolean).join('');
+    return sections;
+}
+
+function renderMcpGenericText(text, music = null) {
+    const source = String(text || '').trim();
+    if (!source) return '<div class="mcp-generic-summary">工具已完成调用，没有返回可展示的内容。</div>';
+    let cleaned = source
+        .replace(/\[music:[^\]]+\]/ig, '')
+        .replace(/https?:\/\/music\.163\.com\/song\?[^ \n\]]+/ig, '')
+        .replace(/\s{2,}/g, ' ')
+        .trim();
+    if (music) cleaned = cleaned.replace(/\n{2,}/g, '\n').trim();
+    const urls = [];
+    cleaned = cleaned.replace(/(?:https?:\/\/|\/\/)[^\s<>"'`]+/gi, (match) => {
+        const url = normalizeMcpResultUrl(match);
+        if (!url) return match;
+        urls.push(url);
+        return '';
+    });
+    const lines = cleaned.split(/\r?\n|[。；;]+/).map(item => item.trim()).filter(Boolean).slice(0, 8);
+    const lineHtml = lines.map(line => `<div class="mcp-generic-field"><span class="mcp-generic-label">信息</span><span class="mcp-generic-value">${escapeChatMessageHtml(line)}</span></div>`).join('');
+    const linkHtml = urls.slice(0, 8).map((url, index) => `<div class="mcp-generic-field"><span class="mcp-generic-label">链接 ${index + 1}</span><span class="mcp-generic-value">${renderMcpResultLink(url, '打开')}</span></div>`).join('');
+    return lineHtml || linkHtml ? `${lineHtml}${linkHtml}` : '<div class="mcp-generic-summary">工具已返回结果，可展开下方原始数据查看详情。</div>';
+}
+
+function buildMcpGenericResultCardHtml(payload, msgId) {
+    const toolName = String(payload.toolName || 'MCP tool').trim() || 'MCP tool';
+    const serverName = String(payload.serverName || 'MCP').trim() || 'MCP';
+    const resultText = String(payload.resultText || '').trim();
+    const parsed = parseMcpToolResultData(resultText);
+    const music = parseMcpMusicResult(resultText, parsed, toolName);
+    const structuredHtml = renderMcpGenericStructuredData(parsed);
+    const contentHtml = structuredHtml || renderMcpGenericText(resultText, music);
+    const statusOk = payload.ok !== false;
+    const rawText = resultText || JSON.stringify(payload, null, 2);
+    const musicHtml = music
+        ? `<div class="mcp-generic-music">
+            <div class="mcp-generic-music-cover">${music.cover ? `<img src="${escapeChatMessageHtml(music.cover)}" alt="" loading="lazy" referrerpolicy="no-referrer">` : '<i class="fas fa-music"></i>'}</div>
+            <div class="mcp-generic-music-main">
+                <div class="mcp-generic-music-title">${escapeChatMessageHtml(music.title)}</div>
+                <div class="mcp-generic-music-artist">${escapeChatMessageHtml(music.artist)}</div>
+                <div class="mcp-generic-music-actions">
+                    ${music.audioUrl ? `<audio class="mcp-generic-audio" controls preload="none" src="${escapeChatMessageHtml(music.audioUrl)}"></audio>` : ''}
+                    ${music.songUrl ? `<a class="mcp-generic-action" href="${escapeChatMessageHtml(music.songUrl)}" target="_blank" rel="noopener noreferrer"><i class="fas fa-play"></i> 打开歌曲</a>` : ''}
+                    ${music.id ? `<span class="mcp-generic-action"><i class="fas fa-hashtag"></i> ${escapeChatMessageHtml(music.id)}</span>` : ''}
+                </div>
+            </div>
+        </div>`
+        : '';
+    return `<div class="mcp-generic-card" data-mcp-msg-id="${escapeChatMessageHtml(msgId)}">
+        <div class="mcp-generic-card-head">
+            <div class="mcp-generic-card-mark"><i class="fas fa-plug"></i></div>
+            <div class="mcp-generic-card-title"><strong>${escapeChatMessageHtml(toolName)}</strong><span>${escapeChatMessageHtml(serverName)}</span></div>
+            <span class="mcp-generic-card-status${statusOk ? '' : ' is-error'}">${statusOk ? '已返回' : '失败'}</span>
+        </div>
+        <div class="mcp-generic-card-body">
+            ${musicHtml}
+            ${musicHtml ? '<div class="mcp-generic-section">' : ''}
+            ${contentHtml}
+            ${musicHtml ? '</div>' : ''}
+            <details class="mcp-generic-raw">
+                <summary>查看原始返回</summary>
+                <pre>${escapeChatMessageHtml(rawText.slice(0, 16000))}</pre>
+            </details>
+        </div>
+    </div>`;
+}
+
 function buildMcpToolResultCardHtml(text, msgId) {
     const payload = parseMcpToolResultPayload(text) || {};
     const toolName = String(payload.toolName || 'MCP tool').trim() || 'MCP tool';
@@ -2355,13 +2587,7 @@ function buildMcpToolResultCardHtml(text, msgId) {
         </div>`;
     }
 
-    const previewText = String(payload.resultText || (payload.ok ? '工具调用完成' : '工具调用失败'))
-        .replace(/\n{3,}/g, '\n\n')
-        .slice(0, 360);
-    return `<div class="mcp-tool-result-card" style="width:288px;overflow:hidden;border:1px solid #dfe5ea;border-radius:10px;background:#fff;box-shadow:0 8px 24px rgba(31,53,70,.08);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
-        ${header}
-        <div style="padding:12px 14px;color:#66717d;font-size:12px;line-height:1.55;white-space:pre-wrap;word-break:break-word;">${escapeChatMessageHtml(previewText)}</div>
-    </div>`;
+    return buildMcpGenericResultCardHtml(payload, msgId);
 }
 
 function findLatestMcpLocation(contactId) {
