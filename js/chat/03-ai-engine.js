@@ -5672,7 +5672,9 @@ function buildMcpToolCatalogSystemMessage(serverSummaries) {
         '当前这轮聊天可用的 MCP 工具清单如下，只有这些工具是真实可调用的：',
         ...lines,
         '如果用户问你“你有哪些 tool / 工具”，直接根据这份清单回答。',
-        '如果用户需求命中这些工具，优先直接调用，不要说自己看不到工具入口、没收到工具，或让用户改成手动下指令。'
+        '如果用户需求命中这些工具，优先直接调用，不要说自己看不到工具入口、没收到工具，或让用户改成手动下指令。',
+        '如果用户是在刚刚调用过 MCP 后继续说“再搜一个、换一首、另一个、继续查”等，或只给出一个具体名称，也要继续调用对应工具；不要因为没有复述完整指令就改成普通聊天。',
+        '搜索类工具遇到简短的名称、歌名、人名、商品名或关键词时，可以直接把它作为查询参数调用，不要先声称没有主动触发工具的权限。'
     ].join('\n');
 }
 
@@ -5760,8 +5762,10 @@ function hasPendingMcpToolContinuation(history, now = Date.now()) {
 
     const ageMs = Math.max(0, now - Number(latest.payload.time || latest.message.time || 0));
     if (ageMs > 30 * 60 * 1000) return false;
-    const toolName = String(latest.payload.toolName || '').trim();
-    return /^(queryShopList|searchProductForMcp|switchProduct|queryProductDetailInfo)$/i.test(toolName);
+    // Keep every MCP server available for a short follow-up window. The old
+    // Luckin-only allowlist made generic tools (for example play_music) vanish
+    // immediately after their first successful call.
+    return true;
 }
 
 function getPrimaryAiResponseMessage(data) {

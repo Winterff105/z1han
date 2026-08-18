@@ -1775,7 +1775,7 @@
             return server ? JSON.parse(JSON.stringify(server)) : null;
         },
         getBoundEnabledServers: (contactId) => JSON.parse(JSON.stringify(getBoundEnabledServers(contactId))),
-        getToolSummariesForContact: (contactId) => JSON.parse(JSON.stringify(getToolSummariesForContact(contactId))),
+        getToolSummariesForContact: (contactId, options = {}) => JSON.parse(JSON.stringify(getToolSummariesForContact(contactId, options))),
         prepareChatTooling,
         executeChatToolCall,
         discoverServerTools,
