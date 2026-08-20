@@ -2397,6 +2397,10 @@
     font-size: 28px;
 }
 
+#garden-app [data-fallback-emoji] {
+    display: contents;
+}
+
 #garden-app .garden-farm-seed-sprite {
     width: 32px;
     height: 32px;
@@ -2692,7 +2696,7 @@
 #garden-app .garden-pasture-container::after {
     z-index: 9;
     inset: -12px -6px -6px -6px;
-    background-image: url('../assets_part_04/assets/stardew-valley/fences/pasture_fence_frame_user_v5.png');
+    background-image: var(--garden-pasture-fence-image, url('/assets/stardew-valley/fences/pasture_fence_frame_user_v5.png'));
     background-position: calc(50% + 6px) calc(50% - 5px);
     background-repeat: no-repeat;
     background-size: 98% 98%;
@@ -2717,6 +2721,9 @@
 }
 
 #garden-app .garden-pasture-animal-sprite {
+    position: relative;
+    flex: 0 0 auto;
+    overflow: hidden;
     display: block;
     width: var(--pasture-sprite-width, 100%);
     height: var(--pasture-sprite-height, auto);
@@ -2729,6 +2736,24 @@
     transform: scaleX(var(--pasture-facing, 1));
     transform-origin: center bottom;
     transition: transform 0.2s;
+}
+
+#garden-app .garden-pasture-sprite-img {
+    position: absolute;
+    left: calc(var(--pasture-sprite-offset-x, 0px) * -1);
+    top: calc(var(--pasture-sprite-offset-y, 0px) * -1);
+    width: var(--pasture-sprite-bg-width, auto);
+    height: var(--pasture-sprite-bg-height, auto);
+    max-width: none;
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    object-fit: fill;
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+    pointer-events: none;
+    user-select: none;
+    -webkit-user-drag: none;
 }
 
 #garden-app .garden-pasture-animal-wrapper:active .garden-pasture-animal-sprite {
@@ -2860,6 +2885,8 @@
 }
 
 #garden-app .garden-pasture-shop-sprite {
+    position: relative;
+    overflow: hidden;
     width: var(--pasture-sprite-width, 100%);
     height: var(--pasture-sprite-height, 100%);
     display: block;

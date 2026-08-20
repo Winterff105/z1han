@@ -151,10 +151,25 @@
 
     function bindPastureSpriteAsset(element, assetPath) {
         if (!element || !assetPath) return;
-        if (element.dataset.assetCssFallbackBound === assetPath) return;
-        element.style.setProperty('--pasture-sprite-image', `url("${getResolvedAssetUrl(assetPath)}")`);
+        const resolvedAssetUrl = getResolvedAssetUrl(assetPath);
+        element.style.setProperty('--pasture-sprite-image', `url("${resolvedAssetUrl}")`);
         element.style.backgroundImage = 'var(--pasture-sprite-image)';
-        bindAssetCssImageFallback(element, assetPath, '--pasture-sprite-image');
+        if (element.dataset.assetCssFallbackBound !== assetPath) {
+            bindAssetCssImageFallback(element, assetPath, '--pasture-sprite-image');
+        }
+        const spriteImage = element.querySelector('.garden-pasture-sprite-img');
+        if (spriteImage) {
+            spriteImage.dataset.assetPath = assetPath;
+            spriteImage.style.setProperty('display', 'block', 'important');
+            spriteImage.style.setProperty('visibility', 'visible', 'important');
+            spriteImage.style.setProperty('opacity', '1', 'important');
+            if (spriteImage.dataset.assetFallbackBound !== 'true') {
+                spriteImage.dataset.assetFallbackBound = 'true';
+                bindAssetImageFallback(spriteImage, assetPath, () => {
+                    spriteImage.remove();
+                });
+            }
+        }
     }
 
     const HOME_ENTRY_META = {
@@ -7952,6 +7967,13 @@ ${taskCard.action}`;
         element.style.setProperty('--pasture-sprite-bg-height', `${backgroundHeight}px`);
         element.style.setProperty('--pasture-sprite-offset-x', `${offsetX}px`);
         element.style.setProperty('--pasture-sprite-offset-y', `${offsetY}px`);
+        const spriteImage = element.querySelector('.garden-pasture-sprite-img');
+        if (spriteImage) {
+            spriteImage.style.setProperty('--pasture-sprite-bg-width', `${backgroundWidth}px`);
+            spriteImage.style.setProperty('--pasture-sprite-bg-height', `${backgroundHeight}px`);
+            spriteImage.style.setProperty('--pasture-sprite-offset-x', `${offsetX}px`);
+            spriteImage.style.setProperty('--pasture-sprite-offset-y', `${offsetY}px`);
+        }
         const assetPath = `assets/stardew-valley/${meta.sheet}`;
         bindPastureSpriteAsset(element, assetPath);
     }
@@ -7979,7 +8001,9 @@ ${taskCard.action}`;
             `--pasture-sprite-image:url(${getResolvedAssetUrl(`assets/stardew-valley/${meta.sheet}`)})`,
             'background-image:var(--pasture-sprite-image)'
         ].join(';');
-        return `<span class="${className} is-sheet" style="${style}" aria-hidden="true"></span>`;
+        const assetPath = `assets/stardew-valley/${meta.sheet}`;
+        const resolvedAssetUrl = getResolvedAssetUrl(assetPath);
+        return `<span class="${className} is-sheet" style="${style}" aria-hidden="true"><img class="garden-pasture-sprite-img" src="${resolvedAssetUrl}" data-asset-path="${assetPath}" alt="" draggable="false"></span>`;
     }
 
     function refreshPastureAnimalSpriteFrames() {
