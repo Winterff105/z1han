@@ -172,6 +172,44 @@
         }
     }
 
+    function renderPastureShopAnimalIcon(iconEl, animalType) {
+        if (!iconEl || !animalType) return;
+        iconEl.innerHTML = getPastureShopAnimalIconMarkup(animalType);
+        const shopSprite = iconEl.querySelector('.garden-pasture-shop-sprite.is-sheet');
+        const shopMeta = getPastureAnimalSpriteMeta(animalType, 'baby');
+        if (shopSprite && shopMeta) {
+            bindPastureSpriteAsset(shopSprite, `assets/stardew-valley/${shopMeta.sheet}`);
+        }
+    }
+
+    function ensurePastureFenceFrame(containerEl) {
+        if (!containerEl) return;
+        const assetPath = 'assets/stardew-valley/fences/pasture_fence_frame_user_v5.png';
+        let fenceImage = containerEl.querySelector('.garden-pasture-fence-frame');
+        if (!fenceImage) {
+            fenceImage = document.createElement('img');
+            fenceImage.className = 'garden-pasture-fence-frame';
+            fenceImage.alt = '';
+            fenceImage.draggable = false;
+            fenceImage.dataset.assetPath = assetPath;
+            fenceImage.style.setProperty('display', 'block', 'important');
+            fenceImage.style.setProperty('visibility', 'visible', 'important');
+            fenceImage.style.setProperty('opacity', '1', 'important');
+            fenceImage.addEventListener('load', () => {
+                containerEl.classList.add('has-fence-frame-image');
+            });
+            bindAssetImageFallback(fenceImage, assetPath, () => {
+                fenceImage.remove();
+                containerEl.classList.remove('has-fence-frame-image');
+            });
+            containerEl.appendChild(fenceImage);
+        }
+        if (fenceImage.dataset.assetPath !== assetPath || !fenceImage.getAttribute('src')) {
+            fenceImage.dataset.assetPath = assetPath;
+            fenceImage.src = getInitialAssetPath(assetPath);
+        }
+    }
+
     const HOME_ENTRY_META = {
         home: { label: '小家' },
         farm: { label: '农场' },
@@ -7603,21 +7641,16 @@ ${taskCard.action}`;
                     if (tool) setPastureTool(tool);
                 });
             });
-            pastureShopItems.forEach((button) => {
-                button.addEventListener('click', () => {
-                    const animalType = button.dataset.pastureAnimal;
-                    if (animalType) selectPastureAnimalToBuy(animalType);
-                });
-                const icon = button.querySelector('.garden-pasture-shop-icon');
-                if (icon && button.dataset.pastureAnimal) {
-                    icon.innerHTML = getPastureShopAnimalIconMarkup(button.dataset.pastureAnimal);
-                    const shopSprite = icon.querySelector('.garden-pasture-shop-sprite.is-sheet');
-                    const shopMeta = getPastureAnimalSpriteMeta(button.dataset.pastureAnimal, 'baby');
-                    if (shopSprite && shopMeta) {
-                        bindPastureSpriteAsset(shopSprite, `assets/stardew-valley/${shopMeta.sheet}`);
+                pastureShopItems.forEach((button) => {
+                    button.addEventListener('click', () => {
+                        const animalType = button.dataset.pastureAnimal;
+                        if (animalType) selectPastureAnimalToBuy(animalType);
+                    });
+                    const icon = button.querySelector('.garden-pasture-shop-icon');
+                    if (icon && button.dataset.pastureAnimal) {
+                        renderPastureShopAnimalIcon(icon, button.dataset.pastureAnimal);
                     }
-                }
-            });
+                });
             state.pastureGame.initialized = true;
         }
 
@@ -7658,7 +7691,7 @@ ${taskCard.action}`;
                         });
                         const icon = button.querySelector('.garden-pasture-shop-icon');
                         if (icon && button.dataset.pastureAnimal) {
-                            icon.innerHTML = getPastureShopAnimalIconMarkup(button.dataset.pastureAnimal);
+                            renderPastureShopAnimalIcon(icon, button.dataset.pastureAnimal);
                         }
                         button.classList.toggle('selected', button.dataset.pastureAnimal === state.pastureGame.selectedAnimalToBuy);
                     });
@@ -8053,6 +8086,7 @@ ${taskCard.action}`;
                 'assets/stardew-valley/fences/pasture_fence_frame_user_v5.png',
                 '--garden-pasture-fence-image'
             );
+            ensurePastureFenceFrame(pastureContainerEl);
         }
         const now = Date.now();
         const existingMap = new Map(
