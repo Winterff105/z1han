@@ -50,8 +50,111 @@
         if (/^(?:https?:|data:|blob:)/i.test(normalized)) {
             return normalized;
         }
+        if (/^assets_part_\d+\/assets\//i.test(normalized)) {
+            return normalized;
+        }
         const relative = normalized.startsWith('assets/') ? normalized.slice('assets/'.length) : normalized;
+        if (relative.startsWith('fonts/') || relative.startsWith('stardew-valley/animals/')) {
+            return `${PARTITIONED_ASSET_ROOTS.part01}${relative}`;
+        }
+        if (
+            relative.startsWith('stardew-valley/fences/') ||
+            relative.startsWith('stardew-valley/items/') ||
+            relative.startsWith('stardew-valley/recipes/') ||
+            relative.startsWith('stardew-valley/terrain/') ||
+            relative === 'textured-paper.png'
+        ) {
+            return `${PARTITIONED_ASSET_ROOTS.part04}${relative}`;
+        }
+        const cropMatch = relative.match(/^stardew-valley\/crops\/([^/]+)\/([^/]+)$/);
+        if (cropMatch) {
+            return `${getPartitionedCropAssetRoot(cropMatch[1], cropMatch[2])}${relative}`;
+        }
         return normalized.startsWith('assets/') ? normalized : `assets/${relative}`;
+    }
+
+    function getAssetPathCandidates(assetPath) {
+        const normalized = String(assetPath || '').replace(/\\/g, '/').replace(/^\.?\//, '');
+        if (!normalized || /^(?:https?:|data:|blob:)/i.test(normalized)) return [normalized].filter(Boolean);
+        const partitionMatch = normalized.match(/^assets_part_\d+\/assets\/(.+)$/i);
+        const relative = partitionMatch
+            ? partitionMatch[1]
+            : (normalized.startsWith('assets/') ? normalized.slice('assets/'.length) : normalized);
+        const primary = resolvePartitionedAssetPath(normalized);
+        const candidates = [
+            `assets/${relative}`,
+            primary,
+            `assets_upload_parts/${primary}`
+        ];
+        return Array.from(new Set(candidates.filter(Boolean)));
+    }
+
+    function bindAssetImageFallback(imageEl, assetPath, onFinalError) {
+        if (!imageEl) return;
+        const candidates = getAssetPathCandidates(assetPath);
+        let candidateIndex = Math.max(0, candidates.indexOf(imageEl.getAttribute('src')));
+        imageEl.addEventListener('error', () => {
+            candidateIndex += 1;
+            if (candidateIndex < candidates.length) {
+                imageEl.src = candidates[candidateIndex];
+                return;
+            }
+            if (typeof onFinalError === 'function') onFinalError();
+        });
+    }
+
+    function bindAssetImageFallbacks(rootEl) {
+        if (!rootEl) return;
+        rootEl.querySelectorAll('img[data-asset-path]').forEach((imageEl) => {
+            if (imageEl.dataset.assetFallbackBound === 'true') return;
+            imageEl.dataset.assetFallbackBound = 'true';
+            bindAssetImageFallback(imageEl, imageEl.dataset.assetPath, () => {
+                const fallback = imageEl.closest('[data-fallback-emoji]');
+                if (fallback) fallback.textContent = fallback.dataset.fallbackEmoji || '📦';
+            });
+        });
+    }
+
+    function bindAssetCssImageFallback(element, assetPath, cssVariable) {
+        if (!element || !cssVariable || element.dataset.assetCssFallbackBound === assetPath) return;
+        const candidates = getAssetPathCandidates(assetPath);
+        if (!candidates.length) return;
+        element.dataset.assetCssFallbackBound = assetPath;
+        let candidateIndex = 0;
+        const tryCandidate = () => {
+            const tester = new Image();
+            tester.onload = () => {
+                element.style.setProperty(cssVariable, `url("${getResolvedAssetUrl(candidates[candidateIndex])}")`);
+            };
+            tester.onerror = () => {
+                candidateIndex += 1;
+                if (candidateIndex < candidates.length) tryCandidate();
+            };
+            tester.src = candidates[candidateIndex];
+        };
+        tryCandidate();
+    }
+
+    function getInitialAssetPath(assetPath) {
+        return getAssetPathCandidates(assetPath)[0] || '';
+    }
+
+    function getResolvedAssetUrl(assetPath) {
+        const candidate = getInitialAssetPath(assetPath);
+        if (!candidate) return '';
+        try {
+            return new URL(candidate, document.baseURI).href;
+        } catch (err) {
+            return candidate;
+        }
+    }
+
+    function bindPastureSpriteAsset(element, assetPath) {
+        if (!element || !assetPath) return;
+        if (element.dataset.assetCssFallbackBound === assetPath) return;
+        element.style.setProperty('--pasture-sprite-image', `url("${getResolvedAssetUrl(assetPath)}")`);
+        element.style.backgroundImage = 'var(--pasture-sprite-image)';
+        bindAssetCssImageFallback(element, assetPath, '--pasture-sprite-image');
     }
 
     const HOME_ENTRY_META = {
@@ -6720,17 +6823,17 @@ ${taskCard.action}`;
 
     function getFarmCropAssetPath(seed, assetName) {
         if (!seed || !seed.id || !assetName) return '';
-        return resolvePartitionedAssetPath(`assets/stardew-valley/crops/${seed.id}/${assetName}`);
+        return getInitialAssetPath(`assets/stardew-valley/crops/${seed.id}/${assetName}`);
     }
 
     function getKitchenRecipeAssetPath(recipeId) {
         const fileName = KITCHEN_RECIPE_ASSET_FILES[recipeId];
-        return fileName ? resolvePartitionedAssetPath(`assets/stardew-valley/recipes/${fileName}`) : '';
+        return fileName ? getInitialAssetPath(`assets/stardew-valley/recipes/${fileName}`) : '';
     }
 
     function getKitchenItemAssetPath(itemId) {
         const fileName = KITCHEN_ITEM_ASSET_FILES[itemId];
-        return fileName ? resolvePartitionedAssetPath(`assets/stardew-valley/items/${fileName}`) : '';
+        return fileName ? getInitialAssetPath(`assets/stardew-valley/items/${fileName}`) : '';
     }
 
     function getFarmItemAssetPath(itemId) {
@@ -6767,24 +6870,37 @@ ${taskCard.action}`;
         }
 
         const currentSprite = cropEl.querySelector('.garden-farm-crop-sprite');
-        if (currentSprite && currentSprite.dataset.spriteSrc === src) return;
+        if (currentSprite && currentSprite.dataset.spriteSrc === src) {
+            currentSprite.style.setProperty('display', 'block', 'important');
+            currentSprite.style.setProperty('visibility', 'visible', 'important');
+            currentSprite.style.setProperty('opacity', '1', 'important');
+            return;
+        }
 
         const sprite = document.createElement('img');
         sprite.className = 'garden-farm-crop-sprite';
         sprite.src = src;
         sprite.alt = '';
         sprite.draggable = false;
+        // The host page includes broad image rules. Keep farm sprites visible
+        // even when those rules are loaded after the garden stylesheet.
+        sprite.style.setProperty('display', 'block', 'important');
+        sprite.style.setProperty('visibility', 'visible', 'important');
+        sprite.style.setProperty('opacity', '1', 'important');
+        sprite.dataset.assetPath = src;
+        sprite.dataset.fallbackEmoji = fallbackEmoji;
         sprite.dataset.spriteSrc = src;
-        sprite.addEventListener('error', () => {
+        bindAssetImageFallback(sprite, src, () => {
             cropEl.textContent = fallbackEmoji;
-        }, { once: true });
+        });
         cropEl.replaceChildren(sprite);
     }
 
     function getFarmSeedSpriteMarkup(seed) {
         const src = getFarmCropAssetPath(seed, 'seed.png');
         if (!src) return seed && seed.emoji ? seed.emoji : '🌱';
-        return `<img class="garden-farm-seed-sprite" src="${src}" alt="" draggable="false">`;
+        const fallbackEmoji = seed && seed.emoji ? seed.emoji : '🌱';
+        return `<span data-fallback-emoji="${fallbackEmoji}"><img class="garden-farm-seed-sprite" data-asset-path="${src}" src="${src}" alt="" draggable="false"></span>`;
     }
 
     function getFarmCropIdFromItemId(itemId) {
@@ -6798,7 +6914,8 @@ ${taskCard.action}`;
     function getFarmStorageSpriteMarkup(item, className) {
         const src = getFarmItemAssetPath(item && item.id);
         if (!src) return item && item.emoji ? item.emoji : '📦';
-        return `<img class="${className}" src="${src}" alt="" draggable="false">`;
+        const fallbackEmoji = item && item.emoji ? item.emoji : '📦';
+        return `<span data-fallback-emoji="${fallbackEmoji}"><img class="${className}" data-asset-path="${src}" src="${src}" alt="" draggable="false"></span>`;
     }
 
     function renderFarmStorageSellIcon(meta) {
@@ -6813,9 +6930,9 @@ ${taskCard.action}`;
         sprite.src = src;
         sprite.alt = '';
         sprite.draggable = false;
-        sprite.addEventListener('error', () => {
+        bindAssetImageFallback(sprite, src, () => {
             storageSellIconEl.textContent = meta.emoji;
-        }, { once: true });
+        });
         storageSellIconEl.replaceChildren(sprite);
     }
 
@@ -6964,6 +7081,7 @@ ${taskCard.action}`;
             `;
         }).join('');
         farmSeedListEl.innerHTML = rows;
+        bindAssetImageFallbacks(farmSeedListEl);
         farmSeedListEl.querySelectorAll('[data-farm-seed]').forEach((item) => {
             item.addEventListener('click', () => setFarmSeed(item.dataset.farmSeed));
         });
@@ -7367,9 +7485,9 @@ ${taskCard.action}`;
                 sprite.src = spriteSrc;
                 sprite.alt = '';
                 sprite.draggable = false;
-                sprite.addEventListener('error', () => {
+                bindAssetImageFallback(sprite, spriteSrc, () => {
                     particle.textContent = seed.emoji;
-                }, { once: true });
+                });
                 particle.appendChild(sprite);
             } else {
                 particle.textContent = seed.emoji;
@@ -7478,6 +7596,11 @@ ${taskCard.action}`;
                 const icon = button.querySelector('.garden-pasture-shop-icon');
                 if (icon && button.dataset.pastureAnimal) {
                     icon.innerHTML = getPastureShopAnimalIconMarkup(button.dataset.pastureAnimal);
+                    const shopSprite = icon.querySelector('.garden-pasture-shop-sprite.is-sheet');
+                    const shopMeta = getPastureAnimalSpriteMeta(button.dataset.pastureAnimal, 'baby');
+                    if (shopSprite && shopMeta) {
+                        bindPastureSpriteAsset(shopSprite, `assets/stardew-valley/${shopMeta.sheet}`);
+                    }
                 }
             });
             state.pastureGame.initialized = true;
@@ -7829,7 +7952,8 @@ ${taskCard.action}`;
         element.style.setProperty('--pasture-sprite-bg-height', `${backgroundHeight}px`);
         element.style.setProperty('--pasture-sprite-offset-x', `${offsetX}px`);
         element.style.setProperty('--pasture-sprite-offset-y', `${offsetY}px`);
-        element.style.backgroundImage = `url("${resolvePartitionedAssetPath(`assets/stardew-valley/${meta.sheet}`)}")`;
+        const assetPath = `assets/stardew-valley/${meta.sheet}`;
+        bindPastureSpriteAsset(element, assetPath);
     }
 
     function getPastureAnimalSpriteMarkup(type, age, animal, options = {}) {
@@ -7852,7 +7976,8 @@ ${taskCard.action}`;
             `--pasture-sprite-bg-height:${backgroundHeight}px`,
             `--pasture-sprite-offset-x:${offsetX}px`,
             `--pasture-sprite-offset-y:${offsetY}px`,
-            `background-image:url(${resolvePartitionedAssetPath(`assets/stardew-valley/${meta.sheet}`)})`
+            `--pasture-sprite-image:url(${getResolvedAssetUrl(`assets/stardew-valley/${meta.sheet}`)})`,
+            'background-image:var(--pasture-sprite-image)'
         ].join(';');
         return `<span class="${className} is-sheet" style="${style}" aria-hidden="true"></span>`;
     }
@@ -7897,6 +8022,14 @@ ${taskCard.action}`;
 
     function renderPastureAnimals() {
         if (!pastureFieldEl) return;
+        const pastureContainerEl = pastureFieldEl.closest('.garden-pasture-container');
+        if (pastureContainerEl) {
+            bindAssetCssImageFallback(
+                pastureContainerEl,
+                'assets/stardew-valley/fences/pasture_fence_frame_user_v5.png',
+                '--garden-pasture-fence-image'
+            );
+        }
         const now = Date.now();
         const existingMap = new Map(
             Array.from(pastureFieldEl.querySelectorAll('.garden-pasture-animal-wrapper'))
@@ -7911,6 +8044,7 @@ ${taskCard.action}`;
             const bubbleMeta = getPastureAnimalBubble(animal, data, isEating);
             const existingWrapper = existingMap.get(String(animal.id));
             const wrapper = existingWrapper || document.createElement('div');
+            const spriteKey = `${animal.type}:${animal.age}`;
             const classNames = ['garden-pasture-animal-wrapper', animal.age === 'adult' ? 'garden-pasture-age-adult' : 'garden-pasture-age-baby'];
             if (animal.moveUntil && animal.moveUntil > now) classNames.push('is-moving');
             if (animal.state === 'hungry') classNames.push('garden-pasture-state-hungry');
@@ -7925,10 +8059,20 @@ ${taskCard.action}`;
             wrapper.dataset.facing = visualFacing;
             wrapper.style.setProperty('--pasture-facing', visualFacing);
             wrapper.style.setProperty('--pasture-move-duration', `${Math.max(1.1, (Number(animal.moveDuration) || 1600) / 1000)}s`);
-            wrapper.innerHTML = `
-                <div class="garden-pasture-bubble" style="color:${bubbleMeta.color};">${bubbleMeta.text}</div>
-                ${getPastureAnimalSpriteMarkup(animal.type, animal.age, animal, { now })}
-            `;
+            const currentSprite = wrapper.querySelector('.garden-pasture-animal-sprite.is-sheet');
+            if (!existingWrapper || wrapper.dataset.spriteKey !== spriteKey || !currentSprite) {
+                wrapper.innerHTML = `
+                    <div class="garden-pasture-bubble" style="color:${bubbleMeta.color};">${bubbleMeta.text}</div>
+                    ${getPastureAnimalSpriteMarkup(animal.type, animal.age, animal, { now })}
+                `;
+                wrapper.dataset.spriteKey = spriteKey;
+            } else {
+                const bubbleEl = wrapper.querySelector('.garden-pasture-bubble');
+                if (bubbleEl) {
+                    bubbleEl.textContent = bubbleMeta.text;
+                    bubbleEl.style.color = bubbleMeta.color;
+                }
+            }
             setPastureAnimalPosition(wrapper, animal.x, animal.y);
             if (!existingWrapper) {
                 wrapper.addEventListener('click', (clickEvent) => {
@@ -7936,6 +8080,13 @@ ${taskCard.action}`;
                     interactWithPastureAnimal(wrapper);
                 });
                 pastureFieldEl.appendChild(wrapper);
+            }
+            const animalSprite = wrapper.querySelector('.garden-pasture-animal-sprite.is-sheet');
+            if (animalSprite) {
+                bindPastureSpriteAsset(
+                    animalSprite,
+                    `assets/stardew-valley/${getPastureAnimalSpriteMeta(animal.type, animal.age).sheet}`
+                );
             }
         });
         existingMap.forEach((node, id) => {
@@ -8185,13 +8336,15 @@ ${taskCard.action}`;
     function getKitchenRecipeImageMarkup(recipe, className = 'garden-kitchen-recipe-icon-sprite') {
         const src = recipe ? getKitchenRecipeAssetPath(recipe.id) : '';
         if (!src) return recipe && recipe.emoji ? recipe.emoji : '🍳';
-        return `<img class="${className}" src="${src}" alt="" draggable="false">`;
+        const fallbackEmoji = recipe && recipe.emoji ? recipe.emoji : '🍳';
+        return `<span data-fallback-emoji="${fallbackEmoji}"><img class="${className}" data-asset-path="${src}" src="${src}" alt="" draggable="false"></span>`;
     }
 
     function getKitchenIngredientSpriteMarkup(itemId, className = 'garden-kitchen-ingredient-sprite') {
         const src = getFarmItemAssetPath(itemId);
         if (!src) return ITEM_META[itemId] && ITEM_META[itemId].emoji ? ITEM_META[itemId].emoji : '📦';
-        return `<img class="${className}" src="${src}" alt="" draggable="false">`;
+        const fallbackEmoji = ITEM_META[itemId] && ITEM_META[itemId].emoji ? ITEM_META[itemId].emoji : '📦';
+        return `<span data-fallback-emoji="${fallbackEmoji}"><img class="${className}" data-asset-path="${src}" src="${src}" alt="" draggable="false"></span>`;
     }
 
     function getKitchenIngredientDisplayName(itemId) {
@@ -8209,6 +8362,7 @@ ${taskCard.action}`;
                 </button>
             `;
         }).join('');
+        bindAssetImageFallbacks(kitchenAreaEl);
     }
 
     function syncKitchenRecipeDetailSheet() {
@@ -8231,9 +8385,9 @@ ${taskCard.action}`;
                 sprite.src = src;
                 sprite.alt = '';
                 sprite.draggable = false;
-                sprite.addEventListener('error', () => {
+                bindAssetImageFallback(sprite, src, () => {
                     kitchenRecipeImageEl.textContent = recipe.emoji;
-                }, { once: true });
+                });
                 kitchenRecipeImageEl.replaceChildren(sprite);
             }
         }
@@ -8256,6 +8410,7 @@ ${taskCard.action}`;
                     </div>
                 `;
             }).join('');
+            bindAssetImageFallbacks(kitchenRecipeIngredientsEl);
         }
         if (kitchenRecipeCookBtnEl) {
             kitchenRecipeCookBtnEl.disabled = !canCook;
@@ -8686,6 +8841,7 @@ ${taskCard.action}`;
             </button>`
         )).join('');
 
+        bindAssetImageFallbacks(storageGridEl);
         syncStorageSellSheetUi();
     }
 
