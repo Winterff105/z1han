@@ -1,0 +1,625 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Doubao UI Clone</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Helvetica Neue", STHeiti, "Microsoft Yahei", Tahoma, Simsun, sans-serif; background-color: #ffffff; overflow: hidden; height: 100vh; display: flex; flex-direction: column; color: #1a1a1a; }
+        .app-container { position: relative; width: 100%; height: 100%; display: flex; flex-direction: column; max-width: 600px; margin: 0 auto; background-color: #ffffff; overflow: hidden; }
+        .header { position: relative; display: flex; align-items: center; justify-content: space-between; padding: 40px 16px 12px; background: #fff; z-index: 10; height: 88px; flex-shrink: 0; }
+        .header-left { display: flex; align-items: center; cursor: pointer; width: 40px; }
+        .header-center { position: absolute; left: 50%; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; cursor: pointer; white-space: nowrap; }
+        .header-title { font-size: 14px; font-weight: 600; color: #000; display: flex; align-items: center; gap: 2px; }
+        .header-subtitle { font-size: 10px; color: #999; margin-top: 2px; }
+        .header-right { display: flex; align-items: center; gap: 16px; width: auto; min-width: calc(var(--phone-w) + var(--mute-w) + 16px); justify-content: flex-end; flex-shrink: 0; }
+        .chat-container { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 24px; padding-bottom: 140px; }
+        .chat-container::-webkit-scrollbar { display: none; }
+        .message { display: flex; flex-direction: column; max-width: 88%; }
+        .message-left { align-self: flex-start; }
+        .message-right { align-self: flex-end; align-items: flex-end; }
+        .bubble { padding: 10px 12px; font-size: 16px; line-height: 1.6; word-wrap: break-word; }
+        .bubble-left { background-color: #f6f6f6; color: #1a1a1a; border-radius: 16px; }
+        .bubble-right { background-color: #0071fe; color: #fff; border-radius: 16px; }
+        .inline-code { background-color: #dededd; padding: 2px 6px; border-radius: 4px; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 14.5px; color: #333; margin: 0 2px; }
+        .bubble-right .inline-code { background-color: rgba(255,255,255,0.2); color: #fff; }
+        .timestamp { text-align: center; font-size: 12px; color: #b0b1b6; margin: -10px 0 10px; width: 100%; }
+        .bubble-divider { height: 1px; background-color: rgba(0,0,0,0.04); margin: 12px 0 8px; }
+        .action-buttons { display: flex; gap: 4px; margin-top: 6px; margin-left: -2px; margin-right: -2px; }
+        .action-btn { width: 30px; height: 30px; border-radius: 10px; background-color: #ebf2fe; display: flex; justify-content: center; align-items: center; cursor: pointer; }
+        .action-btn.refresh { margin-left: auto; }
+        .bottom-area { position: absolute; bottom: 0; left: 0; right: 0; background: #ffffff 100%; padding: 10px 16px 24px; display: flex; flex-direction: column; gap: 12px; z-index: 10; pointer-events: none; }
+        .bottom-area > * { pointer-events: auto; }
+        .quick-actions { display: flex; gap: 10px; overflow-x: auto; padding-bottom: 4px; scrollbar-width: none; }
+        .quick-actions::-webkit-scrollbar { display: none; }
+        .quick-action-btn { white-space: nowrap; padding: 8px 10px; background-color: #ffffff; border-radius: 10px; font-size: 14px; color: #1a1a1a; display: flex; align-items: center; gap: 6px; font-weight: 500; flex-shrink: 0; border: 1.5px solid #e5e6eb; box-shadow: 0 1px 2px rgba(0,0,0,0.02); }
+        .input-bar { display: flex; align-items: center; background-color: #ffffff; border-radius: 16px; padding: 10px 14px; gap: 10px; border: 1px solid #e5e6eb; box-shadow: 0 2px 8px rgba(78, 78, 78, 0.2); }
+        .input-input { flex: 1; border: none; outline: none; font-size: 15px; background: transparent; padding: 6px 0; color: #1a1a1a; }
+        .input-input::placeholder { color: #b0b1b6; }
+        .sidebar-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background-color: rgba(0,0,0,0.4); z-index: 100; opacity: 0; pointer-events: none; transition: opacity 0.3s ease; }
+        .sidebar-overlay.active { opacity: 1; pointer-events: auto; }
+        .sidebar { position: fixed; top: 0; left: -85%; width: 85%; max-width: 340px; height: 100%; background-color: #fff; z-index: 101; transition: left 0.3s ease; display: flex; flex-direction: column; }
+        .sidebar.active { left: 0; }
+        .sidebar-header { padding: 16px 20px; display: flex; align-items: center; gap: 12px; height: 68px; flex-shrink: 0; }
+        .search-bar { flex: 1; display: flex; align-items: center; background-color: #f4f5f9; border-radius: 20px; padding: 8px 14px; gap: 8px; }
+        .search-input { border: none; outline: none; background: transparent; font-size: 15px; flex: 1; }
+        .search-input::placeholder { color: #999; }
+        .new-chat-btn { width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; cursor: pointer; }
+        .sidebar-content { flex: 1; overflow-y: auto; padding: 0 20px; }
+        .sidebar-content::-webkit-scrollbar { display: none; }
+        .menu-item { display: flex; align-items: center; padding: 14px 0; font-size: 16px; color: #1a1a1a; cursor: pointer; gap: 16px; font-weight: 500; }
+        .menu-icon { width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; border-radius: 50%; overflow: hidden; }
+        .menu-icon img { width: 100%; height: 100%; object-fit: cover; }
+        .badge { background-color: #eef2ff; color: #3568f5; font-size: 10px; padding: 2px 6px; border-radius: 4px; margin-left: 4px; font-weight: 600; }
+        .divider { height: 1px; background-color: #f0f1f4; margin: 8px 0; }
+        .history-item { display: flex; align-items: center; padding: 14px 0; font-size: 15px; color: #1a1a1a; cursor: pointer; gap: 16px; }
+        .history-icon { width: 30px; height: 30px; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+        .history-text { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1; font-weight: 400; }
+        .color-green { background-color: #e8f5e9; color: #4caf50; }
+        .color-pink { background-color: #fce4ec; color: #e91e63; }
+        .color-red { background-color: #ffebee; color: #f44336; }
+        .color-orange { background-color: #fff3e0; color: #ff9800; }
+        .color-purple { background-color: #f3e5f5; color: #9c27b0; }
+        .color-blue { background-color: #e3f2fd; color: #2196f3; }
+        .sidebar-footer { padding: 16px 20px; display: flex; align-items: center; justify-content: space-between; border-top: 1px solid #f0f1f4; background: #fff; flex-shrink: 0; height: 72px; padding-bottom: max(16px, env(safe-area-inset-bottom)); }
+        .user-info { display: flex; align-items: center; gap: 12px; cursor: pointer; }
+        .user-avatar { width: 36px; height: 36px; border-radius: 50%; overflow: hidden; background: #eee; }
+        .user-avatar img { width: 100%; height: 100%; object-fit: cover; }
+        .user-name { font-size: 13px; font-weight: 500; display: flex; align-items: center; gap: 4px; }
+        .footer-actions { display: flex; gap: 16px; }
+        .footer-btn { display: flex; align-items: center; justify-content: center; cursor: pointer; }
+        .flex-row { display: flex; align-items: flex-start; gap: 8px; margin-bottom: 16px; }
+        .dot { margin-top: 10px; width: 4px; height: 4px; border-radius: 50%; background-color: #1a1a1a; flex-shrink: 0; }
+
+        /* Icons cut from the supplied reference screenshots. */
+        .header-left svg,
+        .header-title svg,
+        .header-right svg,
+        .search-bar svg,
+        .new-chat-btn svg,
+        .menu-icon svg,
+        .history-icon svg,
+        .footer-btn svg,
+        .input-bar > svg,
+        .quick-action-btn svg:first-of-type,
+        .action-btn svg { background-repeat: no-repeat; background-position: center; background-size: contain; }
+        .header-left svg > *,
+        .header-title svg > *,
+        .header-right svg > *,
+        .search-bar svg > *,
+        .new-chat-btn svg > *,
+        .menu-icon svg > *,
+        .history-icon svg > *,
+        .footer-btn svg > *,
+        .input-bar > svg > *,
+        .quick-action-btn svg:first-of-type > *,
+        .action-btn svg > * { opacity: 0; }
+
+        .header-left svg { background-image: url("assets/doubao-icons/menu.png"); }
+        .header-title svg { background-image: url("assets/doubao-icons/chevron.png"); }
+        .header-right svg:nth-child(1) { background-image: url("assets/doubao-icons/phone.png"); }
+        .header-right svg:nth-child(2) { background-image: url("assets/doubao-icons/mute.png"); }
+
+        .action-btn { background-color: transparent; background-size: 100% 100%; }
+        .action-btn:nth-child(1) { background-image: url("assets/doubao-icons/copy-button.png"); }
+        .action-btn:nth-child(2) { background-image: url("assets/doubao-icons/speaker-button.png"); }
+        .action-btn:nth-child(3) { background-image: url("assets/doubao-icons/like-button.png"); }
+        .action-btn:nth-child(4) { background-image: url("assets/doubao-icons/dislike-button.png"); }
+        .action-btn:nth-child(5) { background-image: url("assets/doubao-icons/share-button.png"); }
+        .action-btn:nth-child(6) { background-image: url("assets/doubao-icons/refresh-button.png"); }
+
+        .quick-action-btn:nth-child(1) svg:first-of-type { background-image: url("assets/doubao-icons/quick-lightning.png"); }
+        .quick-action-btn:nth-child(2) svg:first-of-type { background-image: url("assets/doubao-icons/quick-pencil.png"); }
+        .quick-action-btn:nth-child(3) svg:first-of-type { background-image: url("assets/doubao-icons/quick-question.png"); }
+        .quick-action-btn:nth-child(4) svg:first-of-type { background-image: url("assets/doubao-icons/quick-bag.png"); }
+
+        .input-bar > svg:nth-of-type(1) { background-image: url("assets/doubao-icons/camera.png"); }
+        .input-bar > svg:nth-of-type(2) { background-image: url("assets/doubao-icons/voice.png"); }
+        .input-bar > svg:nth-of-type(3) { background-image: url("assets/doubao-icons/plus.png"); }
+
+        .search-bar svg { background-image: url("assets/doubao-icons/search.png"); }
+        .new-chat-btn svg { background-image: url("assets/doubao-icons/new-chat.png"); }
+        .sidebar-content > .menu-item:nth-child(2) .menu-icon svg { background-image: url("assets/doubao-icons/skills.png"); }
+        .sidebar-content > .menu-item:nth-child(3) .menu-icon svg { background-image: url("assets/doubao-icons/ai-create.png"); }
+        .sidebar-content > .menu-item:nth-child(4) .menu-icon svg { background-image: url("assets/doubao-icons/cloud.png"); }
+        .history-icon { background-position: center; background-size: 100% 100%; background-repeat: no-repeat; }
+        .history-icon svg { background-image: none; }
+        .history-icon.color-green { background-image: url("assets/doubao-icons/history-green.png"); }
+        .history-icon.color-pink,
+        .history-icon.color-red { background-image: url("assets/doubao-icons/history-pink.png"); }
+        .history-icon.color-orange { background-image: url("assets/doubao-icons/history-orange.png"); }
+        .history-icon.color-purple { background-image: url("assets/doubao-icons/history-purple.png"); }
+        .history-icon.color-blue { background-image: url("assets/doubao-icons/history-blue.png"); }
+        .footer-btn:nth-child(1) svg { background-image: url("assets/doubao-icons/scan.png"); }
+        .footer-btn:nth-child(2) svg { background-image: url("assets/doubao-icons/bell.png"); }
+        .footer-btn:nth-child(3) svg { background-image: url("assets/doubao-icons/settings.png"); }
+
+        /* Keep the reference artwork crisp without scaling the whole interface. */
+        .header-left svg { width: 30px; height: 30px; }
+        .header-title svg { width: 16px; height: 16px; }
+        .header-right svg { width: 28px; height: 28px; }
+        .action-buttons { gap: 8px; }
+        .action-btn { width: 38px; height: 38px; border-radius: 12px; }
+        .quick-action-btn svg { width: 22px; height: 22px; }
+        .quick-action-btn svg:last-child { width: 12px; height: 12px; }
+        .input-bar > svg { width: 30px; height: 30px; }
+        .search-bar svg { width: 26px; height: 26px; }
+        .new-chat-btn svg { width: 30px; height: 30px; }
+        .menu-icon { width: 36px; height: 36px; }
+        .menu-icon img { width: 36px; height: 36px; }
+        .menu-icon svg { width: 34px; height: 34px; }
+        .history-item { gap: 14px; }
+        .history-icon { width: 36px; height: 36px; }
+        .user-avatar { width: 40px; height: 40px; }
+        .footer-btn svg { width: 30px; height: 30px; }
+
+        /* ===== 素材尺寸调节区：以后只改这里 ===== */
+        :root {
+            --menu-w: 20px; --menu-h: 20px;
+            --chevron-w: 12px; --chevron-h: 12px;
+            --phone-w: 30px; --phone-h: 30px;
+            --mute-w: 26px; --mute-h: 26px;
+
+            --copy-button-w: 42px; --copy-button-h: 34px;
+            --speaker-button-w: 42px; --speaker-button-h: 34px;
+            --like-button-w: 42px; --like-button-h: 34px;
+            --dislike-button-w: 42px; --dislike-button-h: 34px;
+            --share-button-w: 42px; --share-button-h: 34px;
+            --refresh-button-w: 42px; --refresh-button-h: 34px;
+
+            --quick-lightning-w: 20px; --quick-lightning-h: 20px;
+            --quick-pencil-w: 22px; --quick-pencil-h: 22px;
+            --quick-question-w: 22px; --quick-question-h: 22px;
+            --quick-bag-w: 22px; --quick-bag-h: 22px;
+            --quick-arrow-w: 12px; --quick-arrow-h: 12px;
+
+            --camera-w: 30px; --camera-h: 30px;
+            --voice-w: 30px; --voice-h: 30px;
+            --plus-w: 30px; --plus-h: 30px;
+
+            --search-w: 26px; --search-h: 26px;
+            --new-chat-w: 30px; --new-chat-h: 30px;
+            --skills-w: 30px; --skills-h: 30px;
+            --ai-create-w: 30px; --ai-create-h: 30px;
+            --cloud-w: 30px; --cloud-h: 30px;
+            --history-green-w: 38px; --history-green-h: 38px;
+            --history-pink-w: 50px; --history-pink-h: 48px;
+            --history-orange-w: 48px; --history-orange-h: 44px;
+            --history-purple-w: 38px; --history-purple-h: 38px;
+            --history-blue-w: 38px; --history-blue-h: 38px;
+            --history-green-x: 0px;
+            --history-pink-x: -6px;
+            --history-orange-x: -6px;
+            --history-purple-x: 0px;
+            --history-blue-x: 0px;
+            --scan-w: 30px; --scan-h: 30px;
+            --bell-w: 30px; --bell-h: 30px;
+            --settings-w: 30px; --settings-h: 30px;
+            --doubao-avatar-w: 36px; --doubao-avatar-h: 36px;
+            --user-avatar-w: 40px; --user-avatar-h: 40px;
+        }
+
+        .header-left svg { width: var(--menu-w); height: var(--menu-h); }
+        .header-title svg { width: var(--chevron-w); height: var(--chevron-h); }
+        .header-right svg:nth-child(1) { width: var(--phone-w); height: var(--phone-h); flex: 0 0 auto; }
+        .header-right svg:nth-child(2) { width: var(--mute-w); height: var(--mute-h); flex: 0 0 auto; }
+
+        .action-btn:nth-child(1) { width: var(--copy-button-w); height: var(--copy-button-h); }
+        .action-btn:nth-child(2) { width: var(--speaker-button-w); height: var(--speaker-button-h); }
+        .action-btn:nth-child(3) { width: var(--like-button-w); height: var(--like-button-h); }
+        .action-btn:nth-child(4) { width: var(--dislike-button-w); height: var(--dislike-button-h); }
+        .action-btn:nth-child(5) { width: var(--share-button-w); height: var(--share-button-h); }
+        .action-btn:nth-child(6) { width: var(--refresh-button-w); height: var(--refresh-button-h); }
+
+        .quick-action-btn:nth-child(1) svg:first-of-type { width: var(--quick-lightning-w); height: var(--quick-lightning-h); }
+        .quick-action-btn:nth-child(2) svg:first-of-type { width: var(--quick-pencil-w); height: var(--quick-pencil-h); }
+        .quick-action-btn:nth-child(3) svg:first-of-type { width: var(--quick-question-w); height: var(--quick-question-h); }
+        .quick-action-btn:nth-child(4) svg:first-of-type { width: var(--quick-bag-w); height: var(--quick-bag-h); }
+        .quick-action-btn:nth-child(1) svg:last-child { width: var(--quick-arrow-w); height: var(--quick-arrow-h); }
+
+        .input-bar > svg:nth-of-type(1) { width: var(--camera-w); height: var(--camera-h); }
+        .input-bar > svg:nth-of-type(2) { width: var(--voice-w); height: var(--voice-h); }
+        .input-bar > svg:nth-of-type(3) { width: var(--plus-w); height: var(--plus-h); }
+
+        .search-bar svg { width: var(--search-w); height: var(--search-h); }
+        .new-chat-btn svg { width: var(--new-chat-w); height: var(--new-chat-h); }
+        .sidebar-content > .menu-item:nth-child(2) .menu-icon svg { width: var(--skills-w); height: var(--skills-h); }
+        .sidebar-content > .menu-item:nth-child(3) .menu-icon svg { width: var(--ai-create-w); height: var(--ai-create-h); }
+        .sidebar-content > .menu-item:nth-child(4) .menu-icon svg { width: var(--cloud-w); height: var(--cloud-h); }
+        .history-icon {
+            margin-left: var(--history-icon-x, 0px);
+        }
+        .history-icon.color-green {
+            --history-icon-x: var(--history-green-x);
+            width: var(--history-green-w);
+            height: var(--history-green-h);
+        }
+        .history-icon.color-pink,
+        .history-icon.color-red {
+            --history-icon-x: var(--history-pink-x);
+            width: var(--history-pink-w);
+            height: var(--history-pink-h);
+        }
+        .history-icon.color-orange {
+            --history-icon-x: var(--history-orange-x);
+            width: var(--history-orange-w);
+            height: var(--history-orange-h);
+        }
+        .history-icon.color-purple {
+            --history-icon-x: var(--history-purple-x);
+            width: var(--history-purple-w);
+            height: var(--history-purple-h);
+        }
+        .history-icon.color-blue {
+            --history-icon-x: var(--history-blue-x);
+            width: var(--history-blue-w);
+            height: var(--history-blue-h);
+        }
+        .footer-btn:nth-child(1) svg { width: var(--scan-w); height: var(--scan-h); }
+        .footer-btn:nth-child(2) svg { width: var(--bell-w); height: var(--bell-h); }
+        .footer-btn:nth-child(3) svg { width: var(--settings-w); height: var(--settings-h); }
+        .menu-icon { width: var(--doubao-avatar-w); height: var(--doubao-avatar-h); }
+        .menu-icon img { width: var(--doubao-avatar-w); height: var(--doubao-avatar-h); }
+        .user-avatar { width: var(--user-avatar-w); height: var(--user-avatar-h); }
+        /* ===== 素材尺寸调节区结束 ===== */
+
+        /* Generated phone records reuse the original Doubao layout. */
+        .header-right svg:first-child { cursor: pointer; }
+        .header-right svg:first-child.is-generating { opacity: .42; animation: doubao-generate-pulse 1s ease-in-out infinite; }
+        .doubao-generated-title { text-align: center; color: #a0a1a8; font-size: 12px; margin: -4px 0 8px; }
+        .doubao-media-card { width: min(224px, 72vw); overflow: hidden; border: 1px solid #e8e9ee; border-radius: 14px; background: #fafafb; }
+        .message-right .doubao-media-card { border-color: rgba(0, 113, 254, .24); }
+        .doubao-media-preview { position: relative; aspect-ratio: 1 / 1; padding: 14px; display: flex; flex-direction: column; justify-content: flex-end; overflow: hidden; color: #fff; background: linear-gradient(145deg, #759dd6, #9d7ebd 48%, #2d4d79); }
+        .doubao-media-preview.video { background: linear-gradient(145deg, #323d57, #8a668e 52%, #d49776); }
+        .doubao-media-preview::before { content: ""; position: absolute; inset: 0; background: linear-gradient(180deg, transparent 35%, rgba(0,0,0,.55)); }
+        .doubao-media-kind, .doubao-media-description, .doubao-play-mark { position: relative; z-index: 1; }
+        .doubao-media-kind { align-self: flex-start; padding: 3px 6px; border-radius: 999px; background: rgba(0,0,0,.24); font-size: 10px; }
+        .doubao-media-description { margin-top: auto; font-size: 13px; font-weight: 600; line-height: 1.45; }
+        .doubao-play-mark { position: absolute; top: 50%; left: 50%; width: 42px; height: 42px; border-radius: 50%; transform: translate(-50%, -50%); display: flex; align-items: center; justify-content: center; background: rgba(255,255,255,.9); color: #222; font-size: 18px; }
+        .doubao-media-meta { padding: 9px 11px; }
+        .doubao-media-title { font-size: 13px; font-weight: 600; }
+        .doubao-media-detail { margin-top: 3px; color: #8e8f96; font-size: 11px; line-height: 1.4; }
+        .doubao-file-card { width: min(250px, 76vw); display: flex; align-items: center; gap: 10px; padding: 11px; border-radius: 13px; background: #f5f7fb; }
+        .doubao-file-icon { width: 34px; height: 40px; flex: 0 0 auto; display: flex; align-items: center; justify-content: center; border-radius: 8px; background: #e4ecff; color: #2469f0; font-size: 10px; font-weight: 800; }
+        .doubao-file-copy { min-width: 0; }
+        .doubao-file-name { overflow: hidden; color: #111 !important; font-size: 13px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+        .doubao-file-meta { margin-top: 3px; color: #9899a1; font-size: 11px; }
+        .doubao-message-bubble { display: flex; flex-direction: column; gap: 8px; }
+        .doubao-message-bubble .doubao-media-card,
+        .doubao-message-bubble .doubao-file-card { max-width: 100%; }
+        .doubao-message-time { display: block; align-self: stretch; margin: -12px 0 10px; }
+        .doubao-history-item.is-active { background: #f3f6ff; border-radius: 10px; }
+        .doubao-history-item.is-generating { opacity: .5; pointer-events: none; }
+        @keyframes doubao-generate-pulse { 50% { transform: scale(.88); } }
+
+    </style>
+</head>
+<body>
+<div class="app-container">
+    <div class="header">
+        <div class="header-left" id="hamburgerBtn">
+            <svg viewBox="0 0 24 24" width="22" height="22">
+                <rect x="2" y="7" width="20" height="2" fill="#000" rx="1"/>
+                <rect x="2" y="15" width="14" height="2" fill="#000" rx="1"/>
+            </svg>
+        </div>
+        <div class="header-center" id="doubaoHeaderBack" role="button" tabindex="0" aria-label="返回查手机主屏幕">
+            <div class="header-title">
+                豆包 <svg viewBox="0 0 24 24" width="12" height="12" stroke="#999" stroke-width="2" fill="none"><path d="M9 18l6-6-6-6"/></svg>
+            </div>
+            <div class="header-subtitle">AI 生成可能有误 注意核实</div>
+        </div>
+        <div class="header-right">
+            <svg viewBox="0 0 24 24" width="20" height="20" stroke="#000" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path></svg>
+            <svg viewBox="0 0 24 24" width="20" height="20" stroke="#000" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><line x1="23" y1="9" x2="17" y2="15"></line><line x1="17" y1="9" x2="23" y2="15"></line></svg>
+        </div>
+    </div>
+    <div class="chat-container">
+        <div class="message message-left">
+            <div class="bubble bubble-left">
+                <p style="margin-bottom: 12px;">3. 保存，再点「重建向量索引」</p>
+                <p style="margin-bottom: 16px;">4. 如果还是报错：去硅基流动模型页，确认 <span class="inline-code">BAAI/bge-m3</span> 这个模型已经开通可用</p>
+                <p style="font-weight: 600; font-size: 17px; margin-bottom: 16px;">临时备选方案</p>
+                <p style="margin-bottom: 12px;">如果你暂时不想折腾向量接口：</p>
+                <div class="flex-row">
+                    <div class="dot"></div>
+                    <p>可以把页面里 <span class="inline-code">vector_enabled</span> 改成 <span class="inline-code">false</span>，直接关闭远程向量检索，只用本地关键词记忆，不会再报这个 401。</p>
+                </div>
+                <p>需要我给你一段可以直接加到前端做 Key 可用性前置检测（提前校验会不会 401）的 JS 代码吗？</p>
+            </div>
+        </div>
+        <div class="timestamp">10:24</div>
+        <div class="message message-right">
+            <div class="bubble bubble-right">哈喽豆包</div>
+        </div>
+        <div class="message message-left">
+            <div class="bubble bubble-left">
+                <div style="margin-bottom: 8px;">哈喽～ 😆 有什么要帮忙的吗？</div>
+                <div class="bubble-divider"></div>
+                <div class="action-buttons">
+                    <div class="action-btn"><svg viewBox="0 0 24 24" width="16" height="16" stroke="#3568f5" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg></div>
+                    <div class="action-btn"><svg viewBox="0 0 24 24" width="16" height="16" stroke="#3568f5" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg></div>
+                    <div class="action-btn"><svg viewBox="0 0 24 24" width="16" height="16" stroke="#3568f5" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"></path></svg></div>
+                    <div class="action-btn"><svg viewBox="0 0 24 24" width="16" height="16" stroke="#3568f5" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M10 15v4a3 3 0 0 0 3 3l4-9V2H5.72a2 2 0 0 0-2 1.7l-1.38 9a2 2 0 0 0 2 2.3zm7-13h3a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2h-3"></path></svg></div>
+                    <div class="action-btn"><svg viewBox="0 0 24 24" width="16" height="16" stroke="#3568f5" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 14 20 9 15 4"></polyline><path d="M4 20v-7a4 4 0 0 1 4-4h12"></path></svg></div>
+                    <div class="action-btn refresh"><svg viewBox="0 0 24 24" width="16" height="16" stroke="#3568f5" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="bottom-area">
+        <div class="quick-actions">
+            <div class="quick-action-btn"><svg viewBox="0 0 24 24" width="16" height="16" stroke="#1a1a1a" stroke-width="1.8" fill="none" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>快速 <svg viewBox="0 0 24 24" width="12" height="12" stroke="#ccc" stroke-width="2" fill="none"><path d="M9 18l6-6-6-6"/></svg></div>
+            <div class="quick-action-btn"><svg viewBox="0 0 24 24" width="16" height="16" stroke="#1a1a1a" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>帮我写作</div>
+            <div class="quick-action-btn"><svg viewBox="0 0 24 24" width="16" height="16" stroke="#1a1a1a" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"></rect><circle cx="8" cy="8" r="2"></circle><path d="M21 15l-4-4-4 4"></path><circle cx="16" cy="16" r="4"></circle><line x1="18.8" y1="18.8" x2="21" y2="21"></line></svg>拍题答疑</div>
+            <div class="quick-action-btn"><svg viewBox="0 0 24 24" width="16" height="16" stroke="#1a1a1a" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"></path><line x1="3" y1="6" x2="21" y2="6"></line><path d="M16 10a4 4 0 0 1-8 0"></path></svg>买前问豆包</div>
+        </div>
+        <div class="input-bar">
+            <svg class="icon-btn" viewBox="0 0 24 24" width="24" height="24" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M20.5 7h-3l-1.5-2h-8L6.5 7h-3a2.5 2.5 0 0 0-2.5 2.5v10A2.5 2.5 0 0 0 3.5 22h17a2.5 2.5 0 0 0 2.5-2.5v-10A2.5 2.5 0 0 0 20.5 7z"></path><circle cx="12" cy="14" r="4.5"></circle></svg>
+            <input type="text" class="input-input" placeholder="发消息或按住说话...">
+            <svg viewBox="0 0 24 24" width="24" height="24" stroke="#1a1a1a" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="22"></line></svg>
+            <svg viewBox="0 0 24 24" width="24" height="24" stroke="#1a1a1a" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="16"></line><line x1="8" y1="12" x2="16" y2="12"></line></svg>
+        </div>
+    </div>
+</div>
+<div class="sidebar-overlay" id="sidebarOverlay"></div>
+<div class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+        <div class="search-bar">
+            <svg viewBox="0 0 24 24" width="18" height="18" stroke="#999" stroke-width="2" fill="none"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+            <input type="text" class="search-input" placeholder="搜索">
+        </div>
+        <div class="new-chat-btn">
+            <svg viewBox="0 0 24 24" width="22" height="22" stroke="#1a1a1a" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+        </div>
+    </div>
+    <div class="sidebar-content">
+        <div class="menu-item">
+            <div class="menu-icon" style="background-color: #f4f5f9;"><img src="assets/doubao-avatar.png" alt="豆包"></div>
+            豆包
+        </div>
+        <div class="menu-item">
+            <div class="menu-icon"><svg viewBox="0 0 24 24" width="24" height="24" stroke="#1a1a1a" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"></polygon><polyline points="2 12 12 17 22 12"></polyline><polyline points="2 17 12 22 22 17"></polyline></svg></div>
+            技能
+        </div>
+        <div class="menu-item">
+            <div class="menu-icon"><svg viewBox="0 0 24 24" width="24" height="24" stroke="#1a1a1a" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="4"></rect><line x1="12" y1="8" x2="12" y2="16"></line><line x1="8" y1="12" x2="16" y2="12"></line><path d="M16 8l1-1m-4 5l-1 1" stroke-width="1.5"></path></svg></div>
+            AI 创作
+        </div>
+        <div class="menu-item">
+            <div class="menu-icon"><svg viewBox="0 0 24 24" width="24" height="24" stroke="#1a1a1a" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"></path></svg></div>
+            云盘 <span class="badge">新</span>
+        </div>
+        <div class="divider"></div>
+    </div>
+    <div class="sidebar-footer">
+        <div class="user-info">
+            <div class="user-avatar"><img id="doubaoFooterAvatar" src="assets/user-avatar.png" alt="联系人"></div>
+            <div class="user-name" id="doubaoFooterName">联系人 <svg viewBox="0 0 24 24" width="16" height="16" stroke="#999" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg></div>
+        </div>
+        <div class="footer-actions">
+            <div class="footer-btn"><svg viewBox="0 0 24 24" width="22" height="22" stroke="#1a1a1a" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2"></path><path d="M17 3h2a2 2 0 0 1 2 2v2"></path><path d="M21 17v2a2 2 0 0 1-2 2h-2"></path><path d="M7 21H5a2 2 0 0 1-2-2v-2"></path><rect x="7" y="11" width="10" height="2"></rect></svg></div>
+            <div class="footer-btn"><svg viewBox="0 0 24 24" width="22" height="22" stroke="#1a1a1a" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></svg></div>
+            <div class="footer-btn"><svg viewBox="0 0 24 24" width="22" height="22" stroke="#1a1a1a" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg></div>
+        </div>
+    </div>
+</div>
+<script>
+    const doubaoPageState = {
+        data: { conversations: [], activeConversationId: '' },
+        activeConversationId: '',
+        isGenerating: false
+    };
+
+    const doubaoEscape = (value) => String(value == null ? '' : value).replace(/[&<>"']/g, char => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;'
+    })[char]);
+
+    const doubaoPost = (action, payload = {}) => {
+        if (window.parent && window.parent !== window) {
+            window.parent.postMessage({ source: 'phone-doubao', action, payload }, '*');
+        }
+    };
+
+    function getActiveDoubaoConversation() {
+        const conversations = Array.isArray(doubaoPageState.data.conversations)
+            ? doubaoPageState.data.conversations
+            : [];
+        return conversations.find(item => item.id === doubaoPageState.activeConversationId)
+            || conversations[0]
+            || null;
+    }
+
+    function renderDoubaoAsset(message) {
+        const asset = message.asset || {};
+        if (message.type === 'file') {
+            const extension = String(asset.fileType || (asset.fileName || '').split('.').pop() || 'FILE')
+                .slice(0, 5)
+                .toUpperCase();
+            return `<div class="doubao-file-card">
+                <div class="doubao-file-icon">${doubaoEscape(extension)}</div>
+                <div class="doubao-file-copy">
+                    <div class="doubao-file-name">${doubaoEscape(asset.fileName || asset.title || '文件')}</div>
+                    <div class="doubao-file-meta">${doubaoEscape([asset.fileType, asset.fileSize].filter(Boolean).join(' · ') || '豆包生成的文件')}</div>
+                </div>
+            </div>`;
+        }
+
+        const isVideo = message.type === 'video';
+        return `<div class="doubao-media-card">
+            <div class="doubao-media-preview${isVideo ? ' video' : ''}">
+                <span class="doubao-media-kind">${isVideo ? '视频' : '图片'}</span>
+                ${isVideo ? '<span class="doubao-play-mark">▶</span>' : ''}
+                <div class="doubao-media-description">${doubaoEscape(asset.description || '一张由对话内容生成的图片')}</div>
+            </div>
+            <div class="doubao-media-meta">
+                <div class="doubao-media-title">${doubaoEscape(asset.title || (isVideo ? '生成视频' : '生成图片'))}</div>
+                <div class="doubao-media-detail">${doubaoEscape(asset.detail || asset.duration || '可在对话中查看生成说明')}</div>
+            </div>
+        </div>`;
+    }
+
+    function parseDoubaoTime(value) {
+        const text = String(value || '').trim();
+        const match = text.match(/(\d{1,2}):(\d{2})/);
+        if (!match) return null;
+        const minutes = Number(match[1]) * 60 + Number(match[2]);
+        if (text.includes('昨天')) return minutes - 24 * 60;
+        if (text.includes('前天')) return minutes - 48 * 60;
+        return minutes;
+    }
+
+    function shouldRenderDoubaoTime(message, previousMessage) {
+        if (!message || !message.time) return false;
+        if (!previousMessage || !previousMessage.time) return false;
+        const current = parseDoubaoTime(message.time);
+        const previous = parseDoubaoTime(previousMessage.time);
+        if (current == null || previous == null) return false;
+        return Math.abs(current - previous) >= 10;
+    }
+
+    function renderDoubaoMessage(message, index, messages) {
+        const isAi = message.role === 'ai';
+        const sideClass = isAi ? 'message-left' : 'message-right';
+        const bubbleClass = isAi ? 'bubble-left' : 'bubble-right';
+        const hasAsset = ['image', 'video', 'file'].includes(message.type);
+        const assetMarkup = hasAsset ? renderDoubaoAsset(message) : '';
+        const textMarkup = message.text ? `<div>${doubaoEscape(message.text)}</div>` : '';
+        const contentMarkup = assetMarkup || textMarkup
+            ? `<div class="bubble ${bubbleClass} doubao-message-bubble">${assetMarkup}${textMarkup}</div>`
+            : '';
+        const timeMarkup = shouldRenderDoubaoTime(message, messages[index - 1])
+            ? `<div class="timestamp doubao-message-time">${doubaoEscape(message.time)}</div>`
+            : '';
+        return `${timeMarkup}<div class="message ${sideClass}">${contentMarkup}</div>`;
+    }
+
+    function renderDoubaoConversation(conversation) {
+        const chat = document.querySelector('.chat-container');
+        if (!chat) return;
+        if (!conversation) {
+            chat.innerHTML = `
+                <div class="doubao-generated-title">豆包对话记录</div>
+                <div class="message message-left">
+                    <div class="bubble bubble-left">点击右上角电话图标，生成这位联系人的豆包使用记录。</div>
+                </div>`;
+            return;
+        }
+
+        const messages = Array.isArray(conversation.messages) ? conversation.messages : [];
+        chat.innerHTML = `
+            <div class="doubao-generated-title">${doubaoEscape(conversation.title || '豆包对话')}</div>
+            ${messages.map((message, index) => renderDoubaoMessage(message, index, messages)).join('')}`;
+        chat.scrollTop = chat.scrollHeight;
+    }
+
+    function renderDoubaoConversationTitles() {
+        const sidebar = document.querySelector('.sidebar-content');
+        if (!sidebar) return;
+        sidebar.querySelectorAll('.doubao-generated-history').forEach(item => item.remove());
+        const conversations = Array.isArray(doubaoPageState.data.conversations)
+            ? doubaoPageState.data.conversations
+            : [];
+        if (!conversations.length) return;
+
+        const divider = sidebar.querySelector('.divider');
+        conversations.forEach((conversation, index) => {
+            const item = document.createElement('div');
+            item.className = `history-item doubao-generated-history${conversation.id === doubaoPageState.activeConversationId ? ' is-active' : ''}`;
+            item.dataset.conversationId = conversation.id;
+            item.innerHTML = `
+                <div class="history-icon color-${['green', 'pink', 'orange', 'purple', 'blue'][index % 5]}"></div>
+                <div class="history-text">${doubaoEscape(conversation.title || '未命名对话')}</div>`;
+            item.addEventListener('click', () => {
+                doubaoPageState.activeConversationId = conversation.id;
+                doubaoPageState.data.activeConversationId = conversation.id;
+                renderDoubaoConversationTitles();
+                renderDoubaoConversation(conversation);
+                doubaoPost('select-conversation', { activeConversationId: conversation.id });
+                document.getElementById('sidebar')?.classList.remove('active');
+                document.getElementById('sidebarOverlay')?.classList.remove('active');
+            });
+            sidebar.insertBefore(item, divider || sidebar.firstChild);
+        });
+    }
+
+    function renderDoubaoPage() {
+        const active = getActiveDoubaoConversation();
+        if (!doubaoPageState.activeConversationId && active) {
+            doubaoPageState.activeConversationId = active.id;
+        }
+        renderDoubaoConversationTitles();
+        renderDoubaoConversation(active);
+        const footerAvatar = document.getElementById('doubaoFooterAvatar');
+        const footerName = document.getElementById('doubaoFooterName');
+        if (footerAvatar) {
+            footerAvatar.src = doubaoPageState.contactAvatar || 'assets/user-avatar.png';
+            footerAvatar.alt = doubaoPageState.contactDisplayName || '联系人';
+        }
+        if (footerName) {
+            footerName.firstChild && (footerName.firstChild.textContent = doubaoPageState.contactDisplayName || doubaoPageState.contactName || '联系人');
+        }
+        const generateIcon = document.querySelector('.header-right svg:first-child');
+        if (generateIcon) {
+            generateIcon.classList.toggle('is-generating', doubaoPageState.isGenerating);
+            generateIcon.setAttribute('aria-label', doubaoPageState.isGenerating ? '正在生成' : '生成豆包对话');
+        }
+    }
+
+    document.getElementById('hamburgerBtn')?.addEventListener('click', () => {
+        document.getElementById('sidebar')?.classList.add('active');
+        document.getElementById('sidebarOverlay')?.classList.add('active');
+    });
+    document.getElementById('sidebarOverlay')?.addEventListener('click', () => {
+        document.getElementById('sidebar')?.classList.remove('active');
+        document.getElementById('sidebarOverlay')?.classList.remove('active');
+    });
+
+    document.getElementById('doubaoHeaderBack')?.addEventListener('click', () => doubaoPost('close'));
+    document.getElementById('doubaoHeaderBack')?.addEventListener('keydown', event => {
+        if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            doubaoPost('close');
+        }
+    });
+    document.querySelector('.header-right svg:first-child')?.addEventListener('click', () => {
+        if (!doubaoPageState.isGenerating) doubaoPost('request-generate');
+    });
+
+    window.addEventListener('message', event => {
+        const data = event.data;
+        if (!data || data.source !== 'phone-doubao-host') return;
+        if (data.action === 'sync-state') {
+            const payload = data.payload || {};
+            const nextContactId = String(payload.contactId || '');
+            const contactChanged = doubaoPageState.contactId && doubaoPageState.contactId !== nextContactId;
+            doubaoPageState.contactId = nextContactId;
+            doubaoPageState.data = payload.doubaoData || { conversations: [], activeConversationId: '' };
+            doubaoPageState.activeConversationId = contactChanged
+                ? (payload.activeConversationId || ((doubaoPageState.data.conversations || [])[0] || {}).id || '')
+                : (payload.activeConversationId
+                    || doubaoPageState.data.activeConversationId
+                    || ((doubaoPageState.data.conversations || [])[0] || {}).id
+                    || '');
+            doubaoPageState.isGenerating = !!payload.isGenerating;
+            doubaoPageState.contactAvatar = payload.contactAvatar || '';
+            doubaoPageState.contactDisplayName = payload.contactDisplayName || payload.contactName || '联系人';
+            doubaoPageState.contactName = payload.contactName || '联系人';
+            renderDoubaoPage();
+        } else if (data.action === 'generation-state') {
+            doubaoPageState.isGenerating = !!(data.payload && data.payload.isGenerating);
+            renderDoubaoPage();
+        }
+    });
+
+    renderDoubaoPage();
+    doubaoPost('ready');
+    doubaoPost('request-state');
+</script>
+</body>
+</html>

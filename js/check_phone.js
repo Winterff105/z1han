@@ -1195,7 +1195,7 @@ function initPhoneGrid() {
         }
 
         /* 修复查手机内App底部漏出问题 - 其他应用 (白底) */
-        #phone-weibo, #phone-icity, #phone-browser, #phone-notes, #phone-files, #phone-health, #phone-delivery {
+        #phone-weibo, #phone-icity, #phone-doubao, #phone-browser, #phone-notes, #phone-files, #phone-health, #phone-delivery {
             position: fixed !important;
             top: 0 !important;
             left: 0 !important;
@@ -1207,6 +1207,20 @@ function initPhoneGrid() {
             background-color: #fff !important; /* 强制背景色，防止透出 */
             overflow: hidden !important;
         }
+
+        #phone-doubao {
+            z-index: 220 !important;
+            background-color: #fff !important;
+        }
+
+        #phone-doubao iframe {
+            display: block;
+            width: 100%;
+            height: 100%;
+            border: 0;
+            background: #fff;
+        }
+
 
         #phone-parcel {
             position: fixed !important;
@@ -1261,6 +1275,8 @@ function initPhoneGrid() {
         window.handleAppClick = function(appId, appName) {
             if (appId === 'phone-app') {
                 openPhoneCheckContactModal();
+            } else if (appId === 'phone-doubao') {
+                openPhoneDoubaoApp();
             } else if (appId === 'phone-wechat') {
                 document.getElementById('phone-wechat').classList.remove('hidden');
                 // 初始化 Tab 和按钮状态
@@ -1318,6 +1334,235 @@ function openPhoneCheckContactModal() {
         renderPhoneContactList();
         modal.classList.remove('hidden');
     }
+}
+
+function getPhoneDoubaoFrame() {
+    return document.getElementById('phone-doubao-frame');
+}
+
+function getPhonePromptMemories(contact) {
+    const state = window.iphoneSimState || {};
+    const memories = Array.isArray(state.memories) ? state.memories : [];
+    const contactId = contact ? String(contact.id) : '';
+    if (!contactId) return [];
+    return memories
+        .filter(memory => memory && String(memory.contactId || '') === contactId)
+        .filter(memory => (memory.reviewStatus || 'approved') !== 'rejected')
+        .slice()
+        .sort((a, b) => (b.time || 0) - (a.time || 0))
+        .slice(0, 12)
+        .map(memory => String(memory.content || memory.title || '').trim())
+        .filter(Boolean);
+}
+
+function getPhonePromptWorldbook(contact) {
+    const state = window.iphoneSimState || {};
+    const worldbook = Array.isArray(state.worldbook) ? state.worldbook : [];
+    if (!worldbook.length) return [];
+    const active = worldbook.filter(entry => entry && entry.enabled !== false);
+    const linked = Array.isArray(contact && contact.linkedWbCategories) && contact.linkedWbCategories.length
+        ? active.filter(entry => contact.linkedWbCategories.includes(entry.categoryId))
+        : active;
+    return linked
+        .slice(0, 8)
+        .map(entry => String(entry.content || entry.title || '').trim())
+        .filter(Boolean);
+}
+
+function buildPhoneDoubaoPromptContext(contact) {
+    const sharedContext = buildPhoneSharedPromptContext(contact, {
+        recentChatFallback: '暂无最近聊天记录可供参考。',
+        userPersonaFallback: '未填写'
+    });
+    const memories = getPhonePromptMemories(contact);
+    const worldbook = getPhonePromptWorldbook(contact);
+    const previousConversations = contact
+        && window.iphoneSimState
+        && window.iphoneSimState.phoneContent
+        && window.iphoneSimState.phoneContent[contact.id]
+        && window.iphoneSimState.phoneContent[contact.id].doubaoData
+        && Array.isArray(window.iphoneSimState.phoneContent[contact.id].doubaoData.conversations)
+        ? window.iphoneSimState.phoneContent[contact.id].doubaoData.conversations
+        : [];
+    const previousTitles = previousConversations
+        .map(item => String(item && item.title || '').trim())
+        .filter(Boolean)
+        .slice(0, 20);
+
+    return {
+        contactPersona: sharedContext.contactPersona || '无',
+        userName: sharedContext.userName || '用户',
+        userPersona: sharedContext.userPersonaText || '未填写',
+        recentChatContext: sharedContext.recentChatContext || '暂无最近聊天记录可供参考。',
+        memoriesText: memories.length ? memories.map(item => `- ${item}`).join('\n') : '暂无可用记忆',
+        worldbookText: worldbook.length ? worldbook.map(item => `- ${item}`).join('\n') : '暂无关联世界书',
+        previousTitlesText: previousTitles.length ? previousTitles.map(item => `- ${item}`).join('\n') : '暂无上一轮豆包会话标题',
+    };
+}
+
+function normalizePhoneDoubaoMessage(message) {
+    if (!message || typeof message !== 'object') return null;
+    const role = String(message.role || '').toLowerCase();
+    const type = String(message.type || 'text').toLowerCase();
+    const text = String(message.text || message.content || '').trim();
+    const time = String(message.time || '').trim();
+    const asset = message.asset && typeof message.asset === 'object' ? {
+        title: String(message.asset.title || message.asset.name || '').trim(),
+        description: String(message.asset.description || message.asset.preview || '').trim(),
+        detail: String(message.asset.detail || '').trim(),
+        fileName: String(message.asset.fileName || '').trim(),
+        fileSize: String(message.asset.fileSize || '').trim(),
+        fileType: String(message.asset.fileType || '').trim(),
+        duration: String(message.asset.duration || '').trim()
+    } : null;
+    return {
+        role: role === 'ai' ? 'ai' : 'user',
+        type: ['image', 'video', 'file', 'text'].includes(type) ? type : 'text',
+        text,
+        time,
+        asset,
+        style: String(message.style || '').trim(),
+    };
+}
+
+function normalizePhoneDoubaoConversation(conversation) {
+    if (!conversation || typeof conversation !== 'object') return null;
+    const rawMessages = Array.isArray(conversation.messages)
+        ? conversation.messages.map(normalizePhoneDoubaoMessage).filter(Boolean)
+        : [];
+    const messages = [];
+    rawMessages.forEach(message => {
+        const previous = messages[messages.length - 1];
+        const canMerge = previous
+            && previous.role === message.role
+            && previous.type === 'text'
+            && message.type === 'text'
+            && !previous.asset
+            && !message.asset;
+        if (canMerge) {
+            const left = String(previous.text || '').trim();
+            const right = String(message.text || '').trim();
+            previous.text = [left, right].filter(Boolean).join('\n');
+            previous.time = message.time || previous.time;
+        } else {
+            messages.push({ ...message });
+        }
+    });
+    if (messages.length && messages[messages.length - 1].role !== 'ai') {
+        const lastMessage = messages[messages.length - 1];
+        messages.push({
+            role: 'ai',
+            type: 'text',
+            text: lastMessage.type === 'image'
+                ? '收到，我先按你的要求处理这张图片。'
+                : lastMessage.type === 'file'
+                    ? '收到，我先帮你看一下这个文件。'
+                    : '收到，我理解你的意思了，我整理一下再回复你。',
+            time: lastMessage.time || '',
+            asset: null,
+            style: ''
+        });
+    }
+    return {
+        id: String(conversation.id || Math.random().toString(36).slice(2, 10)).trim(),
+        title: String(conversation.title || '未命名对话').trim(),
+        subtitle: String(conversation.subtitle || conversation.summary || '').trim(),
+        updatedAt: String(conversation.updatedAt || conversation.updated_at || '').trim(),
+        tags: Array.isArray(conversation.tags) ? conversation.tags.map(item => String(item || '').trim()).filter(Boolean) : [],
+        messages
+    };
+}
+
+function normalizePhoneDoubaoData(raw, contact = null) {
+    const source = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
+    const conversations = Array.isArray(source.conversations)
+        ? source.conversations.map(normalizePhoneDoubaoConversation).filter(Boolean)
+        : [];
+    return {
+        contactId: contact ? String(contact.id) : String(source.contactId || ''),
+        contactName: String(source.contactName || (contact && contact.name) || '豆包').trim(),
+        generatedAt: String(source.generatedAt || source.generated_at || buildPhoneGenerationTimeContext(new Date()).localDateTime).trim(),
+        activeConversationId: String(source.activeConversationId || (conversations[0] && conversations[0].id) || '').trim(),
+        conversations
+    };
+}
+
+function syncPhoneDoubaoFrame(contactId, extraPayload = {}) {
+    const frame = getPhoneDoubaoFrame();
+    const contact = window.iphoneSimState && Array.isArray(window.iphoneSimState.contacts)
+        ? window.iphoneSimState.contacts.find(item => String(item.id) === String(contactId))
+        : null;
+    const content = window.iphoneSimState && window.iphoneSimState.phoneContent && window.iphoneSimState.phoneContent[contactId]
+        ? window.iphoneSimState.phoneContent[contactId]
+        : {};
+    const doubaoData = normalizePhoneDoubaoData(content.doubaoData || {}, contact);
+    const payload = {
+        source: 'phone-doubao-host',
+        action: 'sync-state',
+        payload: {
+            contactId: String(contactId || ''),
+            contactName: contact ? contact.name : doubaoData.contactName,
+            contactAvatar: contact && contact.avatar ? contact.avatar : '',
+            contactDisplayName: String(contact && (contact.nickname || contact.wechatName || contact.remark || contact.name) || doubaoData.contactName || '联系人').trim(),
+            contactPersona: contact && contact.persona ? contact.persona : '',
+            currentUserName: (buildPhoneSharedPromptContext(contact || {}).userName) || '用户',
+            doubaoData,
+            isGenerating: !!extraPayload.isGenerating,
+            activeConversationId: extraPayload.activeConversationId || doubaoData.activeConversationId || ''
+        }
+    };
+    if (frame && frame.contentWindow) {
+        frame.contentWindow.postMessage(payload, '*');
+    }
+}
+
+function handlePhoneDoubaoFrameMessage(event) {
+    const data = event && event.data;
+    if (!data || data.source !== 'phone-doubao') return;
+
+    if (data.action === 'request-state' || data.action === 'ready') {
+        if (currentCheckPhoneContactId) {
+            syncPhoneDoubaoFrame(currentCheckPhoneContactId);
+        }
+        return;
+    }
+
+    if (data.action === 'request-generate') {
+        if (currentCheckPhoneContactId) {
+            handlePhoneAppGenerate('doubao');
+        }
+        return;
+    }
+
+    if (data.action === 'select-conversation') {
+        const contactId = currentCheckPhoneContactId;
+        const activeConversationId = String(data.payload && data.payload.activeConversationId || '').trim();
+        if (contactId && activeConversationId && window.iphoneSimState.phoneContent && window.iphoneSimState.phoneContent[contactId]) {
+            const doubaoData = window.iphoneSimState.phoneContent[contactId].doubaoData;
+            if (doubaoData && Array.isArray(doubaoData.conversations)) {
+                doubaoData.activeConversationId = activeConversationId;
+                if (window.saveConfig) window.saveConfig();
+            }
+        }
+        return;
+    }
+
+    if (data.action === 'close') {
+        closePhoneDoubaoApp();
+    }
+}
+
+function openPhoneDoubaoApp() {
+    const app = document.getElementById('phone-doubao');
+    if (app) app.classList.remove('hidden');
+    if (currentCheckPhoneContactId) {
+        setTimeout(() => syncPhoneDoubaoFrame(currentCheckPhoneContactId), 0);
+    }
+}
+
+function closePhoneDoubaoApp() {
+    const app = document.getElementById('phone-doubao');
+    if (app) app.classList.add('hidden');
 }
 
 // 处理查手机-微信朋友圈背景上传
@@ -6029,6 +6274,8 @@ function enterPhoneCheck(contactId) {
     applyPhoneWallpaper();
     refreshPhoneDeliveryApp(contactId);
     refreshPhoneParcelApp(contactId);
+    // 切换联系人后立即同步对应的豆包数据，避免沿用上一位联系人的列表。
+    syncPhoneDoubaoFrame(contactId, { activeConversationId: '', isGenerating: false });
 
     // 加载并设置朋友圈背景
     const contact = window.iphoneSimState.contacts.find(c => c.id === contactId);
@@ -6071,6 +6318,15 @@ function loadPhoneLayout(contactId) {
     
     if (layout && Array.isArray(layout) && layout.length > 0) {
         phoneScreenData = JSON.parse(JSON.stringify(layout)); // Deep copy
+        // 将旧版本的 iCity 入口迁移为豆包，保留用户原有位置和布局。
+        phoneScreenData.forEach(item => {
+            if (item && item.appId === 'phone-icity') {
+                item.appId = 'phone-doubao';
+                item.name = '豆包';
+                item.iconClass = 'fas fa-comment-dots';
+                item.color = '#2563EB';
+            }
+        });
         // 补丁：确保必有的应用存在
         const requiredApps = [
             { appId: 'phone-browser', name: '浏览器', iconClass: 'fab fa-safari', color: '#007AFF', type: 'app' },
@@ -6081,7 +6337,8 @@ function loadPhoneLayout(contactId) {
             { appId: 'phone-files', name: '文件', iconClass: 'fas fa-folder-open', color: '#007AFF', type: 'app' },
             { ...PHONE_THEME_APP },
             { appId: 'phone-health', name: '健康', iconClass: 'fas fa-heartbeat', color: '#FF2D55', type: 'app' },
-            { appId: 'phone-parcel', name: '快递', iconClass: 'fas fa-box', color: '#8E8E93', type: 'app' }
+            { appId: 'phone-parcel', name: '快递', iconClass: 'fas fa-box', color: '#8E8E93', type: 'app' },
+            { appId: 'phone-doubao', name: '豆包', iconClass: 'fas fa-comment-dots', color: '#2563EB', type: 'app' }
         ];
 
         requiredApps.forEach(app => {
@@ -6122,7 +6379,7 @@ function loadPhoneLayout(contactId) {
         phoneScreenData = [
             { index: 0, type: 'app', name: '微信', iconClass: 'fab fa-weixin', color: '#07C160', appId: 'phone-wechat' },
             { index: 1, type: 'app', name: '微博', iconClass: 'fab fa-weibo', color: '#E6162D', appId: 'phone-weibo' },
-            { index: 2, type: 'app', name: 'iCity', iconClass: 'fas fa-building', color: '#FF9500', appId: 'phone-icity' },
+            { index: 2, type: 'app', name: '豆包', iconClass: 'fas fa-comment-dots', color: '#2563EB', appId: 'phone-doubao' },
             { index: 3, type: 'app', name: '浏览器', iconClass: 'fab fa-safari', color: '#007AFF', appId: 'phone-browser' },
             { index: 4, type: 'app', name: '闲鱼', iconClass: 'fas fa-fish', color: '#FFDA44', appId: 'phone-xianyu' },
             { index: 5, type: 'app', name: '备忘录', iconClass: 'fas fa-sticky-note', color: '#FFD60A', appId: 'phone-notes' },
@@ -6675,6 +6932,19 @@ function setupPhoneListeners() {
         bgInput.addEventListener('change', handlePhoneWechatBgUpload);
     }
 
+    const doubaoFrame = getPhoneDoubaoFrame();
+    if (doubaoFrame && !doubaoFrame.dataset.bridgeBound) {
+        doubaoFrame.dataset.bridgeBound = '1';
+        doubaoFrame.addEventListener('load', () => {
+            if (currentCheckPhoneContactId) syncPhoneDoubaoFrame(currentCheckPhoneContactId);
+        });
+    }
+
+    if (!window.__phoneDoubaoMessageBridgeBound) {
+        window.addEventListener('message', handlePhoneDoubaoFrameMessage);
+        window.__phoneDoubaoMessageBridgeBound = true;
+    }
+
     setupPhoneAppListeners();
 }
 
@@ -6682,6 +6952,7 @@ function setupPhoneAppListeners() {
     const btnWechat = document.getElementById('generate-wechat-btn');
     const btnWeibo = document.getElementById('generate-weibo-btn');
     const btnIcity = document.getElementById('generate-icity-btn');
+    const btnDoubao = document.getElementById('generate-doubao-btn');
     const btnBrowser = document.getElementById('generate-browser-btn');
     const btnXianyu = document.getElementById('generate-xianyu-btn');
     const btnDelivery = document.getElementById('generate-phone-delivery-btn');
@@ -6690,6 +6961,7 @@ function setupPhoneAppListeners() {
     if (btnWechat) btnWechat.onclick = () => handlePhoneAppGenerate('wechat');
     if (btnWeibo) btnWeibo.onclick = () => handlePhoneAppGenerate('weibo');
     if (btnIcity) btnIcity.onclick = () => handlePhoneAppGenerate('icity');
+    if (btnDoubao) btnDoubao.onclick = () => handlePhoneAppGenerate('doubao');
     if (btnBrowser) btnBrowser.onclick = () => handlePhoneAppGenerate('browser');
     if (btnXianyu) btnXianyu.onclick = () => handlePhoneAppGenerate('xianyu');
     if (btnDelivery) btnDelivery.onclick = () => handlePhoneAppGenerate('delivery');
@@ -6853,6 +7125,8 @@ async function handlePhoneAppGenerate(appType) {
 
     if (appType === 'wechat') {
         await generatePhoneWechatMoments(contact);
+    } else if (appType === 'doubao') {
+        await generatePhoneDoubaoAll(contact);
     } else if (appType === 'messages') {
         await generatePhoneMessagesAll(contact);
     } else if (appType === 'browser') {
@@ -6867,6 +7141,120 @@ async function handlePhoneAppGenerate(appType) {
         await generatePhoneParcelAll(contact);
     } else {
         alert(`Generating ${contact.name}'s ${appType} content...\n(Feature in progress)`);
+    }
+}
+
+function buildPhoneDoubaoSystemPrompt(contact) {
+    const context = buildPhoneDoubaoPromptContext(contact);
+
+    return `你是一个“查手机场景”的虚拟豆包 AI 对话记录生成器。请为手机主人【${contact.name}】生成其在豆包 App 中留下的真实聊天记录。
+
+【联系人设定】
+姓名：${contact.name}
+人设：${context.contactPersona}
+
+【用户设定】
+用户名称：${context.userName}
+用户人设：${context.userPersona}
+
+【联系人与用户最近聊天记录】
+${context.recentChatContext}
+
+【联系人记忆】
+${context.memoriesText}
+
+【关联世界书】
+${context.worldbookText}
+
+【上一轮已生成的会话标题（必须避开）】
+${context.previousTitlesText}
+
+【生成目标】
+生成的是联系人和“豆包 AI”的私人使用记录，不是联系人和用户的聊天窗口。
+这些对话要像真实使用痕迹：问问题、赶作业、改文案、上传图片修图、请求总结文件、吐槽 AI、深夜情绪倾诉、一些不方便直接对朋友说的烦恼。内容应和联系人性格、生活状态、最近关系与世界观自然一致。
+
+【真实性与情绪要求】
+1. 生成 7 到 10 个不同标题的会话，每个会话 5 到 11 条消息。
+2. 本轮会话必须强制分散主题：至少覆盖 6 个完全不同的主题类别，不要把 7 到 10 个会话都写成“提问-分析-给建议”。
+3. 可从以下类别中挑选，但每类最多 1 个：学习/工作产出、图片修图或视觉创作、文件/长文整理、购物比较或售后、路线/旅行/临时安排、做饭/家务/租房、穿搭/妆容/拍照、运动/睡眠/身体状态、宠物/植物/兴趣爱好、语言翻译/措辞润色、设备/软件排错、短视频/脚本/配音、情绪倾诉或不敢问朋友的小事、社交回复或关系边界。
+4. 每个会话必须有不同的具体触发事件、不同的动词和不同的场景；标题不能只是“帮我分析”“怎么办”“求建议”的同义改写。
+5. 不得重复上一轮的标题、核心对象、媒体动作或问题结构；如果上一轮已有修图、总结文件、情绪倾诉，本轮要换成其他类别和新情境。
+6. 每个会话的最后一条消息必须是豆包 AI 的回复（role="ai"），不能以联系人消息结尾。
+7. 约 25% 到 40% 的内容可间接受到用户、记忆或世界书影响，但不要把用户直接写进豆包对话，也不要照抄最近聊天原句。
+8. 允许 1 到 3 段轻松搞笑的失败片段：联系人嫌 AI 理解错了、修图离谱、答案跑题、语气像客服，然后 AI 道歉并认真重做。不要每段都失败。
+9. 至少有 1 段是联系人向 AI 吐槽、倾诉或问一些不敢直接问朋友的情绪问题。语气克制、生活化，不能极端化或露骨。
+10. 其余内容必须是正常日常使用，避免把每条都写成感情戏或悬疑证据。
+11. 日常闲聊、吐槽、轻松求助时可以自然使用少量 emoji 或颜文字，但不要每句都加；学习、工作、排错、文件总结等正经问题尽量不用 emoji，保持清楚克制。
+12. 不要为了遵守“分点、步骤、条目”等人设或世界书要求，把一句连续的话机械拆成多条连续 text 消息；可以在单条消息内部使用换行或编号，解析时会合并同一角色连续文本。
+
+【媒体规则】
+1. 联系人(role="user")可以发送 text、image、file。
+2. 豆包(role="ai")可以发送 text、image、video、file。
+3. image 和 video 都只生成描述卡片，不生成真实 URL：
+   - asset.title：短标题
+   - asset.description：画面/视频的中文描述，24 到 55 字
+   - asset.detail：可选，补充处理说明
+4. file 必须包含 asset.fileName、asset.fileSize、asset.fileType，并与上下文匹配。
+5. 每个对话最多 2 个媒体卡片，避免堆满。
+6. 必须至少出现：
+   - 1 个联系人上传图片并要求修图的会话，例如“给图里人物加圣诞帽”，然后豆包返回处理后的 image 卡片与文字说明；
+   - 1 个 AI 返回 video 卡片的会话；
+   - 1 个联系人上传或 AI 输出 file 的会话。
+
+【输出格式】
+只输出合法 JSON，不要 Markdown，不要解释：
+{
+  "conversations": [
+    {
+      "id": "doubao-001",
+      "title": "会话标题，3-18字",
+      "subtitle": "列表摘要，10-32字",
+      "updatedAt": "今天 21:08",
+      "tags": ["图片", "日常"],
+      "messages": [
+        {
+          "role": "user 或 ai",
+          "type": "text / image / video / file",
+          "text": "文本消息；媒体消息可为空或写一句配文",
+          "time": "21:08",
+          "asset": {
+            "title": "媒体或文件标题",
+            "description": "图片或视频描述",
+            "detail": "补充说明",
+            "fileName": "文件名",
+            "fileSize": "文件大小",
+            "fileType": "PDF / DOCX / PPTX 等",
+            "duration": "视频时长，例如 00:18"
+          }
+        }
+      ]
+    }
+  ]
+}
+
+【输出约束】
+- 所有可见内容使用自然简体中文。
+- 不要输出 URL、真实隐私、违法内容、极端内容或露骨内容。
+- text 消息每条尽量短，符合真实聊天节奏。
+- 媒体卡片的描述必须是具体可视化内容，不要写“已生成图片”。`;
+}
+
+async function generatePhoneDoubaoAll(contact) {
+    const frame = getPhoneDoubaoFrame();
+    if (frame && frame.contentWindow) {
+        frame.contentWindow.postMessage({
+            source: 'phone-doubao-host',
+            action: 'generation-state',
+            payload: { isGenerating: true }
+        }, '*');
+    }
+    const systemPrompt = buildPhoneDoubaoSystemPrompt(contact);
+    try {
+        await callAiGeneration(contact, systemPrompt, 'doubao_all', null);
+    } finally {
+        if (currentCheckPhoneContactId) {
+            syncPhoneDoubaoFrame(currentCheckPhoneContactId, { isGenerating: false });
+        }
     }
 }
 
@@ -7852,6 +8240,10 @@ async function callAiGeneration(contact, systemPrompt, type, btn, originalConten
             result = normalizePhoneParcelAiPayload(result, contact);
         }
 
+        if (type === 'doubao_all') {
+            result = normalizePhoneDoubaoData(result, contact);
+        }
+
         if (type === 'moments' && Array.isArray(result)) {
             console.log('处理moments类型，数组长度:', result.length);
             window.iphoneSimState.phoneContent[contact.id].wechatMoments = result;
@@ -7903,6 +8295,17 @@ async function callAiGeneration(contact, systemPrompt, type, btn, originalConten
             switchPhoneParcelView(currentView);
             if (window.showChatToast) window.showChatToast('已为 ' + contact.name + ' 生成快递内容');
             else alert('已为 ' + contact.name + ' 生成快递内容');
+        } else if (type === 'doubao_all') {
+            if (!result.conversations.length) {
+                throw new Error('豆包应用生成结果为空');
+            }
+            window.iphoneSimState.phoneContent[contact.id].doubaoData = result;
+            syncPhoneDoubaoFrame(contact.id, {
+                activeConversationId: result.activeConversationId,
+                isGenerating: false
+            });
+            if (window.showChatToast) window.showChatToast('已为 ' + contact.name + ' 生成豆包对话');
+            else alert('已为 ' + contact.name + ' 生成豆包对话');
         } else if (type === 'notes_all') {
             const normalizedNotesData = normalizePhoneNotesData(result);
             const totalNotesCount = PHONE_NOTES_SECTION_ORDER.reduce((sum, sectionKey) => sum + (normalizedNotesData[sectionKey] || []).length, 0);
@@ -8153,6 +8556,10 @@ async function callAiGeneration(contact, systemPrompt, type, btn, originalConten
                 } catch (parcelError) {
                     console.warn('Failed to rebind parcel generate button:', parcelError);
                 }
+            } else if (type === 'doubao_all') {
+                if (currentCheckPhoneContactId) {
+                    syncPhoneDoubaoFrame(currentCheckPhoneContactId, { isGenerating: false });
+                }
             }
         }
         if (type.indexOf('notes_') === 0) {
@@ -8160,6 +8567,9 @@ async function callAiGeneration(contact, systemPrompt, type, btn, originalConten
         }
         if (type.indexOf('files_') === 0) {
             window.__phoneFilesGenerationContext = null;
+        }
+        if (type === 'doubao_all' && currentCheckPhoneContactId) {
+            syncPhoneDoubaoFrame(currentCheckPhoneContactId, { isGenerating: false });
         }
     }
 }
