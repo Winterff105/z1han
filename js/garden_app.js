@@ -1078,7 +1078,8 @@
             currentTool: 'pointer',
             selectedAnimalToBuy: 'chicken',
             selectedToolItemId: null,
-            shopMarkup: ''
+            shopMarkup: '',
+            shopUiReady: false
         },
         kitchenGame: {
             initialized: false,
@@ -7641,16 +7642,7 @@ ${taskCard.action}`;
                     if (tool) setPastureTool(tool);
                 });
             });
-                pastureShopItems.forEach((button) => {
-                    button.addEventListener('click', () => {
-                        const animalType = button.dataset.pastureAnimal;
-                        if (animalType) selectPastureAnimalToBuy(animalType);
-                    });
-                    const icon = button.querySelector('.garden-pasture-shop-icon');
-                    if (icon && button.dataset.pastureAnimal) {
-                        renderPastureShopAnimalIcon(icon, button.dataset.pastureAnimal);
-                    }
-                });
+            syncPastureShopAnimalItems();
             state.pastureGame.initialized = true;
         }
 
@@ -7660,6 +7652,40 @@ ${taskCard.action}`;
         syncPastureToolUi();
         selectPastureAnimalToBuy(state.pastureGame.selectedAnimalToBuy, false);
         renderPastureAnimals();
+    }
+
+    function syncPastureShopAnimalItems() {
+        if (!pastureShopPanelEl) return;
+        pastureShopItems = Array.from(pastureShopPanelEl.querySelectorAll('[data-pasture-animal]'));
+        pastureShopItems.forEach((button) => {
+            if (button.dataset.pastureClickBound !== 'true') {
+                button.addEventListener('click', () => {
+                    const animalType = button.dataset.pastureAnimal;
+                    if (animalType) selectPastureAnimalToBuy(animalType);
+                });
+                button.dataset.pastureClickBound = 'true';
+            }
+            const icon = button.querySelector('.garden-pasture-shop-icon');
+            if (icon && button.dataset.pastureAnimal) {
+                const hasSprite = icon.querySelector('.garden-pasture-shop-sprite.is-sheet');
+                if (!hasSprite) {
+                    renderPastureShopAnimalIcon(icon, button.dataset.pastureAnimal);
+                } else {
+                    const shopMeta = getPastureAnimalSpriteMeta(button.dataset.pastureAnimal, 'baby');
+                    if (shopMeta) {
+                        bindPastureSpriteAsset(
+                            hasSprite,
+                            `assets/stardew-valley/${shopMeta.sheet}`
+                        );
+                    }
+                }
+            }
+            button.classList.toggle(
+                'selected',
+                button.dataset.pastureAnimal === state.pastureGame.selectedAnimalToBuy
+            );
+        });
+        state.pastureGame.shopUiReady = true;
     }
 
     function syncPastureStats() {
@@ -7681,22 +7707,14 @@ ${taskCard.action}`;
         if (pastureShopPanelEl) {
             pastureShopPanelEl.style.display = state.pastureGame.currentTool === 'shop' || state.pastureGame.currentTool === 'tool' ? 'flex' : 'none';
             if (state.pastureGame.currentTool === 'shop') {
-                if (state.pastureGame.shopMarkup) {
-                    pastureShopPanelEl.innerHTML = state.pastureGame.shopMarkup;
-                    pastureShopItems = Array.from(document.querySelectorAll('#garden-app [data-pasture-animal]'));
-                    pastureShopItems.forEach((button) => {
-                        button.addEventListener('click', () => {
-                            const animalType = button.dataset.pastureAnimal;
-                            if (animalType) selectPastureAnimalToBuy(animalType);
-                        });
-                        const icon = button.querySelector('.garden-pasture-shop-icon');
-                        if (icon && button.dataset.pastureAnimal) {
-                            renderPastureShopAnimalIcon(icon, button.dataset.pastureAnimal);
-                        }
-                        button.classList.toggle('selected', button.dataset.pastureAnimal === state.pastureGame.selectedAnimalToBuy);
-                    });
+                if (!state.pastureGame.shopUiReady || !pastureShopPanelEl.querySelector('[data-pasture-animal]')) {
+                    if (state.pastureGame.shopMarkup) {
+                        pastureShopPanelEl.innerHTML = state.pastureGame.shopMarkup;
+                    }
                 }
+                syncPastureShopAnimalItems();
             } else if (state.pastureGame.currentTool === 'tool' && isRogueActivityMode()) {
+                state.pastureGame.shopUiReady = false;
                 renderPastureToolListUi();
             }
         }
