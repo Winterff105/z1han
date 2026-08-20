@@ -8,7 +8,7 @@
         * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
         body { font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Helvetica Neue", STHeiti, "Microsoft Yahei", Tahoma, Simsun, sans-serif; background-color: #ffffff; overflow: hidden; height: 100vh; display: flex; flex-direction: column; color: #1a1a1a; }
         .app-container { position: relative; width: 100%; height: 100%; display: flex; flex-direction: column; max-width: 600px; margin: 0 auto; background-color: #ffffff; overflow: hidden; }
-        .header { position: relative; display: flex; align-items: center; justify-content: space-between; padding: 40px 16px 12px; background: #fff; z-index: 10; height: 88px; flex-shrink: 0; }
+        .header { position: relative; display: flex; align-items: center; justify-content: space-between; padding: 52px 16px 12px; background: #fff; z-index: 10; height: 100px; flex-shrink: 0; }
         .header-left { display: flex; align-items: center; cursor: pointer; width: 40px; }
         .header-center { position: absolute; left: 50%; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; cursor: pointer; white-space: nowrap; }
         .header-title { font-size: 14px; font-weight: 600; color: #000; display: flex; align-items: center; gap: 2px; }
@@ -96,44 +96,44 @@
         .quick-action-btn svg:first-of-type > *,
         .action-btn svg > * { opacity: 0; }
 
-        .header-left svg { background-image: url("assets/doubao-icons/menu.png"); }
-        .header-title svg { background-image: url("assets/doubao-icons/chevron.png"); }
-        .header-right svg:nth-child(1) { background-image: url("assets/doubao-icons/phone.png"); }
-        .header-right svg:nth-child(2) { background-image: url("assets/doubao-icons/mute.png"); }
+        .header-left svg { background-image: url("doubao-assets/doubao-icons/menu.png"); }
+        .header-title svg { background-image: url("doubao-assets/doubao-icons/chevron.png"); }
+        .header-right svg:nth-child(1) { background-image: url("doubao-assets/doubao-icons/phone.png"); }
+        .header-right svg:nth-child(2) { background-image: url("doubao-assets/doubao-icons/mute.png"); }
 
         .action-btn { background-color: transparent; background-size: 100% 100%; }
-        .action-btn:nth-child(1) { background-image: url("assets/doubao-icons/copy-button.png"); }
-        .action-btn:nth-child(2) { background-image: url("assets/doubao-icons/speaker-button.png"); }
-        .action-btn:nth-child(3) { background-image: url("assets/doubao-icons/like-button.png"); }
-        .action-btn:nth-child(4) { background-image: url("assets/doubao-icons/dislike-button.png"); }
-        .action-btn:nth-child(5) { background-image: url("assets/doubao-icons/share-button.png"); }
-        .action-btn:nth-child(6) { background-image: url("assets/doubao-icons/refresh-button.png"); }
+        .action-btn:nth-child(1) { background-image: url("doubao-assets/doubao-icons/copy-button.png"); }
+        .action-btn:nth-child(2) { background-image: url("doubao-assets/doubao-icons/speaker-button.png"); }
+        .action-btn:nth-child(3) { background-image: url("doubao-assets/doubao-icons/like-button.png"); }
+        .action-btn:nth-child(4) { background-image: url("doubao-assets/doubao-icons/dislike-button.png"); }
+        .action-btn:nth-child(5) { background-image: url("doubao-assets/doubao-icons/share-button.png"); }
+        .action-btn:nth-child(6) { background-image: url("doubao-assets/doubao-icons/refresh-button.png"); }
 
-        .quick-action-btn:nth-child(1) svg:first-of-type { background-image: url("assets/doubao-icons/quick-lightning.png"); }
-        .quick-action-btn:nth-child(2) svg:first-of-type { background-image: url("assets/doubao-icons/quick-pencil.png"); }
-        .quick-action-btn:nth-child(3) svg:first-of-type { background-image: url("assets/doubao-icons/quick-question.png"); }
-        .quick-action-btn:nth-child(4) svg:first-of-type { background-image: url("assets/doubao-icons/quick-bag.png"); }
+        .quick-action-btn:nth-child(1) svg:first-of-type { background-image: url("doubao-assets/doubao-icons/quick-lightning.png"); }
+        .quick-action-btn:nth-child(2) svg:first-of-type { background-image: url("doubao-assets/doubao-icons/quick-pencil.png"); }
+        .quick-action-btn:nth-child(3) svg:first-of-type { background-image: url("doubao-assets/doubao-icons/quick-question.png"); }
+        .quick-action-btn:nth-child(4) svg:first-of-type { background-image: url("doubao-assets/doubao-icons/quick-bag.png"); }
 
-        .input-bar > svg:nth-of-type(1) { background-image: url("assets/doubao-icons/camera.png"); }
-        .input-bar > svg:nth-of-type(2) { background-image: url("assets/doubao-icons/voice.png"); }
-        .input-bar > svg:nth-of-type(3) { background-image: url("assets/doubao-icons/plus.png"); }
+        .input-bar > svg:nth-of-type(1) { background-image: url("doubao-assets/doubao-icons/camera.png"); }
+        .input-bar > svg:nth-of-type(2) { background-image: url("doubao-assets/doubao-icons/voice.png"); }
+        .input-bar > svg:nth-of-type(3) { background-image: url("doubao-assets/doubao-icons/plus.png"); }
 
-        .search-bar svg { background-image: url("assets/doubao-icons/search.png"); }
-        .new-chat-btn svg { background-image: url("assets/doubao-icons/new-chat.png"); }
-        .sidebar-content > .menu-item:nth-child(2) .menu-icon svg { background-image: url("assets/doubao-icons/skills.png"); }
-        .sidebar-content > .menu-item:nth-child(3) .menu-icon svg { background-image: url("assets/doubao-icons/ai-create.png"); }
-        .sidebar-content > .menu-item:nth-child(4) .menu-icon svg { background-image: url("assets/doubao-icons/cloud.png"); }
+        .search-bar svg { background-image: url("doubao-assets/doubao-icons/search.png"); }
+        .new-chat-btn svg { background-image: url("doubao-assets/doubao-icons/new-chat.png"); }
+        .sidebar-content > .menu-item:nth-child(2) .menu-icon svg { background-image: url("doubao-assets/doubao-icons/skills.png"); }
+        .sidebar-content > .menu-item:nth-child(3) .menu-icon svg { background-image: url("doubao-assets/doubao-icons/ai-create.png"); }
+        .sidebar-content > .menu-item:nth-child(4) .menu-icon svg { background-image: url("doubao-assets/doubao-icons/cloud.png"); }
         .history-icon { background-position: center; background-size: 100% 100%; background-repeat: no-repeat; }
         .history-icon svg { background-image: none; }
-        .history-icon.color-green { background-image: url("assets/doubao-icons/history-green.png"); }
+        .history-icon.color-green { background-image: url("doubao-assets/doubao-icons/history-green.png"); }
         .history-icon.color-pink,
-        .history-icon.color-red { background-image: url("assets/doubao-icons/history-pink.png"); }
-        .history-icon.color-orange { background-image: url("assets/doubao-icons/history-orange.png"); }
-        .history-icon.color-purple { background-image: url("assets/doubao-icons/history-purple.png"); }
-        .history-icon.color-blue { background-image: url("assets/doubao-icons/history-blue.png"); }
-        .footer-btn:nth-child(1) svg { background-image: url("assets/doubao-icons/scan.png"); }
-        .footer-btn:nth-child(2) svg { background-image: url("assets/doubao-icons/bell.png"); }
-        .footer-btn:nth-child(3) svg { background-image: url("assets/doubao-icons/settings.png"); }
+        .history-icon.color-red { background-image: url("doubao-assets/doubao-icons/history-pink.png"); }
+        .history-icon.color-orange { background-image: url("doubao-assets/doubao-icons/history-orange.png"); }
+        .history-icon.color-purple { background-image: url("doubao-assets/doubao-icons/history-purple.png"); }
+        .history-icon.color-blue { background-image: url("doubao-assets/doubao-icons/history-blue.png"); }
+        .footer-btn:nth-child(1) svg { background-image: url("doubao-assets/doubao-icons/scan.png"); }
+        .footer-btn:nth-child(2) svg { background-image: url("doubao-assets/doubao-icons/bell.png"); }
+        .footer-btn:nth-child(3) svg { background-image: url("doubao-assets/doubao-icons/settings.png"); }
 
         /* Keep the reference artwork crisp without scaling the whole interface. */
         .header-left svg { width: 30px; height: 30px; }
@@ -376,7 +376,7 @@
     </div>
     <div class="sidebar-content">
         <div class="menu-item">
-            <div class="menu-icon" style="background-color: #f4f5f9;"><img src="assets/doubao-avatar.png" alt="豆包"></div>
+            <div class="menu-icon" style="background-color: #f4f5f9;"><img src="doubao-assets/doubao-avatar.png" alt="豆包"></div>
             豆包
         </div>
         <div class="menu-item">
@@ -395,7 +395,7 @@
     </div>
     <div class="sidebar-footer">
         <div class="user-info">
-            <div class="user-avatar"><img id="doubaoFooterAvatar" src="assets/user-avatar.png" alt="联系人"></div>
+            <div class="user-avatar"><img id="doubaoFooterAvatar" src="doubao-assets/user-avatar.png" alt="联系人"></div>
             <div class="user-name" id="doubaoFooterName">联系人 <svg viewBox="0 0 24 24" width="16" height="16" stroke="#999" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg></div>
         </div>
         <div class="footer-actions">
@@ -558,7 +558,7 @@
         const footerAvatar = document.getElementById('doubaoFooterAvatar');
         const footerName = document.getElementById('doubaoFooterName');
         if (footerAvatar) {
-            footerAvatar.src = doubaoPageState.contactAvatar || 'assets/user-avatar.png';
+            footerAvatar.src = doubaoPageState.contactAvatar || 'doubao-assets/user-avatar.png';
             footerAvatar.alt = doubaoPageState.contactDisplayName || '联系人';
         }
         if (footerName) {
