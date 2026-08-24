@@ -1828,15 +1828,15 @@
             </div>
             <!-- 删除表情包分类弹窗 -->
             <div id="sticker-delete-cats-modal" class="modal hidden" style="z-index: 210; align-items: flex-end;">
-                <div class="modal-content" style="height: auto; max-height: min(86vh, calc(100dvh - 24px)); border-radius: 12px 12px 0 0; width: 100%; max-width: 100%; background-color: transparent; display: flex; flex-direction: column; overflow: hidden; padding-bottom: 0;">
-                    <div class="ios-list-group" style="margin: 0 10px; border-radius: 12px; overflow: hidden; display: flex; flex-direction: column; min-height: 0; flex: 1 1 auto;">
+                <div class="modal-content" style="height: min(86vh, calc(100dvh - 24px)); max-height: min(86vh, calc(100dvh - 24px)); border-radius: 12px 12px 0 0; width: 100%; max-width: 100%; background-color: transparent; display: flex; flex-direction: column; overflow: hidden; padding-bottom: env(safe-area-inset-bottom); box-sizing: border-box;">
+                    <div class="ios-list-group" style="margin: 0 10px 10px 10px; border-radius: 12px; overflow: hidden; display: flex; flex-direction: column; min-height: 0; flex: 1 1 auto;">
                         <div class="list-item" style="background: white; padding: 12px 16px; font-weight: 600;">选择要删除的表情包分类</div>
                         <div id="sticker-delete-cats-list" style="background: #fff; display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; touch-action: pan-y; overscroll-behavior: contain;"></div>
                     </div>
-                    <div class="ios-list-group" style="margin: 10px 10px 20px 10px; border-radius: 12px; overflow: hidden;">
-                        <div class="list-item" style="background: white; height: 56px; display: flex; gap: 10px; justify-content: center; align-items: center;">
-                            <button id="confirm-delete-sticker-cats" class="ios-btn-block" style="max-width: 160px;">删除所选</button>
-                            <button id="close-delete-sticker-cats" class="ios-btn-block secondary" style="max-width: 120px;">取消</button>
+                    <div class="ios-list-group" style="margin: 0 10px calc(10px + env(safe-area-inset-bottom, 0px)) 10px; border-radius: 12px; overflow: hidden; flex: 0 0 auto;">
+                        <div class="list-item" style="background: white; min-height: 56px; height: 56px; display: flex; gap: 10px; justify-content: center; align-items: center; flex-shrink: 0; padding-top: 0; padding-bottom: 0;">
+                            <button id="confirm-delete-sticker-cats" class="ios-btn-block" style="max-width: 160px; margin: 0; height: 44px; min-height: 44px; padding: 0 12px; display: flex; align-items: center; justify-content: center; line-height: 1;">删除所选</button>
+                            <button id="close-delete-sticker-cats" class="ios-btn-block secondary" style="max-width: 120px; margin: 0; height: 44px; min-height: 44px; padding: 0 12px; display: flex; align-items: center; justify-content: center; line-height: 1;">取消</button>
                         </div>
                     </div>
                 </div>
