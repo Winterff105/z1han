@@ -826,6 +826,421 @@ window.submitComment = function(id, content, replyTo = null, userName = null) {
     }
 };
 
+function getMomentCommentContactDisplayName(contact) {
+    return String(
+        (contact && (contact.remark || contact.name || contact.nickname))
+        || '联系人'
+    ).trim() || '联系人';
+}
+
+function getMomentCommentNpcCandidates(contact, worldbookContext = '') {
+    const state = window.iphoneSimState || {};
+    const contactText = [
+        contact && contact.persona,
+        contact && contact.style,
+        contact && contact.desc,
+        contact && contact.memory,
+        contact && contact.description
+    ].map(value => String(value || '').trim()).filter(Boolean).join('\n');
+    const sourceText = `${contactText}\n${String(worldbookContext || '')}`;
+    const currentContactId = String(contact && contact.id || '').trim();
+    const userName = String(state.userProfile && state.userProfile.name || '').trim();
+    const candidates = [];
+    const seen = new Set();
+    const forbiddenNames = new Set();
+
+    const addForbiddenName = (value) => {
+        const clean = String(value || '').trim();
+        if (!clean) return;
+        forbiddenNames.add(clean.toLowerCase());
+    };
+
+    addForbiddenName(getMomentCommentContactDisplayName(contact));
+    addForbiddenName(contact && contact.name);
+    addForbiddenName(contact && contact.remark);
+    addForbiddenName(contact && contact.nickname);
+    addForbiddenName(userName);
+
+    const allContacts = Array.isArray(state.contacts) ? state.contacts : [];
+    allContacts.forEach(item => {
+        if (!item) return;
+        if (String(item.id || '').trim() === currentContactId) return;
+        addForbiddenName(item.name);
+        addForbiddenName(item.remark);
+        addForbiddenName(item.nickname);
+    });
+
+    const addCandidate = (name, persona, source) => {
+        const cleanName = String(name || '').trim();
+        if (!cleanName || cleanName === getMomentCommentContactDisplayName(contact) || cleanName === userName) return;
+        const key = cleanName.toLowerCase();
+        if (forbiddenNames.has(key)) return;
+        if (seen.has(key)) return;
+        seen.add(key);
+        candidates.push({
+            name: cleanName,
+            persona: String(persona || '').trim() || '未提供额外人设，请只根据当前上下文自然发言。',
+            source: String(source || '').trim() || '世界书或联系人设'
+        });
+    };
+
+    // Some imported worldbooks store a character name in the entry remark/title.
+    // Do not treat arbitrary prose as a person name; only use an explicit title.
+    const entries = Array.isArray(state.worldbook)
+        ? state.worldbook.filter(entry => entry && entry.enabled !== false)
+        : [];
+    entries.forEach(entry => {
+        const linked = !contact || !Array.isArray(contact.linkedWbCategories)
+            || contact.linkedWbCategories.length === 0
+            || contact.linkedWbCategories.some(id => String(id) === String(entry.categoryId));
+        if (!linked) return;
+        const title = String(entry.remark || entry.name || entry.title || '').trim();
+        if (!title) return;
+        const looksLikePersonTitle = /(?:人物|角色|npc|朋友|同学|同事|室友|兄弟|姐妹|好友|联系人)/i.test(title);
+        if (looksLikePersonTitle) {
+            const titleName = title.replace(/^(?:人物|角色|npc|朋友|同学|同事|室友|兄弟|姐妹|好友|联系人)\s*[:：\-—]?\s*/i, '').trim();
+            if (titleName && titleName !== title) {
+                addCandidate(titleName, entry.content, '世界书条目标题');
+            }
+        } else if (
+            sourceText.includes(title)
+            && title.length >= 2
+            && title.length <= 12
+            && !/^(世界观|世界书|背景|基础设定|通用设定|规则|剧情|地点|时间|系统|说明|备注|其他)$/i.test(title)
+        ) {
+            addCandidate(title, entry.content, '世界书中明确出现的条目名称');
+        }
+    });
+
+    // Catch common explicit introductions such as “朋友小林” or “叫阿宁”.
+    // This is intentionally conservative and only supplements the raw worldbook
+    // text already shown to the model.
+    const explicitNamePatterns = [
+        /(?:朋友|同学|同事|室友|兄弟|姐妹|好友|联系人|人物|角色)\s*([A-Za-z0-9_\u4e00-\u9fff]{2,8})/g,
+        /(?:叫|名叫|名字是|称作)\s*([A-Za-z0-9_\u4e00-\u9fff]{2,8})/g
+    ];
+    explicitNamePatterns.forEach(pattern => {
+        let match;
+        while ((match = pattern.exec(sourceText)) !== null) {
+            const possibleName = String(match[1] || '').replace(/[，。！？、；：,.!?;:]+$/g, '').trim();
+            if (possibleName && !/[，。！？、；：,.!?;:]/.test(possibleName)) {
+                addCandidate(possibleName, `原文线索：${match[0]}`, '联系人设/世界书中的明确人物线索');
+            }
+        }
+    });
+
+    console.log('[MomentsCommentAI] forbidden npc names:', Array.from(forbiddenNames));
+    return candidates.slice(0, 8);
+}
+
+function getMomentCommentGeneratedAuthorType(item, contact) {
+    const rawType = String(item && (item.speaker || item.role || item.type || item.kind || item.authorType) || '').trim().toLowerCase();
+    if (rawType === 'contact' || rawType === 'author' || rawType === 'host') return 'contact';
+    if (rawType === 'me' || rawType === 'self' || rawType === 'user') return 'me';
+    if (rawType === 'npc' || rawType === 'other' || rawType === 'friend' || rawType === 'stranger') return 'other';
+
+    const name = String(item && (item.name || item.username || item.user || item.authorDisplayName || item.authorName) || '').trim();
+    const contactNames = [
+        contact && contact.name,
+        contact && contact.remark,
+        contact && contact.nickname,
+        getMomentCommentContactDisplayName(contact)
+    ].map(value => String(value || '').trim()).filter(Boolean);
+
+    if (name && contactNames.some(candidate => candidate === name)) {
+        return 'contact';
+    }
+
+    return 'other';
+}
+
+function buildGeneratedMomentCommentEntry(moment, item, contact, fallbackReplyTo = '') {
+    if (!item || typeof item !== 'object') return null;
+    const content = String(item.content || item.text || '').trim();
+    if (!content) return null;
+
+    const contactDisplayName = getMomentCommentContactDisplayName(contact);
+    const authorType = getMomentCommentGeneratedAuthorType(item, contact);
+    const name = String(item.name || item.username || item.user || item.authorDisplayName || item.authorName || '').trim();
+    const authorDisplayName = authorType === 'contact'
+        ? contactDisplayName
+        : (name || 'NPC');
+    const authorName = authorType === 'contact'
+        ? String(contact && contact.name || contactDisplayName).trim() || contactDisplayName
+        : (name || authorDisplayName);
+    const authorId = authorType === 'contact'
+        ? String(contact && contact.id || '').trim()
+        : `npc:${name || Math.random().toString(36).slice(2, 8)}`;
+    const replyTo = String(item.replyTo || item.reply_to || fallbackReplyTo || '').trim();
+    const raw = {
+        content,
+        replyTo,
+        authorType,
+        authorId,
+        authorName,
+        authorDisplayName,
+        user: authorDisplayName
+    };
+
+    if (authorType === 'contact' || authorType === 'me') {
+        return typeof window.normalizeMomentCommentEntry === 'function'
+            ? (window.normalizeMomentCommentEntry(raw, moment) || raw)
+            : raw;
+    }
+
+    return raw;
+}
+
+function formatMomentCommentThreadSummary(moment, userComment, generatedComments, contact) {
+    const contactId = String(moment && moment.contactId || '').trim();
+    if (!contactId || !window.iphoneSimState || !window.iphoneSimState.chatHistory) return;
+
+    if (!Array.isArray(window.iphoneSimState.chatHistory[contactId])) {
+        window.iphoneSimState.chatHistory[contactId] = [];
+    }
+
+    const contactName = getMomentCommentContactDisplayName(contact);
+    const momentContent = String(moment && moment.content || '').trim();
+    const commentAuthor = String(userComment && userComment.user || '').trim() || '用户';
+    const commentContent = String(userComment && userComment.content || '').trim();
+    const replyTarget = String(userComment && userComment.replyTo || '').trim();
+    const replyTargetText = replyTarget ? `（回复 ${replyTarget}）` : '';
+    const lines = [
+        `朋友圈发布者：${contactName}`,
+        `朋友圈内容：${momentContent || '（无文字内容）'}`,
+        `用户 ${commentAuthor}${replyTargetText} 评论：${commentContent}`
+    ];
+
+    const list = Array.isArray(generatedComments) ? generatedComments : [];
+    list.forEach((item, index) => {
+        const authorName = String(item && (item.authorDisplayName || item.authorName || item.name || item.user) || '').trim() || '联系人';
+        const authorType = String(item && item.authorType || '').trim() === 'contact'
+            ? '联系人'
+            : (String(item && item.authorType || '').trim() === 'me' ? '用户' : 'NPC');
+        const itemReplyTo = String(item && item.replyTo || '').trim();
+        const itemContent = String(item && item.content || '').trim();
+        const replyLabel = itemReplyTo ? ` 回复 ${itemReplyTo}` : '';
+        lines.push(`${index + 1}. ${authorName}（${authorType}）${replyLabel}：${itemContent}`);
+    });
+
+    window.iphoneSimState.chatHistory[contactId].push({
+        id: `moment-comment-reply-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        time: Date.now(),
+        role: 'system',
+        type: 'system_event',
+        channel: 'wechat',
+        hiddenFromUi: true,
+        includeInAiContext: true,
+        metaType: 'wechat_moment_comment_reply',
+        meta: {
+            momentId: moment && moment.id,
+            comment: commentContent,
+            replies: list.map(item => ({
+                name: String(item && (item.authorDisplayName || item.authorName || item.name || item.user) || '').trim(),
+                role: String(item && item.authorType || '').trim() || 'other',
+                replyTo: String(item && item.replyTo || '').trim(),
+                content: String(item && item.content || '').trim()
+            }))
+        },
+        content: lines.join('\n')
+    });
+
+    saveConfig();
+}
+
+function parseMomentCommentReplyBatch(rawText) {
+    const text = String(rawText || '').trim();
+    if (!text) return [];
+    const cleaned = text
+        .replace(/```json/gi, '')
+        .replace(/```text/gi, '')
+        .replace(/```/g, '')
+        .trim();
+
+    const lineItems = cleaned
+        .split(/\n+/)
+        .map(line => String(line || '').trim())
+        .filter(Boolean)
+        .map(line => line.replace(/^[-*•\d\.\)\s]+/, '').trim())
+        .map(line => {
+            // Providers occasionally prepend a short sentence or Markdown
+            // marker before the required protocol. Parse from the first token.
+            const protocolMatch = line.match(/(?:^|[`"'“”\s>：:：-])((?:contact|npc)\s*\|\|.*)$/i);
+            const protocolLine = protocolMatch ? protocolMatch[1].trim() : line;
+            const parts = protocolLine.includes('||')
+                ? protocolLine.split('||').map(part => String(part || '').trim())
+                : [];
+            if (parts.length < 4) return null;
+            const [speakerRaw, nameRaw, replyToRaw, ...contentParts] = parts;
+            const normalizeField = (value, fieldName) => {
+                const raw = String(value || '').trim();
+                if (!raw) return '';
+                const patterns = [
+                    new RegExp(`^${fieldName}\\s*[:：=]\\s*`, 'i'),
+                    new RegExp(`^(speaker|name|replyto|reply_to|content)\\s*[:：=]\\s*`, 'i')
+                ];
+                return patterns.reduce((result, pattern) => result.replace(pattern, '').trim(), raw);
+            };
+            const speaker = normalizeField(speakerRaw, 'speaker').toLowerCase();
+            const name = normalizeField(nameRaw, 'name');
+            const replyTo = normalizeField(replyToRaw, 'replyto');
+            const content = normalizeField(contentParts.join('||'), 'content');
+            if (!speaker || !name || !content) return null;
+            return {
+                speaker,
+                name,
+                replyTo,
+                content
+            };
+        })
+        .filter(Boolean);
+
+    if (lineItems.length > 0) return lineItems;
+
+    const start = cleaned.indexOf('[');
+    const end = cleaned.lastIndexOf(']');
+    const objectStart = cleaned.indexOf('{');
+    const objectEnd = cleaned.lastIndexOf('}');
+    const candidates = [];
+
+    const tryParseCandidate = (candidateText) => {
+        const candidate = String(candidateText || '').trim();
+        if (!candidate) return [];
+
+        const repaired = candidate
+            .replace(/[“”]/g, '"')
+            .replace(/[‘’]/g, "'")
+            .replace(/:\s*True\b/g, ': true')
+            .replace(/:\s*False\b/g, ': false')
+            .replace(/:\s*None\b/g, ': null')
+            .replace(/,(\s*[}\]])/g, '$1')
+            .replace(/\r\n/g, '\n')
+            .replace(/\r/g, '\n');
+        const repairedStringControls = repaired.replace(/"((?:[^"\\]|\\.)*)"/g, (match, inner) => {
+            const fixedInner = inner
+                .replace(/\n/g, '\\n')
+                .replace(/\t/g, '\\t');
+            return `"${fixedInner}"`;
+        });
+
+        try {
+            const parsed = JSON.parse(repairedStringControls);
+            if (Array.isArray(parsed)) return parsed;
+            if (parsed && Array.isArray(parsed.comments)) return parsed.comments;
+            if (parsed && typeof parsed === 'object') return [parsed];
+        } catch (error) {
+            // continue
+        }
+
+        return [];
+    };
+
+    if (start !== -1 && end !== -1 && end > start) {
+        candidates.push(cleaned.slice(start, end + 1));
+    }
+    if (objectStart !== -1 && objectEnd !== -1 && objectEnd > objectStart) {
+        candidates.push(cleaned.slice(objectStart, objectEnd + 1));
+    }
+    candidates.push(cleaned);
+
+    for (const candidate of candidates) {
+        const parsedItems = tryParseCandidate(candidate);
+        if (parsedItems.length > 0) return parsedItems;
+    }
+
+    for (const candidate of candidates) {
+        const extractedItems = [];
+        let depth = 0;
+        let objectStartIndex = -1;
+        let inString = false;
+        let escapeNext = false;
+
+        for (let i = 0; i < candidate.length; i++) {
+            const ch = candidate[i];
+            if (escapeNext) {
+                escapeNext = false;
+                continue;
+            }
+            if (ch === '\\') {
+                escapeNext = true;
+                continue;
+            }
+            if (ch === '"') {
+                inString = !inString;
+                continue;
+            }
+            if (inString) continue;
+            if (ch === '{') {
+                if (depth === 0) objectStartIndex = i;
+                depth++;
+                continue;
+            }
+            if (ch === '}') {
+                depth--;
+                if (depth === 0 && objectStartIndex !== -1) {
+                    const objectText = candidate.slice(objectStartIndex, i + 1);
+                    const parsedObject = tryParseCandidate(objectText);
+                    if (parsedObject.length > 0) {
+                        extractedItems.push(parsedObject[0]);
+                    }
+                    objectStartIndex = -1;
+                }
+            }
+        }
+
+        if (extractedItems.length > 0) return extractedItems;
+    }
+
+    return [];
+}
+
+function extractMomentCommentReplyFallback(rawReply, contact, userComment) {
+    const text = String(rawReply || '').trim();
+    if (!text) return null;
+
+    const extractedContentMatch = text.match(/"content"\s*:\s*"((?:[^"\\]|\\.)*)"/i);
+    const extractedNameMatch = text.match(/"name"\s*:\s*"((?:[^"\\]|\\.)*)"/i);
+    const extractedReplyToMatch = text.match(/"replyTo"\s*:\s*"((?:[^"\\]|\\.)*)"/i);
+
+    const decodeJsonString = (value) => {
+        const source = String(value || '').trim();
+        if (!source) return '';
+        try {
+            return JSON.parse(`"${source.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`);
+        } catch (error) {
+            return source
+                .replace(/\\"/g, '"')
+                .replace(/\\n/g, '\n')
+                .replace(/\\t/g, '\t')
+                .replace(/\\\\/g, '\\');
+        }
+    };
+
+    const extractedContent = decodeJsonString(extractedContentMatch && extractedContentMatch[1]);
+    if (extractedContent) {
+        return {
+            speaker: 'contact',
+            name: decodeJsonString(extractedNameMatch && extractedNameMatch[1]) || getMomentCommentContactDisplayName(contact),
+            replyTo: decodeJsonString(extractedReplyToMatch && extractedReplyToMatch[1]) || userComment.user,
+            content: extractedContent
+        };
+    }
+
+    const plainText = text
+        .replace(/^\s*[\[{].*$/s, '')
+        .replace(/^["“]|["”]$/g, '')
+        .trim();
+
+    if (!plainText || /^[\[{]/.test(text)) return null;
+
+    return {
+        speaker: 'contact',
+        name: getMomentCommentContactDisplayName(contact),
+        replyTo: userComment.user,
+        content: plainText
+    };
+}
+
 async function generateAiCommentReply(moment, userComment) {
     const contact = window.iphoneSimState.contacts.find(c => c.id === moment.contactId);
     if (!contact) return;
@@ -834,6 +1249,97 @@ async function generateAiCommentReply(moment, userComment) {
     if (!settings.url || !settings.key) return;
 
     try {
+        const logPrefix = '[MomentsCommentAI]';
+        console.groupCollapsed(`${logPrefix} 开始生成朋友圈评论互动`);
+        console.log(`${logPrefix} moment:`, {
+            id: moment && moment.id,
+            contactId: moment && moment.contactId,
+            contactName: getMomentCommentContactDisplayName(contact),
+            content: moment && moment.content
+        });
+        console.log(`${logPrefix} userComment:`, userComment);
+
+        const state = window.iphoneSimState || {};
+        const chatHistory = typeof window.getChatHistoryByChannel === 'function'
+            ? window.getChatHistoryByChannel(contact.id, 'wechat')
+            : (Array.isArray(state.chatHistory && state.chatHistory[contact.id]) ? state.chatHistory[contact.id] : []);
+        const contextLimit = Number(contact.contextLimit) > 0 ? Number(contact.contextLimit) : 50;
+        const recentHistory = chatHistory.slice(-contextLimit);
+        const userPersonas = Array.isArray(state.userPersonas) ? state.userPersonas : [];
+        const preferredPersonaId = contact.userPersonaId || state.currentUserPersonaId;
+        const userPersona = preferredPersonaId
+            ? userPersonas.find(persona => String(persona && persona.id) === String(preferredPersonaId))
+            : (userPersonas[0] || null);
+        const userProfile = state.userProfile && typeof state.userProfile === 'object' ? state.userProfile : {};
+        const userName = String((userPersona && userPersona.name) || userProfile.name || userComment.user || '用户').trim() || '用户';
+        const userPersonaPrompt = String(
+            contact.userPersonaPromptOverride
+            || (userPersona && (userPersona.aiPrompt || userPersona.desc))
+            || userProfile.desc
+            || '无'
+        ).trim() || '无';
+        const userPromptInfo = `\n用户(我)的网名：${userName}\n用户(我)的人设：${userPersonaPrompt}`;
+
+        let rolePrompt = '';
+        if (typeof buildWechatRolePrompt === 'function') {
+            rolePrompt = buildWechatRolePrompt(contact, userPromptInfo);
+        } else {
+            rolePrompt = `你现在扮演 ${contact.name}。\n人设：${contact.persona || '无'}${userPromptInfo}`;
+        }
+
+        let memoryContext = '';
+        if (typeof window.buildMemoryContextByPolicyWithVector === 'function') {
+            memoryContext = await window.buildMemoryContextByPolicyWithVector(contact, recentHistory, 'chat-text');
+        } else if (typeof window.buildMemoryContextByPolicy === 'function') {
+            memoryContext = window.buildMemoryContextByPolicy(contact, recentHistory, 'chat-text');
+        }
+
+        let worldbookContext = '';
+        if (typeof window.buildWechatWorldbookPrompt === 'function') {
+            worldbookContext = window.buildWechatWorldbookPrompt(contact, recentHistory);
+        }
+        if (!worldbookContext) {
+            const linkedEntries = Array.isArray(state.worldbook)
+                ? state.worldbook.filter(entry => {
+                    if (!entry || entry.enabled === false) return false;
+                    if (!Array.isArray(contact.linkedWbCategories) || contact.linkedWbCategories.length === 0) return true;
+                    return contact.linkedWbCategories.some(id => String(id) === String(entry.categoryId));
+                })
+                : [];
+            if (linkedEntries.length > 0) {
+                worldbookContext = `世界书信息：\n${linkedEntries
+                    .map(entry => String(entry.content || '').trim())
+                    .filter(Boolean)
+                    .join('\n')
+                    .slice(0, 7000)}`;
+            }
+        }
+        const npcCandidates = getMomentCommentNpcCandidates(contact, worldbookContext);
+        const npcCandidateContext = npcCandidates.length > 0
+            ? npcCandidates.map((candidate, index) => (
+                `${index + 1}. ${candidate.name}\n人设/依据：${candidate.persona}\n来源：${candidate.source}`
+            )).join('\n')
+            : '无可确认的 NPC 候选。此时不要凭空创造 NPC。';
+
+        const chatContext = recentHistory
+            .filter(message => {
+                if (typeof shouldExcludeFromAiContext === 'function') {
+                    return !shouldExcludeFromAiContext(message);
+                }
+                return true;
+            })
+            .map(message => {
+                const roleName = message.role === 'user'
+                    ? '用户'
+                    : (message.role === 'assistant' ? contact.name : '系统');
+                const content = typeof message.content === 'string'
+                    ? message.content.trim()
+                    : JSON.stringify(message.content || '');
+                return content ? `${roleName}：${content}` : '';
+            })
+            .filter(Boolean)
+            .join('\n');
+
         let contextDesc = `你的朋友 ${userComment.user} 在下面评论说：“${userComment.content}”`;
         if (userComment.replyTo) {
             // Check if replying to the persona itself
@@ -856,23 +1362,46 @@ async function generateAiCommentReply(moment, userComment) {
             });
         }
 
-        let systemPrompt = `你现在扮演 ${contact.name}。
-人设：${contact.persona || '无'}
+        let systemPrompt = `${rolePrompt}
+
+【联系人记忆】
+${memoryContext || '无'}
+
+【聊天上下文】
+${chatContext || '无'}
+
+【关联世界书】
+${worldbookContext || '无'}
+
+【本轮可出场的 NPC 候选】
+${npcCandidateContext}
 
 【当前情境】
 你发了一条朋友圈：“${moment.content}”${imageDescText}
 ${contextDesc}
 
 【任务】
-请回复 ${userComment.user}。
+请一次性生成这一轮朋友圈评论区的完整互动，不要分多次调用。
 回复要求：
-1. 简短自然，像微信朋友圈回复。
-2. 符合你的人设。
-3. 直接返回回复内容，不要包含任何解释。`;
+1. 第一条必须是联系人针对当前用户评论的直接回应，必须紧扣用户原话，不得突然换话题、补写用户没有说过的话，不得把用户的语气改写成另一句话。
+2. 当前可出场 NPC 候选不为空时，必须至少安排其中 1 名 NPC 出场；候选为空时不得创造任何新人物。
+3. NPC 只能使用上面候选中的名字和人设；联系人也必须始终符合联系人设。
+4. NPC 可以回复用户、联系人或其他 NPC，联系人也可以回复 NPC；每条新评论必须明确回应当前评论区已经出现的内容，形成连续对话，不要写成互不相关的独白。
+5. 评论内容要像真实朋友圈短评，优先 6-30 个字。不要重复用户原话，不要自问自答，不要凭空添加当前情境没有依据的事件。
+6. 最多生成 4 条评论，必须包含联系人；有 NPC 候选时建议顺序为“联系人回应用户 -> NPC 接话 -> 联系人或 NPC 继续回应”。
+7. 为了避免输出被截断，不要返回 JSON、解释、前言或 Markdown。第一行必须直接以 contact 或 npc 开头，只返回紧凑纯文本，每行一条评论，严格使用这个格式：
+   speaker||name||replyTo||content
+8. speaker 只能是 contact 或 npc。replyTo 必须填写当前评论区已有的用户或评论者姓名；content 里不要出现 ||。
+9. 联系人的 name 必须使用“${getMomentCommentContactDisplayName(contact)}”；NPC 的 name 必须使用上面候选中的名字。
+
+示例：
+contact||${getMomentCommentContactDisplayName(contact)}||${userComment.user}||先接住用户的话
+npc||候选人物||${getMomentCommentContactDisplayName(contact)}||基于候选人物设定接话
+contact||${getMomentCommentContactDisplayName(contact)}||候选人物||联系人对 NPC 的回应`;
 
         // Construct User Message with Vision capabilities
         let userContent = [];
-        userContent.push({ type: 'text', text: '请回复' });
+        userContent.push({ type: 'text', text: '请按约定格式生成本轮评论互动。' });
 
         if (moment.images && moment.images.length > 0) {
             moment.images.forEach(img => {
@@ -898,13 +1427,24 @@ ${contextDesc}
         if (hasImages) {
             messages.push({ role: 'user', content: userContent });
         } else {
-            messages.push({ role: 'user', content: '请回复' });
+            messages.push({ role: 'user', content: '请按约定格式生成本轮评论互动。' });
         }
 
         let fetchUrl = settings.url;
         if (!fetchUrl.endsWith('/chat/completions')) {
             fetchUrl = fetchUrl.endsWith('/') ? fetchUrl + 'chat/completions' : fetchUrl + '/chat/completions';
         }
+
+        console.log(`${logPrefix} request summary:`, {
+            fetchUrl,
+            model: settings.model,
+            hasImages,
+            historyCount: recentHistory.length,
+            npcCandidates
+        });
+        console.log(`${logPrefix} npc candidates:`, npcCandidates);
+        console.log(`${logPrefix} systemPrompt:`, systemPrompt);
+        console.log(`${logPrefix} request messages:`, messages);
 
         const response = await fetch(fetchUrl, {
             method: 'POST',
@@ -916,41 +1456,63 @@ ${contextDesc}
                 model: settings.model,
                 messages: messages,
                 temperature: 0.7,
-                max_tokens: 300 // Optional limit
+                max_tokens: 1400
             })
         });
 
         if (!response.ok) {
             console.error('AI Request Failed', response.status);
+            console.groupEnd();
             return;
         }
 
         const data = await response.json();
-        let replyContent = data.choices[0].message.content.trim();
-        
-        if ((replyContent.startsWith('"') && replyContent.endsWith('"')) || (replyContent.startsWith('“') && replyContent.endsWith('”'))) {
-            replyContent = replyContent.slice(1, -1);
+        console.log(`${logPrefix} response json:`, data);
+        console.log(`${logPrefix} response meta:`, {
+            finishReason: data && data.choices && data.choices[0] ? data.choices[0].finish_reason : null,
+            usage: data && data.usage ? data.usage : null
+        });
+        if (data && data.choices && data.choices[0] && data.choices[0].finish_reason && data.choices[0].finish_reason !== 'stop') {
+            console.warn(`${logPrefix} finish_reason 非 stop，可能发生了截断或中断:`, data.choices[0].finish_reason);
+        }
+        const rawReply = data && data.choices && data.choices[0] && data.choices[0].message
+            ? data.choices[0].message.content
+            : '';
+        console.log(`${logPrefix} raw reply:`, rawReply);
+        let generatedComments = parseMomentCommentReplyBatch(rawReply);
+        console.log(`${logPrefix} parsed generatedComments:`, generatedComments);
+
+        if (generatedComments.length === 0) {
+            const fallbackComment = extractMomentCommentReplyFallback(rawReply, contact, userComment);
+            console.log(`${logPrefix} fallback comment:`, fallbackComment);
+            if (fallbackComment) {
+                generatedComments = [fallbackComment];
+            }
         }
 
-        if (window.submitComment) {
-            window.submitComment(moment.id, replyContent, userComment.user, contact.remark || contact.name);
-        } else {
-            if (!moment.comments) moment.comments = [];
-            moment.comments.push({
-                user: contact.remark || contact.name,
-                content: replyContent,
-                replyTo: userComment.user,
-                authorType: 'contact',
-                authorId: String(contact.id || ''),
-                authorName: contact.name || contact.remark || contact.nickname || '',
-                authorDisplayName: contact.remark || contact.name || contact.nickname || ''
-            });
-            
-            saveConfig();
-            renderMomentsList();
+        const normalizedComments = generatedComments
+            .map(item => buildGeneratedMomentCommentEntry(moment, item, contact, userComment.user))
+            .filter(Boolean)
+            .slice(0, 6);
+        console.log(`${logPrefix} normalizedComments:`, normalizedComments);
+
+        if (normalizedComments.length === 0) {
+            console.warn(`${logPrefix} 没有可写入的评论，已跳过`);
+            console.groupEnd();
+            return;
         }
+
+        if (!moment.comments) moment.comments = [];
+        moment.comments.push(...normalizedComments);
+        saveConfig();
+        renderMomentsList();
+        formatMomentCommentThreadSummary(moment, userComment, normalizedComments, contact);
+        console.log(`${logPrefix} 已写入朋友圈评论:`, normalizedComments);
+        console.groupEnd();
 
     } catch (error) {
+        console.error('[MomentsCommentAI] AI回复评论失败:', error);
+        console.groupEnd();
         console.error('AI回复评论失败:', error);
     }
 }
