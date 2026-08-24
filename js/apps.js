@@ -10866,9 +10866,9 @@ function renderStickerCategoryDeleteModal() {
         };
     }
 
-    modal.addEventListener('click', (e) => {
+    modal.onclick = (e) => {
         if (e.target === modal) modal.classList.add('hidden');
-    });
+    };
 
     modal.classList.remove('hidden');
 }
