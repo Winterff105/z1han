@@ -1,4 +1,39 @@
-﻿function createDefaultMemorySettingsV2() {
+// LocalForage 安全降级与防崩溃 Polyfill
+(function() {
+    if (typeof window.localforage === 'undefined') {
+        const memoryFallback = {};
+        window.localforage = {
+            async getItem(key) {
+                try {
+                    const val = localStorage.getItem(key);
+                    return val ? JSON.parse(val) : (memoryFallback[key] || null);
+                } catch (e) {
+                    return memoryFallback[key] || null;
+                }
+            },
+            async setItem(key, val) {
+                memoryFallback[key] = val;
+                try {
+                    localStorage.setItem(key, JSON.stringify(val));
+                } catch (e) {}
+                return val;
+            },
+            async removeItem(key) {
+                delete memoryFallback[key];
+                try { localStorage.removeItem(key); } catch (e) {}
+            },
+            async clear() {
+                for (const k in memoryFallback) delete memoryFallback[k];
+                try { localStorage.clear(); } catch (e) {}
+            },
+            createInstance() {
+                return Object.create(this);
+            }
+        };
+    }
+})();
+
+function createDefaultMemorySettingsV2() {
     return {
         extractMode: 'hybrid',
         injectQuota: {
