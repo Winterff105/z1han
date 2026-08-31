@@ -25,6 +25,10 @@
     const BMOB_API_KEY = '2382745495111111';
 
     function initAuth() {
+        // 直接无条件解锁界面并跳过后续所有逻辑（适配 WebToApp 等封装环境）
+        showContent();
+        return;
+
         const urlParams = new URLSearchParams(window.location.search);
         const hashParams = new URLSearchParams(window.location.hash.substring(1));
         
